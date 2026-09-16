@@ -2,10 +2,10 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   AppState,
   AppStateStatus,
+  KeyboardAvoidingView,
   Platform,
   Pressable,
   SafeAreaView,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -13,23 +13,19 @@ import {
 } from "react-native";
 import { DropAvatar } from "./src/components/DropAvatar";
 import { GuidedSetupCard } from "./src/components/GuidedSetupCard";
-import { SolutionCard } from "./src/components/SolutionCard";
 import { solutions } from "./src/data/solutions";
 import { resolveConversation } from "./src/lib/conversation";
 import { hapticAnswer, hapticDive, hapticEmerge, hapticStep } from "./src/lib/haptics";
 import {
   endGuideLiveActivity,
-  liveActivityAvailable,
   startGuideLiveActivity,
   updateGuideLiveActivity
 } from "./src/lib/liveActivity";
 import {
   createNeedRadarProfile,
-  learnFromFeedback,
   learnFromOpen,
   learnFromProblem,
-  radarRecommendations,
-  topLearnedCategories
+  radarRecommendations
 } from "./src/lib/needRadar";
 import { openSupportedSettings } from "./src/lib/settings";
 import {
@@ -45,33 +41,22 @@ import {
   GuideSession,
   NeedRadarProfile,
   Region,
-  Solution,
-  SolutionFeedback
+  Solution
 } from "./src/types";
 
-const examples = [
-  "Wie mach ich Siri an?",
-  "Wie kann ich vom Handy aus meinen Tesla über Siri öffnen?",
-  "Ich vergesse immer, wo ich geparkt habe",
-  "Ich mache jedes Mal das Gleiche, wenn ich die Arbeit verlasse"
+type Tab = "ask" | "discover" | "you";
+
+const quickIdeas = [
+  { title: "Make Siri more useful", query: "siri shortcut app control automation" },
+  { title: "Find my parked car", query: "remember parking location" },
+  { title: "Automate something repetitive", query: "automation shortcut leave work" }
 ];
 
-const painPoints = [
-  { label: "Ich vergesse ständig Dinge", query: "remember parking location automation reminders" },
-  { label: "Zu viele wiederkehrende Schritte", query: "automation shortcut leave work back tap" },
-  { label: "Ich will mehr mit Siri machen", query: "siri shortcut app control automation" },
-  { label: "Ich möchte versteckte Funktionen finden", query: "back tap background sounds sound recognition" }
+const hiddenFeatures = [
+  { title: "Turn the back of your iPhone into a button", query: "back tap" },
+  { title: "Scan documents without another app", query: "scan document pdf" },
+  { title: "Let iPhone recognize important sounds", query: "sound recognition" }
 ];
-
-const intentLabels: Record<string, string> = {
-  enable: "turn something on",
-  howto: "how-to",
-  "voice-control": "voice control",
-  automation: "automation",
-  availability: "availability",
-  discover: "discovery",
-  general: "general request"
-};
 
 function makeGuideSession(solution: Solution): GuideSession {
   const now = Date.now();
@@ -95,10 +80,9 @@ function osMajor(): number | undefined {
 }
 
 export default function App() {
+  const [tab, setTab] = useState<Tab>("ask");
   const [draftQuery, setDraftQuery] = useState("");
   const [submittedQuery, setSubmittedQuery] = useState("");
-  const [mode, setMode] = useState<"ask" | "discover">("ask");
-  const [discoveryQuery, setDiscoveryQuery] = useState("");
   const [profile, setProfile] = useState<NeedRadarProfile>(createNeedRadarProfile());
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [region, setRegion] = useState<Region>("eu");
@@ -109,15 +93,15 @@ export default function App() {
   const [settingsHint, setSettingsHint] = useState<string | null>(null);
   const appState = useRef<AppStateStatus>(AppState.currentState);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const answerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const platform = Platform.OS === "android" ? "android" : "ios";
-
   const deviceContext: DeviceContext = useMemo(() => ({
     platform,
     region,
     osMajor: osMajor(),
     appleIntelligenceCapable: undefined,
-    language: "de"
+    language: "en"
   }), [platform, region]);
 
   useEffect(() => {
@@ -131,9 +115,11 @@ export default function App() {
       }
       setProfileLoaded(true);
     }).catch(() => setProfileLoaded(true));
+
     return () => {
       alive = false;
       if (searchTimer.current) clearTimeout(searchTimer.current);
+      if (answerTimer.current) clearTimeout(answerTimer.current);
     };
   }, []);
 
@@ -148,99 +134,59 @@ export default function App() {
       appState.current = nextState;
 
       if (guideSession && (nextState === "background" || nextState === "inactive")) {
-        const backgroundSession: GuideSession = {
-          ...guideSession,
-          status: "background",
-          updatedAt: Date.now()
-        };
+        const backgroundSession: GuideSession = { ...guideSession, status: "background", updatedAt: Date.now() };
         setGuideSession(backgroundSession);
         await saveGuideSession(backgroundSession);
         setDropPhase("submerged");
       }
 
       if (guideSession && nextState === "active" && (previous === "background" || previous === "inactive")) {
-        const activeSession: GuideSession = {
-          ...guideSession,
-          status: "active",
-          updatedAt: Date.now()
-        };
+        const activeSession: GuideSession = { ...guideSession, status: "active", updatedAt: Date.now() };
         setGuideSession(activeSession);
         await saveGuideSession(activeSession);
         setReturnedFromBackground(true);
         setDropPhase("emerging");
         await hapticEmerge();
-        setTimeout(() => setDropPhase("guiding"), 520);
+        setTimeout(() => setDropPhase("guiding"), 560);
       }
     });
+
     return () => subscription.remove();
   }, [guideSession]);
 
-  const effectiveQuery = mode === "ask" ? submittedQuery : discoveryQuery;
   const conversation = useMemo(
-    () => resolveConversation(effectiveQuery, solutions, deviceContext),
-    [effectiveQuery, deviceContext]
+    () => resolveConversation(submittedQuery, solutions, deviceContext),
+    [submittedQuery, deviceContext]
   );
+
   const results = conversation.solutions;
-
-  const radarResults = useMemo(
-    () => radarRecommendations(profile, solutions, platform),
-    [profile, platform]
-  );
-
-  const learnedCategories = useMemo(() => topLearnedCategories(profile), [profile]);
-  const directIds = new Set(results.map((item) => item.id));
-  const proactiveResults = radarResults.filter((item) => !directIds.has(item.id)).slice(0, 3);
+  const bestResult = results[0] ?? null;
   const guideSolution = guideSession ? solutions.find((item) => item.id === guideSession.solutionId) ?? null : null;
-
-  const learnProblem = (value: string) => {
-    setProfile((current) => learnFromProblem(current, value, solutions, platform));
-  };
+  const radarResults = useMemo(() => radarRecommendations(profile, solutions, platform).slice(0, 3), [profile, platform]);
 
   const runAsk = async (value = draftQuery) => {
     const normalized = value.trim();
     if (!normalized) return;
     if (searchTimer.current) clearTimeout(searchTimer.current);
+    if (answerTimer.current) clearTimeout(answerTimer.current);
+
+    setTab("ask");
     setDraftQuery(normalized);
     setSubmittedQuery("");
-    learnProblem(normalized);
+    setProfile((current) => learnFromProblem(current, normalized, solutions, platform));
     setDropPhase("diving");
     await hapticDive();
     setDropPhase("searching");
+
     searchTimer.current = setTimeout(async () => {
       setSubmittedQuery(normalized);
-      setDropPhase("answer");
-      await hapticAnswer();
-    }, 640);
-  };
-
-  const chooseExample = (value: string) => {
-    setMode("ask");
-    runAsk(value).catch(() => undefined);
-  };
-
-  const choosePainPoint = (value: string) => {
-    setDiscoveryQuery(value);
-    learnProblem(value);
-    setDropPhase("answer");
-    hapticAnswer().catch(() => undefined);
-  };
-
-  const handleOpen = (solution: Solution) => {
-    setProfile((current) => learnFromOpen(current, solution));
-  };
-
-  const handleFeedback = (solution: Solution, feedback: SolutionFeedback) => {
-    setProfile((current) => learnFromFeedback(current, solution, feedback));
-  };
-
-  const toggleRadar = () => {
-    setProfile((current) => ({ ...current, enabled: !current.enabled }));
-  };
-
-  const resetRadar = async () => {
-    const fresh = createNeedRadarProfile();
-    setProfile(fresh);
-    await clearNeedRadarProfile();
+      setDropPhase("emerging");
+      await hapticEmerge();
+      answerTimer.current = setTimeout(async () => {
+        setDropPhase("answer");
+        await hapticAnswer();
+      }, 520);
+    }, 760);
   };
 
   const startGuide = async (solution: Solution) => {
@@ -249,6 +195,7 @@ export default function App() {
     setReturnedFromBackground(false);
     setSettingsHint(null);
     setDropPhase("guiding");
+    setProfile((current) => learnFromOpen(current, solution));
     await saveGuideSession(session);
     await hapticStep();
     const started = await startGuideLiveActivity(session);
@@ -258,12 +205,7 @@ export default function App() {
   const updateGuideStep = async (nextStep: number) => {
     if (!guideSession) return;
     const bounded = Math.max(0, Math.min(guideSession.steps.length - 1, nextStep));
-    const next: GuideSession = {
-      ...guideSession,
-      currentStep: bounded,
-      status: "active",
-      updatedAt: Date.now()
-    };
+    const next: GuideSession = { ...guideSession, currentStep: bounded, status: "active", updatedAt: Date.now() };
     setGuideSession(next);
     setReturnedFromBackground(false);
     await saveGuideSession(next);
@@ -286,16 +228,14 @@ export default function App() {
 
     const result = await openSupportedSettings(guideSolution);
     if (!result.opened) {
-      setSettingsHint(
-        "Für diesen iOS-Systembereich gibt es keinen öffentlichen Deep Link. Öffne Einstellungen manuell — Drop Guide merkt sich Schritt und Pfad und begleitet dich im Dev-Build über die Live Activity."
-      );
+      setSettingsHint("Open Settings manually. Drop keeps your exact step and path ready for you.");
       setDropPhase("guiding");
     }
   };
 
   const finishGuide = async () => {
     if (guideSession) {
-      await endGuideLiveActivity("Einstellung abgeschlossen");
+      await endGuideLiveActivity("Setup complete");
       await saveGuideSession(null);
     }
     setGuideSession(null);
@@ -306,33 +246,35 @@ export default function App() {
     await hapticAnswer();
   };
 
+  const resetRadar = async () => {
+    const fresh = createNeedRadarProfile();
+    setProfile(fresh);
+    await clearNeedRadarProfile();
+  };
+
+  const showHomeIdeas = !submittedQuery || !bestResult;
+
   return (
     <SafeAreaView style={styles.safe}>
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <View style={styles.headerRow}>
-          <Text style={styles.brand}>CanMyPhone</Text>
-          <View style={styles.contextPills}>
-            <Text style={styles.platform}>{platform === "ios" ? "iPhone" : "Android"}</Text>
-            {platform === "ios" && deviceContext.osMajor ? <Text style={styles.platform}>iOS {deviceContext.osMajor}</Text> : null}
+      <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.brand}>CanMyPhone</Text>
+            <Text style={styles.tagline}>Your iPhone, explained.</Text>
+          </View>
+          <View style={styles.devicePill}>
+            <Text style={styles.devicePillText}>{platform === "ios" ? `iPhone${deviceContext.osMajor ? ` · iOS ${deviceContext.osMajor}` : ""}` : "Android"}</Text>
           </View>
         </View>
 
         <View style={styles.dropStage}>
-          <View style={styles.orbA} />
-          <View style={styles.orbB} />
-          <DropAvatar
-            phase={dropPhase}
-            caption={guideSession ? "Ich behalte deinen Platz." : undefined}
-          />
+          <View style={styles.softGlowA} />
+          <View style={styles.softGlowB} />
+          <DropAvatar phase={dropPhase} caption={guideSession ? "I’m keeping your place." : undefined} />
         </View>
 
-        <Text style={styles.hero}>Was möchtest du mit deinem iPhone machen?</Text>
-        <Text style={styles.sub}>
-          Frag normal. Drop versteht dein Ziel, findet den einfachsten verifizierten Weg und bleibt bei dir, wenn du für die Einrichtung in iOS wechselst.
-        </Text>
-
         {guideSession && guideSolution ? (
-          <>
+          <View style={styles.mainContent}>
             <GuidedSetupCard
               session={guideSession}
               solution={guideSolution}
@@ -344,234 +286,187 @@ export default function App() {
               onFinish={finishGuide}
             />
             {settingsHint ? <Text style={styles.settingsHint}>{settingsHint}</Text> : null}
-          </>
-        ) : null}
-
-        {platform === "ios" ? (
-          <View style={styles.regionRow}>
-            <Text style={styles.regionLabel}>Region context</Text>
-            <Pressable onPress={() => setRegion("eu")} style={[styles.regionButton, region === "eu" && styles.regionButtonActive]}>
-              <Text style={[styles.regionText, region === "eu" && styles.regionTextActive]}>EU</Text>
-            </Pressable>
-            <Pressable onPress={() => setRegion("outside_eu")} style={[styles.regionButton, region === "outside_eu" && styles.regionButtonActive]}>
-              <Text style={[styles.regionText, region === "outside_eu" && styles.regionTextActive]}>Outside EU</Text>
-            </Pressable>
-            <Text style={styles.livePill}>{liveActivityAvailable() ? "Live Activity ready" : "Expo preview"}</Text>
           </View>
-        ) : null}
-
-        <View style={styles.radarCard}>
-          <View style={styles.radarHeader}>
-            <View style={styles.radarTitleWrap}>
-              <Text style={styles.radarEyebrow}>NEED RADAR</Text>
-              <Text style={styles.radarTitle}>{profile.enabled ? "Lernt, was dir wirklich hilft" : "Persönliches Lernen pausiert"}</Text>
-            </View>
-            <Pressable onPress={toggleRadar} style={[styles.radarToggle, profile.enabled && styles.radarToggleOn]}>
-              <Text style={[styles.radarToggleText, profile.enabled && styles.radarToggleTextOn]}>{profile.enabled ? "ON" : "OFF"}</Text>
-            </Pressable>
-          </View>
-          <Text style={styles.radarText}>
-            {profile.enabled
-              ? "Fragen, geöffnete Lösungen und dein Feedback werden lokal als kleines Interessenprofil gespeichert — damit Tipps mit der Zeit weniger generisch werden."
-              : "CanMyPhone beantwortet weiter Fragen, nutzt deine Interaktionen aber nicht zur Personalisierung."}
-          </Text>
-          {profile.enabled && profile.interactionCount > 0 ? (
-            <View style={styles.learnedRow}>
-              <Text style={styles.learnedLabel}>Gelernt:</Text>
-              <Text style={styles.learnedValue}>
-                {learnedCategories.length ? learnedCategories.join(" · ") : `${profile.interactionCount} interactions`}
-              </Text>
-              <Pressable onPress={resetRadar}><Text style={styles.reset}>Löschen</Text></Pressable>
-            </View>
-          ) : null}
-          <Text style={styles.radarPrivacy}>On-device first · pausierbar · löschbar · kein heimliches App-Tracking.</Text>
-        </View>
-
-        <View style={styles.modeRow}>
-          <Pressable onPress={() => setMode("ask")} style={[styles.modeButton, mode === "ask" && styles.modeButtonActive]}>
-            <Text style={[styles.modeText, mode === "ask" && styles.modeTextActive]}>Ask</Text>
-          </Pressable>
-          <Pressable onPress={() => setMode("discover")} style={[styles.modeButton, mode === "discover" && styles.modeButtonActive]}>
-            <Text style={[styles.modeText, mode === "discover" && styles.modeTextActive]}>Discover for me</Text>
-          </Pressable>
-        </View>
-
-        {mode === "ask" ? (
-          <>
-            <View style={styles.askBox}>
-              <TextInput
-                value={draftQuery}
-                onChangeText={setDraftQuery}
-                placeholder="z. B. Wie kann ich meinen Tesla mit Siri öffnen?"
-                placeholderTextColor="#8C8C8C"
-                multiline
-                style={styles.input}
-                onFocus={() => setDropPhase("listening")}
-              />
-              <Pressable onPress={() => runAsk()} style={styles.askButton}>
-                <Text style={styles.askButtonText}>Drop fragen</Text>
-              </Pressable>
-            </View>
-
-            {!draftQuery ? (
-              <View style={styles.examples}>
-                <Text style={styles.label}>FRAG ES EINFACH SO</Text>
-                {examples.map((example) => (
-                  <Pressable key={example} onPress={() => chooseExample(example)} style={styles.chip}>
-                    <Text style={styles.chipText}>{example}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            ) : null}
-          </>
         ) : (
-          <View style={styles.discoverCard}>
-            <Text style={styles.discoverTitle}>Lass uns herausfinden, was dir wirklich helfen würde.</Text>
-            <Text style={styles.discoverText}>Welche Reibung kennst du aus deinem Alltag?</Text>
-            {painPoints.map((item) => (
-              <Pressable
-                key={item.label}
-                onPress={() => choosePainPoint(item.query)}
-                style={[styles.discoveryChoice, discoveryQuery === item.query && styles.discoveryChoiceActive]}
-              >
-                <Text style={styles.discoveryChoiceText}>{item.label}</Text>
-              </Pressable>
-            ))}
+          <View style={styles.mainContent}>
+            {tab === "ask" ? (
+              <>
+                <Text style={styles.hero}>What do you want your iPhone to do?</Text>
+                <View style={styles.askBox}>
+                  <TextInput
+                    value={draftQuery}
+                    onChangeText={setDraftQuery}
+                    placeholder="Ask Drop…"
+                    placeholderTextColor="#919AA3"
+                    returnKeyType="send"
+                    onSubmitEditing={() => runAsk().catch(() => undefined)}
+                    onFocus={() => setDropPhase("listening")}
+                    style={styles.input}
+                  />
+                  <Pressable style={styles.askButton} onPress={() => runAsk().catch(() => undefined)}>
+                    <Text style={styles.askButtonText}>Ask</Text>
+                  </Pressable>
+                </View>
+
+                {submittedQuery && bestResult ? (
+                  <View style={styles.answerCard}>
+                    <Text style={styles.answerEyebrow}>BEST MATCH</Text>
+                    <Text style={styles.answerTitle} numberOfLines={2}>{bestResult.title}</Text>
+                    <Text style={styles.answerSummary} numberOfLines={4}>{bestResult.summary}</Text>
+                    <View style={styles.answerActions}>
+                      <Pressable style={styles.primaryButton} onPress={() => startGuide(bestResult)}>
+                        <Text style={styles.primaryButtonText}>Show me how</Text>
+                      </Pressable>
+                      <Pressable style={styles.secondaryButton} onPress={() => { setSubmittedQuery(""); setDraftQuery(""); setDropPhase("idle"); }}>
+                        <Text style={styles.secondaryButtonText}>New question</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ) : conversation.followUp ? (
+                  <View style={styles.followUpCard}>
+                    <Text style={styles.answerEyebrow}>ONE QUICK QUESTION</Text>
+                    <Text style={styles.followUpText}>{conversation.followUp}</Text>
+                  </View>
+                ) : (
+                  <View style={styles.ideaList}>
+                    <Text style={styles.sectionLabel}>TRY SOMETHING</Text>
+                    {quickIdeas.map((item) => (
+                      <Pressable key={item.title} style={styles.ideaRow} onPress={() => runAsk(item.query).catch(() => undefined)}>
+                        <Text style={styles.ideaText}>{item.title}</Text>
+                        <Text style={styles.chevron}>›</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
+              </>
+            ) : null}
+
+            {tab === "discover" ? (
+              <>
+                <Text style={styles.hero}>Discover what your iPhone can already do.</Text>
+                <Text style={styles.subhead}>Useful features, explained in plain English — not copied from a support page.</Text>
+                <View style={styles.ideaList}>
+                  {hiddenFeatures.map((item) => (
+                    <Pressable key={item.title} style={styles.discoveryCard} onPress={() => runAsk(item.query).catch(() => undefined)}>
+                      <Text style={styles.discoveryBadge}>HIDDEN GEM</Text>
+                      <Text style={styles.discoveryTitle}>{item.title}</Text>
+                      <Text style={styles.discoveryCTA}>Show me →</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </>
+            ) : null}
+
+            {tab === "you" ? (
+              <>
+                <Text style={styles.hero}>Make CanMyPhone feel like yours.</Text>
+                <View style={styles.youCard}>
+                  <View style={styles.youRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.youTitle}>Need Radar</Text>
+                      <Text style={styles.youText}>Learns from what you ask and surfaces useful features you may not know.</Text>
+                    </View>
+                    <Pressable onPress={() => setProfile((current) => ({ ...current, enabled: !current.enabled }))} style={[styles.toggle, profile.enabled && styles.toggleOn]}>
+                      <Text style={[styles.toggleText, profile.enabled && styles.toggleTextOn]}>{profile.enabled ? "ON" : "OFF"}</Text>
+                    </Pressable>
+                  </View>
+
+                  <View style={styles.divider} />
+
+                  <Text style={styles.youTitle}>Region</Text>
+                  <View style={styles.regionRow}>
+                    <Pressable onPress={() => setRegion("eu")} style={[styles.regionButton, region === "eu" && styles.regionButtonActive]}>
+                      <Text style={[styles.regionButtonText, region === "eu" && styles.regionButtonTextActive]}>EU</Text>
+                    </Pressable>
+                    <Pressable onPress={() => setRegion("outside_eu")} style={[styles.regionButton, region === "outside_eu" && styles.regionButtonActive]}>
+                      <Text style={[styles.regionButtonText, region === "outside_eu" && styles.regionButtonTextActive]}>Outside EU</Text>
+                    </Pressable>
+                  </View>
+
+                  {radarResults.length ? (
+                    <Text style={styles.radarHint} numberOfLines={2}>Drop already has {radarResults.length} personalized suggestion{radarResults.length === 1 ? "" : "s"} ready for you.</Text>
+                  ) : null}
+
+                  <Pressable onPress={resetRadar} style={styles.resetButton}><Text style={styles.resetText}>Clear learned preferences</Text></Pressable>
+                </View>
+              </>
+            ) : null}
           </View>
         )}
 
-        {effectiveQuery ? (
-          <View style={styles.understoodCard}>
-            <Text style={styles.understoodEyebrow}>VERSTANDEN</Text>
-            <Text style={styles.understoodText}>
-              {intentLabels[conversation.intent.kind]}
-              {conversation.intent.entities.length ? ` · ${conversation.intent.entities.join(" · ")}` : ""}
-            </Text>
-            {conversation.notice ? <Text style={styles.notice}>{conversation.notice}</Text> : null}
-          </View>
-        ) : null}
-
-        {conversation.followUp ? (
-          <View style={styles.followUp}>
-            <Text style={styles.followUpEyebrow}>EINE SACHE MUSS ICH NOCH WISSEN</Text>
-            <Text style={styles.followUpText}>{conversation.followUp}</Text>
-          </View>
-        ) : null}
-
-        {effectiveQuery && results.length ? (
-          <View style={styles.results}>
-            <Text style={styles.label}>{mode === "discover" ? "RELEVANT FÜR DICH" : "BESTER VERIFIZIERTER WEG"}</Text>
-            {results.slice(0, mode === "discover" ? 3 : 4).map((solution, index) => (
-              <SolutionCard
-                key={solution.id}
-                solution={solution}
-                best={index === 0}
-                reason={index === 0 ? "Passt zu Ziel, Gerät, Region und verfügbarem Siri-Weg." : undefined}
-                onOpen={handleOpen}
-                onFeedback={handleFeedback}
-                onStartGuide={startGuide}
-              />
+        {!guideSession ? (
+          <View style={styles.tabBar}>
+            {(["ask", "discover", "you"] as Tab[]).map((item) => (
+              <Pressable key={item} onPress={() => { setTab(item); setDropPhase("idle"); }} style={[styles.tabButton, tab === item && styles.tabButtonActive]}>
+                <Text style={[styles.tabText, tab === item && styles.tabTextActive]}>{item === "ask" ? "Ask" : item === "discover" ? "Discover" : "You"}</Text>
+              </Pressable>
             ))}
           </View>
         ) : null}
-
-        {effectiveQuery && !results.length && !conversation.followUp ? (
-          <View style={styles.empty}>
-            <Text style={styles.emptyTitle}>Dafür habe ich noch keine verifizierte Antwort.</Text>
-            <Text style={styles.emptyText}>
-              Das ist wertvoll: CanMyPhone soll ungelöste Probleme sammeln, statt Einstellungen oder Siri-Fähigkeiten zu erfinden.
-            </Text>
-          </View>
-        ) : null}
-
-        {profile.enabled && proactiveResults.length ? (
-          <View style={styles.results}>
-            <Text style={styles.label}>NEED RADAR · FÜR DICH AUSGEWÄHLT</Text>
-            <Text style={styles.proactiveIntro}>Diese Vorschläge basieren auf dem, was du CanMyPhone bisher gezeigt hast.</Text>
-            {proactiveResults.map((solution) => (
-              <SolutionCard
-                key={`radar-${solution.id}`}
-                solution={solution}
-                reason={`Du scheinst dich für ${solution.category} zu interessieren.`}
-                onOpen={handleOpen}
-                onFeedback={handleFeedback}
-                onStartGuide={startGuide}
-              />
-            ))}
-          </View>
-        ) : null}
-
-        <Text style={styles.footer}>v0.4 Drop Experience · Haptics · Resume Guide · Live Activity bridge · Siri-aware · Need Radar · Open source</Text>
-      </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#F5F8FB" },
-  container: { padding: 20, paddingTop: 18, paddingBottom: 50, maxWidth: 760, width: "100%", alignSelf: "center" },
-  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  brand: { fontSize: 18, fontWeight: "900", color: "#111B26" },
-  contextPills: { flexDirection: "row", gap: 6 },
-  platform: { fontSize: 12, fontWeight: "800", color: "#53606C", backgroundColor: "rgba(255,255,255,0.72)", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, overflow: "hidden" },
-  dropStage: { marginTop: 18, minHeight: 160, alignItems: "center", justifyContent: "center", overflow: "hidden", borderRadius: 32 },
-  orbA: { position: "absolute", width: 190, height: 190, borderRadius: 999, backgroundColor: "rgba(136,196,255,0.22)", top: -70, left: 30 },
-  orbB: { position: "absolute", width: 170, height: 170, borderRadius: 999, backgroundColor: "rgba(194,159,255,0.16)", bottom: -95, right: 15 },
-  hero: { fontSize: 36, lineHeight: 41, fontWeight: "900", color: "#111B26", marginTop: 16, letterSpacing: -1.1 },
-  sub: { fontSize: 16, lineHeight: 23, color: "#63707D", marginTop: 10, marginBottom: 15 },
-  settingsHint: { marginTop: 9, paddingHorizontal: 3, fontSize: 12, lineHeight: 18, color: "#6A7280" },
-  regionRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 7, marginTop: 16, marginBottom: 18 },
-  regionLabel: { fontSize: 12, fontWeight: "800", color: "#777777", marginRight: 2 },
-  regionButton: { paddingHorizontal: 11, paddingVertical: 7, borderRadius: 999, backgroundColor: "#E9EEF3" },
-  regionButtonActive: { backgroundColor: "#D8E9FB" },
-  regionText: { fontSize: 12, fontWeight: "800", color: "#666666" },
-  regionTextActive: { color: "#245A87" },
-  livePill: { fontSize: 11, fontWeight: "800", color: "#71808F", backgroundColor: "#EEF2F5", paddingHorizontal: 9, paddingVertical: 6, borderRadius: 999 },
-  radarCard: { backgroundColor: "#121A23", borderRadius: 24, padding: 18, marginBottom: 18 },
-  radarHeader: { flexDirection: "row", justifyContent: "space-between", gap: 14, alignItems: "flex-start" },
-  radarTitleWrap: { flex: 1 },
-  radarEyebrow: { fontSize: 10, fontWeight: "900", letterSpacing: 1.3, color: "#8CBDF2", marginBottom: 5 },
-  radarTitle: { fontSize: 18, lineHeight: 23, fontWeight: "800", color: "#FFFFFF" },
-  radarText: { fontSize: 14, lineHeight: 20, color: "#CDD5DD", marginTop: 10 },
-  radarToggle: { paddingHorizontal: 11, paddingVertical: 7, borderRadius: 999, backgroundColor: "#33404D" },
-  radarToggleOn: { backgroundColor: "#E6F3FF" },
-  radarToggleText: { fontSize: 11, fontWeight: "900", color: "#BFBFBF" },
-  radarToggleTextOn: { color: "#245A87" },
-  learnedRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 7, marginTop: 13 },
-  learnedLabel: { fontSize: 12, fontWeight: "800", color: "#909AA5" },
-  learnedValue: { flex: 1, fontSize: 12, fontWeight: "700", color: "#FFFFFF", textTransform: "capitalize" },
-  reset: { fontSize: 12, fontWeight: "800", color: "#9DCBFA" },
-  radarPrivacy: { fontSize: 11, lineHeight: 16, color: "#808D99", marginTop: 10 },
-  modeRow: { flexDirection: "row", gap: 8, marginBottom: 18 },
-  modeButton: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, backgroundColor: "#E9EEF3" },
-  modeButtonActive: { backgroundColor: "#101820" },
-  modeText: { fontSize: 14, fontWeight: "800", color: "#596674" },
-  modeTextActive: { color: "#FFFFFF" },
-  askBox: { backgroundColor: "rgba(255,255,255,0.84)", borderRadius: 26, borderWidth: 1, borderColor: "#DDE5EC", overflow: "hidden" },
-  input: { padding: 18, minHeight: 100, fontSize: 18, lineHeight: 25, textAlignVertical: "top", color: "#111111" },
-  askButton: { alignSelf: "flex-end", margin: 10, marginTop: 0, paddingHorizontal: 16, paddingVertical: 11, borderRadius: 16, backgroundColor: "#101820" },
-  askButtonText: { fontSize: 14, fontWeight: "900", color: "#FFFFFF" },
-  examples: { marginTop: 24 },
-  label: { fontSize: 11, fontWeight: "900", letterSpacing: 1.2, color: "#777777", marginBottom: 12 },
-  chip: { paddingVertical: 12, paddingHorizontal: 15, backgroundColor: "#E9EEF3", borderRadius: 15, marginBottom: 9, alignSelf: "flex-start" },
-  chipText: { fontSize: 15, fontWeight: "600", color: "#242424" },
-  discoverCard: { backgroundColor: "rgba(255,255,255,0.84)", borderRadius: 24, padding: 18, borderWidth: 1, borderColor: "#DDE5EC" },
-  discoverTitle: { fontSize: 20, lineHeight: 25, fontWeight: "800", color: "#111111" },
-  discoverText: { fontSize: 15, lineHeight: 21, color: "#666666", marginTop: 7, marginBottom: 15 },
-  discoveryChoice: { padding: 14, backgroundColor: "#EFF3F6", borderRadius: 16, marginBottom: 9, borderWidth: 1, borderColor: "transparent" },
-  discoveryChoiceActive: { borderColor: "#466A8A", backgroundColor: "#FFFFFF" },
-  discoveryChoiceText: { fontSize: 15, fontWeight: "700", color: "#222222" },
-  understoodCard: { marginTop: 18, borderRadius: 18, padding: 14, backgroundColor: "#E8F2FC" },
-  understoodEyebrow: { fontSize: 10, fontWeight: "900", letterSpacing: 1.2, color: "#476F99", marginBottom: 5 },
-  understoodText: { fontSize: 14, fontWeight: "800", color: "#263E56", textTransform: "capitalize" },
-  notice: { fontSize: 13, lineHeight: 19, color: "#50677D", marginTop: 8 },
-  followUp: { marginTop: 14, borderRadius: 18, padding: 15, backgroundColor: "#FFF4D8", borderWidth: 1, borderColor: "#F1DEAA" },
-  followUpEyebrow: { fontSize: 10, fontWeight: "900", letterSpacing: 1.2, color: "#8A6711", marginBottom: 5 },
-  followUpText: { fontSize: 16, lineHeight: 22, fontWeight: "800", color: "#4D3B0E" },
-  results: { marginTop: 28 },
-  proactiveIntro: { fontSize: 14, lineHeight: 20, color: "#666666", marginTop: -3, marginBottom: 14 },
-  empty: { marginTop: 28, padding: 20, backgroundColor: "#FFFFFF", borderRadius: 24, borderWidth: 1, borderColor: "#E5E9ED" },
-  emptyTitle: { fontSize: 19, fontWeight: "800", color: "#111111" },
-  emptyText: { fontSize: 14, lineHeight: 20, color: "#666666", marginTop: 8 },
-  footer: { fontSize: 12, color: "#8A8A8A", textAlign: "center", marginTop: 34 }
+  safe: { flex: 1, backgroundColor: "#F7FAFC" },
+  screen: { flex: 1, paddingHorizontal: 18, paddingTop: 10, paddingBottom: 12 },
+  header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", minHeight: 52 },
+  brand: { fontSize: 18, fontWeight: "900", color: "#111820", letterSpacing: -0.3 },
+  tagline: { marginTop: 1, fontSize: 11, color: "#7B8791", fontWeight: "600" },
+  devicePill: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.82)", borderWidth: 1, borderColor: "rgba(223,229,235,0.9)" },
+  devicePillText: { fontSize: 11, fontWeight: "800", color: "#53616D" },
+  dropStage: { height: 194, alignItems: "center", justifyContent: "center", overflow: "hidden", borderRadius: 30 },
+  softGlowA: { position: "absolute", width: 210, height: 210, borderRadius: 999, backgroundColor: "rgba(174,214,244,0.16)", top: -72, left: 20 },
+  softGlowB: { position: "absolute", width: 170, height: 170, borderRadius: 999, backgroundColor: "rgba(223,215,248,0.12)", right: 18, bottom: -76 },
+  mainContent: { flex: 1, minHeight: 0 },
+  hero: { fontSize: 27, lineHeight: 31, fontWeight: "900", color: "#121A22", letterSpacing: -0.8, textAlign: "center", marginBottom: 12 },
+  subhead: { fontSize: 13, lineHeight: 18, color: "#74808A", textAlign: "center", marginTop: -4, marginBottom: 12, paddingHorizontal: 10 },
+  askBox: { flexDirection: "row", alignItems: "center", gap: 8, padding: 7, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.94)", borderWidth: 1, borderColor: "#E1E7EC" },
+  input: { flex: 1, height: 46, paddingHorizontal: 12, fontSize: 15, color: "#18212A" },
+  askButton: { height: 44, paddingHorizontal: 18, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: "#111820" },
+  askButtonText: { color: "#FFFFFF", fontWeight: "900", fontSize: 14 },
+  ideaList: { marginTop: 12, gap: 8 },
+  sectionLabel: { fontSize: 9, fontWeight: "900", letterSpacing: 1.25, color: "#89939C", marginLeft: 3, marginBottom: 1 },
+  ideaRow: { minHeight: 49, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 15, borderRadius: 16, backgroundColor: "rgba(255,255,255,0.82)", borderWidth: 1, borderColor: "rgba(228,233,238,0.92)" },
+  ideaText: { flex: 1, fontSize: 14, fontWeight: "800", color: "#28343E" },
+  chevron: { fontSize: 24, color: "#9AA5AE", marginLeft: 10 },
+  answerCard: { marginTop: 12, borderRadius: 22, padding: 16, backgroundColor: "rgba(255,255,255,0.94)", borderWidth: 1, borderColor: "#DEE5EB" },
+  answerEyebrow: { fontSize: 9, fontWeight: "900", letterSpacing: 1.25, color: "#7B91A2", marginBottom: 5 },
+  answerTitle: { fontSize: 20, lineHeight: 24, fontWeight: "900", color: "#16202A" },
+  answerSummary: { marginTop: 7, fontSize: 13, lineHeight: 18, color: "#66727C" },
+  answerActions: { flexDirection: "row", gap: 8, marginTop: 13 },
+  primaryButton: { flex: 1.2, paddingVertical: 12, borderRadius: 15, backgroundColor: "#111820" },
+  primaryButtonText: { textAlign: "center", color: "#FFFFFF", fontSize: 13, fontWeight: "900" },
+  secondaryButton: { flex: 1, paddingVertical: 12, borderRadius: 15, backgroundColor: "#EFF3F6" },
+  secondaryButtonText: { textAlign: "center", color: "#44515C", fontSize: 13, fontWeight: "800" },
+  followUpCard: { marginTop: 12, borderRadius: 20, padding: 15, backgroundColor: "#FFFFFF", borderWidth: 1, borderColor: "#E1E7EC" },
+  followUpText: { fontSize: 15, lineHeight: 20, fontWeight: "800", color: "#293640" },
+  discoveryCard: { minHeight: 73, padding: 14, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.9)", borderWidth: 1, borderColor: "#E1E7EC" },
+  discoveryBadge: { fontSize: 8, fontWeight: "900", letterSpacing: 1.1, color: "#7C9DB7", marginBottom: 4 },
+  discoveryTitle: { fontSize: 15, lineHeight: 19, fontWeight: "900", color: "#23303A" },
+  discoveryCTA: { marginTop: 5, fontSize: 11, fontWeight: "800", color: "#708493" },
+  youCard: { borderRadius: 22, padding: 16, backgroundColor: "rgba(255,255,255,0.92)", borderWidth: 1, borderColor: "#E1E7EC" },
+  youRow: { flexDirection: "row", gap: 12, alignItems: "center" },
+  youTitle: { fontSize: 15, fontWeight: "900", color: "#26323C" },
+  youText: { marginTop: 3, fontSize: 12, lineHeight: 17, color: "#6F7B84" },
+  toggle: { minWidth: 48, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 999, backgroundColor: "#ECEFF2" },
+  toggleOn: { backgroundColor: "#121921" },
+  toggleText: { textAlign: "center", fontSize: 10, fontWeight: "900", color: "#78848E" },
+  toggleTextOn: { color: "#FFFFFF" },
+  divider: { height: 1, backgroundColor: "#EDF0F2", marginVertical: 14 },
+  regionRow: { flexDirection: "row", gap: 8, marginTop: 8 },
+  regionButton: { flex: 1, paddingVertical: 9, borderRadius: 13, backgroundColor: "#F0F3F5" },
+  regionButtonActive: { backgroundColor: "#131A21" },
+  regionButtonText: { textAlign: "center", fontSize: 12, fontWeight: "800", color: "#66717A" },
+  regionButtonTextActive: { color: "#FFFFFF" },
+  radarHint: { marginTop: 12, fontSize: 11, lineHeight: 15, color: "#71808B" },
+  resetButton: { marginTop: 12, alignSelf: "flex-start" },
+  resetText: { fontSize: 11, fontWeight: "800", color: "#8A969F" },
+  settingsHint: { marginTop: 8, fontSize: 11, lineHeight: 15, color: "#78838C", textAlign: "center", paddingHorizontal: 8 },
+  tabBar: { height: 56, flexDirection: "row", alignItems: "center", padding: 5, borderRadius: 19, backgroundColor: "rgba(236,241,245,0.92)", borderWidth: 1, borderColor: "rgba(221,228,234,0.9)", marginTop: 10 },
+  tabButton: { flex: 1, height: 44, borderRadius: 15, alignItems: "center", justifyContent: "center" },
+  tabButtonActive: { backgroundColor: "#FFFFFF", shadowColor: "#25313A", shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: 3 } },
+  tabText: { fontSize: 12, fontWeight: "800", color: "#7B8790" },
+  tabTextActive: { color: "#1F2B34" }
 });
