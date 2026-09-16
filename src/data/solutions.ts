@@ -23,6 +23,11 @@ export const solutions: Solution[] = [
       "Tap Turn On Siri and follow the setup",
       "In Siri settings, choose whether you want to activate Siri by voice, with the side button, or both"
     ],
+    settings: {
+      path: ["Settings", "Siri"],
+      openMode: "manual-system",
+      note: "Apple does not expose a public deep link into the Siri settings page. Drop Guide keeps this path visible while you switch apps."
+    },
     sources: [
       { label: "Apple Support — Turn on and activate Siri", url: "https://support.apple.com/guide/iphone/turn-on-and-activate-siri-iph83aad8922/27/ios/27" }
     ]
@@ -177,6 +182,11 @@ export const solutions: Solution[] = [
     intents: ["enable", "howto"],
     entities: ["bluetooth"],
     steps: ["Open Settings", "Tap Bluetooth", "Turn Bluetooth on"],
+    settings: {
+      path: ["Settings", "Bluetooth"],
+      openMode: "manual-system",
+      note: "CanMyPhone intentionally avoids private App-Prefs links that could break or cause App Store review issues."
+    },
     sources: [
       { label: "Apple Support — Bluetooth accessories", url: "https://support.apple.com/guide/iphone/connect-bluetooth-devices-iph3c50f191/ios" }
     ]
@@ -195,6 +205,10 @@ export const solutions: Solution[] = [
     entities: ["car"],
     requirements: ["Location Services enabled", "Car paired through Bluetooth or CarPlay", "Show Parked Location enabled in Maps settings"],
     steps: ["Open Settings", "Go to Apps → Maps", "Turn on Show Parked Location", "Make sure Location Services and Significant Locations are enabled"],
+    settings: {
+      path: ["Settings", "Apps", "Maps", "Show Parked Location"],
+      openMode: "manual-system"
+    },
     sources: [{ label: "Apple Support — Parked Car", url: "https://support.apple.com/guide/iphone/get-directions-to-your-parked-car-ipha13ef1c2e/27/ios/27" }]
   },
   {
@@ -238,6 +252,10 @@ export const solutions: Solution[] = [
     setupMinutes: 2,
     intents: ["howto", "automation"],
     steps: ["Open Settings", "Go to Accessibility → Touch", "Open Back Tap", "Choose Double Tap or Triple Tap", "Select an action or Shortcut"],
+    settings: {
+      path: ["Settings", "Accessibility", "Touch", "Back Tap"],
+      openMode: "manual-system"
+    },
     sources: [{ label: "Apple Support — Back Tap", url: "https://support.apple.com/de-de/guide/iphone/iphaa57e7885/ios" }]
   },
   {
@@ -252,6 +270,10 @@ export const solutions: Solution[] = [
     setupMinutes: 1,
     intents: ["enable", "howto"],
     steps: ["Open Control Center", "Add Background Sounds if it is not already present", "Press and hold the Background Sounds control", "Choose a sound and volume"],
+    settings: {
+      path: ["Control Center", "Background Sounds"],
+      openMode: "manual-system"
+    },
     sources: [{ label: "Apple Support — Background Sounds", url: "https://support.apple.com/de-de/109346" }]
   },
   {
@@ -267,6 +289,10 @@ export const solutions: Solution[] = [
     intents: ["enable", "howto"],
     requirements: ["Not intended as a safety-critical emergency detection system"],
     steps: ["Open Settings", "Go to Accessibility → Sound & Name Recognition → Sound Recognition", "Turn on Sound Recognition", "Choose the sounds you want to recognize"],
+    settings: {
+      path: ["Settings", "Accessibility", "Sound & Name Recognition", "Sound Recognition"],
+      openMode: "manual-system"
+    },
     sources: [{ label: "Apple Support — Sound Recognition", url: "https://support.apple.com/guide/iphone/use-sound-recognition-iphf2dc33312/ios" }]
   },
   {

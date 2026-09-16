@@ -82,3 +82,22 @@ Optional services:
 ## Privacy
 
 Prefer processing on device. A search query should not require contacts, photos, location history, app-usage history or broad system access.
+
+## v0.4 system companion layer
+
+```text
+verified solution
+      ↓
+Drop Guide session
+      ├─ persistent step state (AsyncStorage)
+      ├─ AppState background / return detection
+      ├─ Liquid Glass avatar state machine
+      ├─ semantic haptics
+      └─ Settings breadcrumb
+             ↓
+       Expo Live Activity
+       Lock Screen / Dynamic Island
+```
+
+The Live Activity is implemented through Expo SDK 57 `expo-widgets`; no private ActivityKit bridge is required. The app remains functional when Live Activities are disabled.
+

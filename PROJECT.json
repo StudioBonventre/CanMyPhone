@@ -1,15 +1,19 @@
 {
   "name": "CanMyPhone",
+  "version": "0.4.0",
   "status": "pre-alpha",
-  "product_promise": "Tell us what you want to do. We find the simplest verified way your phone can help.",
+  "product_promise": "Tell us what you want to do. We find the simplest verified way your phone can help and stay with you while you set it up.",
   "current_focus": [
+    "drop-experience",
+    "guided-setup-resume",
+    "live-activities",
+    "liquid-glass",
+    "haptics",
     "conversation-engine",
     "siri-routing",
-    "eu-aware-availability",
-    "need-radar",
-    "verified-capability-graph"
+    "need-radar"
   ],
-  "interaction_modes": ["ask", "discover", "need-radar"],
+  "interaction_modes": ["ask", "discover", "need-radar", "drop-guide"],
   "voice_routes": ["siri-direct", "shortcut", "siri-ai", "none"],
   "initial_languages": ["de", "en"],
   "license": "MIT"

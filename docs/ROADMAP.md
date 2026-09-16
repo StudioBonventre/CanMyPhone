@@ -29,14 +29,25 @@
 - multilingual intent understanding (DE/EN first)
 - confidence thresholds and safe no-answer behavior
 
-## v0.4 — Community knowledge graph
+## v0.4 — Drop Experience
+- Liquid Glass Drop avatar with accessibility fallbacks
+- semantic haptics for dive / emerge / answer / step
+- persistent guided setup session
+- AppState-based return/resume flow after switching to Settings
+- verified Settings breadcrumbs
+- public-only settings navigation policy
+- Live Activity / Dynamic Island guide using `expo-widgets`
+- EAS development build configuration
+- persistent local Need Radar profile
+
+## v0.5 — Community knowledge graph
 - remote capability dataset
 - schema validation in CI
 - contributor review workflow
 - source freshness checks
 - Android capability expansion
 
-## v0.5 — Advanced opt-in learning
+## v0.6 — Advanced opt-in learning
 - anonymous aggregate problem-gap analytics
 - optional synced user profile
 - persistent on-device Need Radar profile

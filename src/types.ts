@@ -1,6 +1,7 @@
 export type Platform = "ios" | "android" | "both";
 export type Region = "eu" | "outside_eu" | "unknown";
 export type VoiceRoute = "siri-direct" | "shortcut" | "siri-ai" | "none";
+export type DropPhase = "idle" | "listening" | "diving" | "searching" | "answer" | "guiding" | "submerged" | "emerging";
 
 export type Source = {
   label: string;
@@ -22,6 +23,14 @@ export type VoiceIntegration = {
   fallback?: string;
 };
 
+export type SettingsGuide = {
+  /** Human-readable public path the user can follow in Settings. */
+  path: string[];
+  /** Public iOS APIs only. Never use private App-Prefs/prefs URLs. */
+  openMode?: "app-settings" | "manual-system";
+  note?: string;
+};
+
 export type Solution = {
   id: string;
   platform: Platform;
@@ -40,6 +49,7 @@ export type Solution = {
   intents?: QueryIntentKind[];
   availability?: Availability;
   voice?: VoiceIntegration;
+  settings?: SettingsGuide;
 };
 
 export type SolutionFeedback = "worked" | "didnt_work" | "already_knew" | "not_relevant";
@@ -85,4 +95,17 @@ export type ConversationResult = {
   solutions: Solution[];
   followUp?: string;
   notice?: string;
+};
+
+export type GuideSessionStatus = "active" | "background" | "completed";
+
+export type GuideSession = {
+  id: string;
+  solutionId: string;
+  title: string;
+  steps: string[];
+  currentStep: number;
+  status: GuideSessionStatus;
+  startedAt: number;
+  updatedAt: number;
 };

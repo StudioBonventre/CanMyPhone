@@ -2,56 +2,198 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "CanMyPhone capability solution",
   "type": "object",
-  "required": ["id", "platform", "title", "summary", "aliases", "steps", "sources", "builtIn", "cost"],
+  "required": [
+    "id",
+    "platform",
+    "title",
+    "summary",
+    "aliases",
+    "steps",
+    "sources",
+    "builtIn",
+    "cost"
+  ],
   "properties": {
-    "id": { "type": "string" },
-    "platform": { "enum": ["ios", "android", "both"] },
-    "title": { "type": "string" },
-    "summary": { "type": "string" },
-    "aliases": { "type": "array", "items": { "type": "string" } },
-    "category": { "type": "string" },
-    "builtIn": { "type": "boolean" },
-    "cost": { "type": "string" },
-    "setupMinutes": { "type": "integer", "minimum": 0 },
-    "minOs": { "type": ["string", "null"] },
-    "requirements": { "type": "array", "items": { "type": "string" } },
-    "entities": { "type": "array", "items": { "type": "string" } },
+    "id": {
+      "type": "string"
+    },
+    "platform": {
+      "enum": [
+        "ios",
+        "android",
+        "both"
+      ]
+    },
+    "title": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "aliases": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "category": {
+      "type": "string"
+    },
+    "builtIn": {
+      "type": "boolean"
+    },
+    "cost": {
+      "type": "string"
+    },
+    "setupMinutes": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "minOs": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "requirements": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "entities": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "intents": {
       "type": "array",
-      "items": { "enum": ["enable", "howto", "voice-control", "automation", "availability", "discover", "general"] }
+      "items": {
+        "enum": [
+          "enable",
+          "howto",
+          "voice-control",
+          "automation",
+          "availability",
+          "discover",
+          "general"
+        ]
+      }
     },
     "availability": {
       "type": "object",
       "properties": {
-        "regions": { "type": "array", "items": { "enum": ["eu", "outside_eu", "unknown"] } },
-        "excludedRegions": { "type": "array", "items": { "enum": ["eu", "outside_eu", "unknown"] } },
-        "minOsMajor": { "type": "integer", "minimum": 1 },
-        "requiresAppleIntelligence": { "type": "boolean" },
-        "languages": { "type": "array", "items": { "type": "string" } }
+        "regions": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "eu",
+              "outside_eu",
+              "unknown"
+            ]
+          }
+        },
+        "excludedRegions": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "eu",
+              "outside_eu",
+              "unknown"
+            ]
+          }
+        },
+        "minOsMajor": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "requiresAppleIntelligence": {
+          "type": "boolean"
+        },
+        "languages": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
       }
     },
     "voice": {
       "type": "object",
-      "required": ["route"],
+      "required": [
+        "route"
+      ],
       "properties": {
-        "route": { "enum": ["siri-direct", "shortcut", "siri-ai", "none"] },
-        "invocation": { "type": "string" },
-        "note": { "type": "string" },
-        "fallback": { "type": "string" }
+        "route": {
+          "enum": [
+            "siri-direct",
+            "shortcut",
+            "siri-ai",
+            "none"
+          ]
+        },
+        "invocation": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        },
+        "fallback": {
+          "type": "string"
+        }
       }
     },
-    "steps": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
     "sources": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["label", "url"],
+        "required": [
+          "label",
+          "url"
+        ],
         "properties": {
-          "label": { "type": "string" },
-          "url": { "type": "string", "format": "uri" }
+          "label": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          }
         }
       },
       "minItems": 1
+    },
+    "settings": {
+      "type": "object",
+      "required": [
+        "path"
+      ],
+      "properties": {
+        "path": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "openMode": {
+          "enum": [
+            "app-settings",
+            "manual-system"
+          ]
+        },
+        "note": {
+          "type": "string"
+        }
+      }
     }
   }
 }

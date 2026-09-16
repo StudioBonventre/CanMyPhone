@@ -22,13 +22,15 @@ export function SolutionCard({
   best,
   reason,
   onOpen,
-  onFeedback
+  onFeedback,
+  onStartGuide
 }: {
   solution: Solution;
   best?: boolean;
   reason?: string;
   onOpen?: (solution: Solution) => void;
   onFeedback?: (solution: Solution, feedback: SolutionFeedback) => void;
+  onStartGuide?: (solution: Solution) => void;
 }) {
   const [expanded, setExpanded] = useState(Boolean(best));
   const [feedback, setFeedback] = useState<SolutionFeedback | null>(null);
@@ -87,6 +89,13 @@ export function SolutionCard({
           <Text style={styles.section}>How to set it up</Text>
           {solution.steps.map((step, i) => <Text key={`${solution.id}-${i}`} style={styles.step}>{i + 1}. {step}</Text>)}
 
+          {onStartGuide ? (
+            <Pressable style={styles.guideButton} onPress={() => onStartGuide(solution)}>
+              <Text style={styles.guideButtonText}>Start Drop Guide</Text>
+              <Text style={styles.guideButtonSub}>Keep this setup with me while I switch to Settings</Text>
+            </Pressable>
+          ) : null}
+
           {solution.sources.map((source) => (
             <Pressable key={source.url} onPress={() => Linking.openURL(source.url)}>
               <Text style={styles.source}>Verify with {source.label} ↗</Text>
@@ -129,6 +138,9 @@ const styles = StyleSheet.create({
   section: { fontSize: 14, fontWeight: "800", marginTop: 8, marginBottom: 6 },
   step: { fontSize: 14, lineHeight: 20, color: "#333333", marginBottom: 5 },
   fallback: { fontSize: 13, lineHeight: 19, color: "#666666", fontStyle: "italic", marginTop: 3, marginBottom: 5 },
+  guideButton: { marginTop: 14, padding: 14, borderRadius: 16, backgroundColor: "#101820" },
+  guideButtonText: { fontSize: 14, fontWeight: "900", color: "#FFFFFF" },
+  guideButtonSub: { fontSize: 11, lineHeight: 16, color: "#AFC1D3", marginTop: 3 },
   source: { fontSize: 13, fontWeight: "700", color: "#3B36D6", marginTop: 10 },
   feedbackTitle: { fontSize: 13, fontWeight: "800", color: "#333333", marginTop: 18, marginBottom: 9 },
   feedbackRow: { flexDirection: "row", flexWrap: "wrap", gap: 7 },

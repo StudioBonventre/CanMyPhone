@@ -88,9 +88,30 @@ The first release intentionally stays small:
 
 The MVP does **not** automatically change system settings and does not need broad device permissions.
 
+
+## Drop Experience
+
+CanMyPhone now has a visual assistant called **Drop**. On supported iPhones it renders with the native iOS Liquid Glass effect and falls back gracefully on older/unsupported devices.
+
+When a user starts a setup guide:
+
+1. Drop gives a small haptic cue.
+2. The current setup step is saved locally.
+3. An iOS Live Activity starts for the Lock Screen / Dynamic Island.
+4. The user can switch to Settings without losing the current step.
+5. Returning to CanMyPhone resumes the guide and Drop reappears with a soft haptic.
+
+CanMyPhone intentionally avoids private iOS settings URL schemes. Where Apple does not offer a public deep link to a system page, the guide keeps the exact Settings breadcrumb visible instead.
+
+See [`docs/DROP_EXPERIENCE.md`](docs/DROP_EXPERIENCE.md) and [`docs/LIVE_ACTIVITY.md`](docs/LIVE_ACTIVITY.md).
+
 ## Tech stack
 
-- React Native + Expo
+- React Native + Expo SDK 57
+- Expo Widgets for Live Activities / Dynamic Island
+- Expo GlassEffect + Blur fallback for Drop
+- Expo Haptics
+- AsyncStorage for local guide / Need Radar persistence
 - TypeScript
 - local JSON/TypeScript knowledge base for v0.1
 - local deterministic matching for v0.1
@@ -138,4 +159,4 @@ The app code and the public capability dataset are licensed under MIT for the in
 
 ## Status
 
-**Pre-alpha / conversation prototype.** Ask, Discover, Need Radar, the first Conversation Engine, Siri routing and region-aware Siri AI fallbacks are represented in the starter. The next milestone is ~50 verified iPhone capabilities, persistent local preferences and a semantic resolver that is constrained to verified records.
+**Pre-alpha / v0.4 Drop Experience.** Ask, Discover, Need Radar, Conversation Engine and Siri routing are joined by a persistent Drop Guide, Liquid Glass avatar, haptics and an iOS Live Activity / Dynamic Island companion. The next milestone is expanding the verified capability graph and replacing deterministic matching with a semantic resolver constrained to verified records.
