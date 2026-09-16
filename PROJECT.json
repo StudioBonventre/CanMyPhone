@@ -1,0 +1,16 @@
+{
+  "name": "CanMyPhone",
+  "status": "pre-alpha",
+  "product_promise": "Tell us what you want to do. We find the simplest verified way your phone can help.",
+  "current_focus": [
+    "conversation-engine",
+    "siri-routing",
+    "eu-aware-availability",
+    "need-radar",
+    "verified-capability-graph"
+  ],
+  "interaction_modes": ["ask", "discover", "need-radar"],
+  "voice_routes": ["siri-direct", "shortcut", "siri-ai", "none"],
+  "initial_languages": ["de", "en"],
+  "license": "MIT"
+}
