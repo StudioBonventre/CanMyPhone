@@ -1,4 +1,4 @@
-import * as Brightness from "expo-brightness";
+import { CanMyPhoneNative } from "../../modules/canmyphone-native";
 import type { EntitlementState, Solution } from "../types";
 import { directActionPlan, type DirectActionKind } from "./actionPlanning";
 import {
@@ -26,6 +26,12 @@ async function entitlementGate(): Promise<{
   message?: string;
 }> {
   const state = await loadEntitlementState() ?? DEFAULT_ENTITLEMENTS;
+
+  // Keep the native App Intents layer aligned with the app's entitlement state.
+  if (CanMyPhoneNative) {
+    await CanMyPhoneNative.setPremiumEntitlement(state.pro).catch(() => undefined);
+  }
+
   const access = automaticActionAccess(state);
   if (access.allowed) return { allowed: true, state };
 
@@ -37,7 +43,11 @@ async function entitlementGate(): Promise<{
 }
 
 async function persistSuccessfulAutomaticAction(state: EntitlementState): Promise<void> {
-  await saveEntitlementState(consumeAutomaticAction(state));
+  const next = consumeAutomaticAction(state);
+  await saveEntitlementState(next);
+  if (CanMyPhoneNative) {
+    await CanMyPhoneNative.setPremiumEntitlement(next.pro).catch(() => undefined);
+  }
 }
 
 export async function runDirectAction(solution: Solution, query: string): Promise<DirectActionResult> {
@@ -66,21 +76,40 @@ export async function runDirectAction(solution: Solution, query: string): Promis
         message: "Sag mir die gewünschte Helligkeit, zum Beispiel „35 %“."
       };
     }
+
+    if (!CanMyPhoneNative) {
+      return {
+        handled: true,
+        succeeded: false,
+        kind: "brightness",
+        message: "Diese Version von CanMyPhone braucht einen neuen iOS-Build, bevor sie die Displayhelligkeit direkt ändern kann."
+      };
+    }
+
     try {
-      await Brightness.setBrightnessAsync(plan.brightness);
+      const applied = await CanMyPhoneNative.setBrightness(plan.brightness);
+      if (!applied.success) {
+        return {
+          handled: true,
+          succeeded: false,
+          kind: "brightness",
+          message: applied.message || "Die Helligkeit konnte auf diesem Gerät gerade nicht geändert werden."
+        };
+      }
+
       await persistSuccessfulAutomaticAction(gate.state);
       return {
         handled: true,
         succeeded: true,
         kind: "brightness",
-        message: `Helligkeit auf ${Math.round(plan.brightness * 100)} % gestellt.`
+        message: applied.message
       };
     } catch {
       return {
         handled: true,
         succeeded: false,
         kind: "brightness",
-        message: "Die Helligkeit konnte auf diesem Gerät gerade nicht geändert werden."
+        message: "Die Helligkeit konnte auf diesem Gerät gerade nicht geändert werden. Installiere bei Bedarf den aktuellen Development Build."
       };
     }
   }
