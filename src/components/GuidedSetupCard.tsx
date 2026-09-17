@@ -31,7 +31,9 @@ export function GuidedSetupCard({
   const path = solution.settings?.path ?? [];
   const permissionFlow = isPermissionSettingsFlow(solution);
   const shortcutFlow = isShortcutSettingsFlow(solution) && !permissionFlow;
-  const hasSettingsAction = Boolean(solution.settings) || shortcutFlow;
+  const appSettingsFlow = solution.settings?.openMode === "app-settings" && !permissionFlow;
+  const hasSettingsAction = permissionFlow || shortcutFlow || appSettingsFlow;
+  const manualSystemFlow = Boolean(solution.settings) && !hasSettingsAction;
 
   return (
     <View style={styles.card}>
@@ -91,6 +93,7 @@ export function GuidedSetupCard({
       {hasSettingsAction ? (
         <>
           <Pressable
+            accessibilityRole="button"
             style={[styles.settingsButton, (permissionFlow || shortcutFlow) && styles.settingsButtonPermission]}
             onPress={onLeaveForSettings}
           >
@@ -105,13 +108,19 @@ export function GuidedSetupCard({
             </Text>
           ) : shortcutFlow ? (
             <Text style={styles.permissionHint}>
-              CanMyPhone nutzt dafür nur Apples offiziellen Kurzbefehle-Deep-Link. Systemzuordnungen, die iOS nicht freigibt, bestätigst du einmal selbst.
+              CanMyPhone nutzt dafür Apples offiziellen Kurzbefehle-Link. Den letzten von iOS geschützten Systemschritt bestätigst du selbst.
             </Text>
           ) : null}
         </>
       ) : null}
 
-      {!permissionFlow && !shortcutFlow && solution.settings?.note ? <Text style={styles.note}>{solution.settings.note}</Text> : null}
+      {manualSystemFlow ? (
+        <Text style={styles.note}>
+          Für diesen Systembereich bietet iOS keinen öffentlichen Direktlink. Deshalb zeigt CanMyPhone dir den kürzesten erlaubten Pfad statt eines Buttons, der nur scheinbar etwas öffnet.
+        </Text>
+      ) : !permissionFlow && !shortcutFlow && solution.settings?.note ? (
+        <Text style={styles.note}>{solution.settings.note}</Text>
+      ) : null}
 
       <View style={styles.actions}>
         <Pressable
