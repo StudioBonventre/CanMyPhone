@@ -21,6 +21,7 @@ import { GlassView, isGlassEffectAPIAvailable } from "expo-glass-effect";
 import { ActionTransitionV2 } from "./src/components/ActionTransitionV2";
 import { AuraV2 } from "./src/components/AuraV2";
 import { GuidedSetupCard } from "./src/components/GuidedSetupCard";
+import { Top100Section } from "./src/components/Top100Section";
 import { solutions } from "./src/data/solutions";
 import { directActionPlan, runDirectAction, type DirectActionResult } from "./src/lib/actions";
 import { resolveWithOnDeviceAI } from "./src/lib/aiResolver";
@@ -701,6 +702,8 @@ export default function App() {
                       : "Nützliche Funktionen, verständlich erklärt — ohne Techniksprech."}
                   </Text>
                 </View>
+
+                <Top100Section onSelect={(query) => runAsk(query).catch(() => undefined)} />
 
                 {radarResults.length ? (
                   <View style={styles.discoveryList}>
