@@ -12,13 +12,27 @@ export type DirectActionPlan = {
   brightness?: number;
 };
 
-function brightnessFromQuery(query: string): number | null {
-  const match = query.match(/(?:auf\s*)?(-?\d{1,3})(?:\s*%|\s*prozent)/i);
-  if (!match) return null;
-
-  const percent = Number(match[1]);
+function validBrightnessPercent(raw: string): number | null {
+  const percent = Number(raw);
   if (!Number.isFinite(percent) || percent < 0 || percent > 100) return null;
   return percent / 100;
+}
+
+function brightnessFromQuery(query: string): number | null {
+  // Explicit target language is authoritative even if the sentence also says
+  // "heller" or "dunkler", e.g. "mach es heller, auf 60 %".
+  const explicitTarget = query.match(/\bauf\s*(-?\d{1,3})(?:\s*%|\s*prozent)\b/i);
+  if (explicitTarget) return validBrightnessPercent(explicitTarget[1]);
+
+  // Relative requests need the current brightness as an input. Until that
+  // capability is implemented, never reinterpret "25 % heller" as "auf 25 %".
+  if (/\b(heller|dunkler|erhöhen|erhoehen|senken|reduzieren|mehr|weniger)\b/i.test(query)) {
+    return null;
+  }
+
+  const percentage = query.match(/(-?\d{1,3})(?:\s*%|\s*prozent)\b/i);
+  if (!percentage) return null;
+  return validBrightnessPercent(percentage[1]);
 }
 
 export function directActionPlan(solution: Solution, query: string): DirectActionPlan {
