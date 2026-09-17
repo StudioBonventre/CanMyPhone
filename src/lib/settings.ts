@@ -10,6 +10,7 @@ export type SettingsLaunchResult = {
     | "permission-granted"
     | "permission-denied"
     | "manual-system-path"
+    | "native-permission-unavailable"
     | "not-ios"
     | "no-settings-guide";
   message: string;
@@ -19,32 +20,60 @@ function permissionForSolution(solution: Solution): PermissionKind | null {
   return solution.settings?.permission ?? null;
 }
 
+export function isPermissionSettingsFlow(solution: Solution): boolean {
+  return Boolean(permissionForSolution(solution));
+}
+
 export function settingsActionLabel(solution: Solution): string {
   const permission = permissionForSolution(solution);
-  if (permission) return "Berechtigung prüfen";
+  if (permission === "notifications") return "Mitteilungen prüfen";
+  if (permission) return "Zugriff erlauben";
   if (solution.settings?.openMode === "app-settings") return "App-Einstellungen öffnen";
-  return "In Einstellungen fortfahren";
+  return "In Einstellungen weiter";
 }
 
 /**
  * Public iOS APIs only.
  * - App-owned permissions: ask through the real system permission sheet first.
- * - App settings / notification settings: use Apple's documented settings URLs.
+ * - If a permission was already denied, open the official app/notification settings.
  * - Arbitrary system panes: keep a visible breadcrumb instead of private App-Prefs links.
  */
 export async function openSupportedSettings(solution: Solution): Promise<SettingsLaunchResult> {
   if (!solution.settings) {
-    return { opened: false, reason: "no-settings-guide", message: "Für diese Lösung ist kein Einstellungsweg hinterlegt." };
+    return {
+      opened: false,
+      reason: "no-settings-guide",
+      message: "Für diese Lösung ist kein Einstellungsweg hinterlegt."
+    };
   }
+
   if (Platform.OS !== "ios") {
-    return { opened: false, reason: "not-ios", message: "Dieser Einstellungsweg ist für iOS vorgesehen." };
+    return {
+      opened: false,
+      reason: "not-ios",
+      message: "Dieser Einstellungsweg ist für iOS vorgesehen."
+    };
   }
 
   const permission = permissionForSolution(solution);
-  if (permission && CanMyPhoneNative) {
+
+  if (permission) {
+    if (!CanMyPhoneNative) {
+      return {
+        opened: false,
+        reason: "native-permission-unavailable",
+        message: "Der native iOS-Berechtigungsdialog ist in diesem Build noch nicht verfügbar."
+      };
+    }
+
     const current = await CanMyPhoneNative.permissionStatus(permission);
+
     if (current.granted) {
-      return { opened: false, reason: "permission-granted", message: current.message };
+      return {
+        opened: false,
+        reason: "permission-granted",
+        message: current.message
+      };
     }
 
     if (current.status === "notDetermined") {
@@ -63,7 +92,11 @@ export async function openSupportedSettings(solution: Solution): Promise<Setting
     return {
       opened,
       reason: permission === "notifications" ? "opened-notification-settings" : "opened-app-settings",
-      message: opened ? "Die passenden App-Einstellungen wurden geöffnet." : current.message
+      message: opened
+        ? permission === "notifications"
+          ? "Die Mitteilungseinstellungen für CanMyPhone wurden geöffnet."
+          : "Die CanMyPhone-Einstellungen wurden geöffnet."
+        : current.message
     };
   }
 
@@ -71,18 +104,33 @@ export async function openSupportedSettings(solution: Solution): Promise<Setting
     try {
       if (CanMyPhoneNative) {
         const opened = await CanMyPhoneNative.openAppSettings();
-        return { opened, reason: "opened-app-settings", message: opened ? "Die CanMyPhone-Einstellungen wurden geöffnet." : "Die App-Einstellungen konnten nicht geöffnet werden." };
+        return {
+          opened,
+          reason: "opened-app-settings",
+          message: opened
+            ? "Die CanMyPhone-Einstellungen wurden geöffnet."
+            : "Die App-Einstellungen konnten nicht geöffnet werden."
+        };
       }
+
       await Linking.openSettings();
-      return { opened: true, reason: "opened-app-settings", message: "Die CanMyPhone-Einstellungen wurden geöffnet." };
+      return {
+        opened: true,
+        reason: "opened-app-settings",
+        message: "Die CanMyPhone-Einstellungen wurden geöffnet."
+      };
     } catch {
-      return { opened: false, reason: "manual-system-path", message: "Die App-Einstellungen konnten nicht geöffnet werden." };
+      return {
+        opened: false,
+        reason: "manual-system-path",
+        message: "Die App-Einstellungen konnten nicht geöffnet werden."
+      };
     }
   }
 
   return {
     opened: false,
     reason: "manual-system-path",
-    message: "Diesen Systembereich stellt iOS Apps nicht als öffentlichen Direktlink bereit. CanMyPhone hält deshalb den kürzesten Pfad sichtbar."
+    message: "CanMyPhone kann diesen Systemschalter nicht selbst ändern. Folge einfach dem oben gezeigten kurzen Pfad — dein Fortschritt bleibt dabei erhalten."
   };
 }
