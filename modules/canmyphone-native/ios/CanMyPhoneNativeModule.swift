@@ -70,6 +70,24 @@ public final class CanMyPhoneNativeModule: Module {
       return await self.requestPermission(kind: kind)
     }
 
+    AsyncFunction("setBrightness") { (level: Double) async -> [String: Any] in
+      let clamped = max(0.0, min(1.0, level))
+      return await MainActor.run {
+        UIScreen.main.brightness = CGFloat(clamped)
+        let applied = Double(UIScreen.main.brightness)
+        return [
+          "success": abs(applied - clamped) < 0.02,
+          "requested": clamped,
+          "applied": applied,
+          "message": "Helligkeit auf \(Int(round(applied * 100))) % gestellt."
+        ]
+      }
+    }
+
+    AsyncFunction("setPremiumEntitlement") { (enabled: Bool) async -> Void in
+      UserDefaults.standard.set(enabled, forKey: "CanMyPhoneProEnabled")
+    }
+
     AsyncFunction("openAppSettings") { () async -> Bool in
       guard let url = URL(string: UIApplication.openSettingsURLString) else { return false }
       return await self.open(url: url)
@@ -81,6 +99,12 @@ public final class CanMyPhoneNativeModule: Module {
         return await self.open(url: url)
       }
       guard let url = URL(string: UIApplication.openSettingsURLString) else { return false }
+      return await self.open(url: url)
+    }
+
+    AsyncFunction("openShortcuts") { (destination: String) async -> Bool in
+      let urlString = destination == "create" ? "shortcuts://create-shortcut" : "shortcuts://"
+      guard let url = URL(string: urlString) else { return false }
       return await self.open(url: url)
     }
   }
