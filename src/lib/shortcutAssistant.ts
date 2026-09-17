@@ -38,13 +38,13 @@ export function shortcutAssistantPlan(query: string, solution?: Solution | null)
     return {
       applicable: true,
       title: "Back Tap mit CanMyPhone vorbereiten",
-      explanation: "CanMyPhone registriert einen eigenen App Shortcut automatisch. Apple verlangt nur die letzte Zuordnung zu Doppeltippen oder Dreimal tippen in den Bedienungshilfen.",
+      explanation: "CanMyPhone nutzt dafür einen eigenen App-Kurzbefehl. Apple verlangt nur die letzte Zuordnung zu Doppeltippen oder Dreimal tippen in den Bedienungshilfen.",
       suggestedName: "CanMyPhone öffnen",
       steps: [
-        "Tippe auf „Shortcut vorbereiten“ — CanMyPhone öffnet die Kurzbefehle-App über Apples offiziellen Deep Link",
-        "Prüfe, dass der CanMyPhone App Shortcut verfügbar ist",
+        "Tippe auf „Kurzbefehle öffnen“",
+        "Prüfe, ob der CanMyPhone App-Kurzbefehl verfügbar ist",
         "Öffne Einstellungen → Bedienungshilfen → Tippen → Auf Rückseite tippen",
-        "Wähle Doppeltippen oder Dreimal tippen und ordne den CanMyPhone Shortcut zu"
+        "Wähle Doppeltippen oder Dreimal tippen und ordne den CanMyPhone Kurzbefehl zu"
       ]
     };
   }
@@ -53,7 +53,7 @@ export function shortcutAssistantPlan(query: string, solution?: Solution | null)
     return {
       applicable: true,
       title: "Automation fürs Auto",
-      explanation: "CanMyPhone kann dir den passenden Kurzbefehle-Weg vorbereiten, ohne dass du die Fachbegriffe kennen musst.",
+      explanation: "CanMyPhone bringt dich direkt in Kurzbefehle und zeigt dir danach nur die Schritte, die iOS selbst noch von dir verlangt.",
       clarification: "Woran soll dein iPhone erkennen, dass du losfährst?",
       choices: [
         { id: "carplay", label: "CarPlay verbindet sich", queryHint: "CarPlay" },
@@ -74,7 +74,7 @@ export function shortcutAssistantPlan(query: string, solution?: Solution | null)
     return {
       applicable: true,
       title: "Tesla-Aktion als Siri-Kurzbefehl",
-      explanation: "CanMyPhone nutzt die von der Tesla-App angebotenen App-Kurzbefehle und legt keine privaten Fahrzeugbefehle an.",
+      explanation: "CanMyPhone nutzt nur die Aktionen, die deine installierte Tesla-App tatsächlich als App-Kurzbefehl anbietet.",
       clarification: "Welche Tesla-Aktion möchtest du per Siri starten?",
       choices: [
         { id: "unlock", label: "Entriegeln", queryHint: "Tesla entriegeln" },
@@ -94,7 +94,7 @@ export function shortcutAssistantPlan(query: string, solution?: Solution | null)
   return {
     applicable: true,
     title: "Kurzbefehl vorbereiten",
-    explanation: "CanMyPhone führt dich durch den kürzesten offiziellen Kurzbefehle-Weg.",
+    explanation: "CanMyPhone führt dich durch den kürzesten offiziellen Kurzbefehle-Weg und verwendet keine privaten Systemlinks.",
     suggestedName: solution?.title ?? "Meine Automation",
     steps: solution?.steps ?? [
       "Öffne Kurzbefehle",
