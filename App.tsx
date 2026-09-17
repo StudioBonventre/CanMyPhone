@@ -2,10 +2,8 @@ import React, { PropsWithChildren, useEffect, useMemo, useRef, useState } from "
 import {
   AccessibilityInfo,
   ActivityIndicator,
-  Animated,
   AppState,
   AppStateStatus,
-  Easing,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
@@ -20,6 +18,8 @@ import {
   ViewStyle
 } from "react-native";
 import { GlassView, isGlassEffectAPIAvailable } from "expo-glass-effect";
+import { ActionTransitionV2 } from "./src/components/ActionTransitionV2";
+import { AuraV2 } from "./src/components/AuraV2";
 import { GuidedSetupCard } from "./src/components/GuidedSetupCard";
 import { solutions } from "./src/data/solutions";
 import { directActionPlan, runDirectAction, type DirectActionResult } from "./src/lib/actions";
@@ -127,138 +127,6 @@ function osMajor(): number | undefined {
   const value = String(Platform.Version);
   const major = Number.parseInt(value.split(".")[0] ?? "", 10);
   return Number.isFinite(major) ? major : undefined;
-}
-
-function phaseIntensity(phase: DropPhase): number {
-  switch (phase) {
-    case "diving": return 0.62;
-    case "searching": return 1;
-    case "emerging": return 0.72;
-    case "submerged": return 0.45;
-    case "guiding": return 0.18;
-    case "listening": return 0.28;
-    case "success": return 0.42;
-    case "answer": return 0.12;
-    default: return 0.08;
-  }
-}
-
-function AuraLayer({ phase, reduceMotion }: { phase: DropPhase; reduceMotion: boolean }) {
-  const activity = useRef(new Animated.Value(phaseIntensity(phase))).current;
-  const breathe = useRef(new Animated.Value(0)).current;
-  const travel = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.timing(activity, {
-      toValue: phaseIntensity(phase),
-      duration: reduceMotion ? 120 : phase === "searching" ? 280 : 500,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true
-    }).start();
-  }, [activity, phase, reduceMotion]);
-
-  useEffect(() => {
-    if (reduceMotion) {
-      breathe.stopAnimation();
-      travel.stopAnimation();
-      breathe.setValue(0.35);
-      travel.setValue(0.28);
-      return;
-    }
-
-    const breathing = Animated.loop(
-      Animated.sequence([
-        Animated.timing(breathe, { toValue: 1, duration: 5600, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(breathe, { toValue: 0, duration: 5600, easing: Easing.inOut(Easing.sin), useNativeDriver: true })
-      ])
-    );
-    const travelling = Animated.loop(
-      Animated.sequence([
-        Animated.timing(travel, { toValue: 1, duration: 6200, easing: Easing.inOut(Easing.cubic), useNativeDriver: true }),
-        Animated.timing(travel, { toValue: 0, duration: 6200, easing: Easing.inOut(Easing.cubic), useNativeDriver: true })
-      ])
-    );
-
-    breathing.start();
-    travelling.start();
-    return () => {
-      breathing.stop();
-      travelling.stop();
-    };
-  }, [breathe, reduceMotion, travel]);
-
-  const ambientScale = breathe.interpolate({ inputRange: [0, 1], outputRange: [0.97, 1.07] });
-  const segmentOpacity = activity.interpolate({ inputRange: [0, 1], outputRange: [0, 0.62] });
-  const haloOpacity = activity.interpolate({ inputRange: [0, 1], outputRange: [0.05, 0.28] });
-  const haloScale = breathe.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1.08] });
-
-  const topX = travel.interpolate({ inputRange: [0, 1], outputRange: [-110, 380] });
-  const rightY = travel.interpolate({ inputRange: [0, 1], outputRange: [-130, 760] });
-  const bottomX = travel.interpolate({ inputRange: [0, 1], outputRange: [300, -150] });
-  const leftY = travel.interpolate({ inputRange: [0, 1], outputRange: [720, -150] });
-
-  return (
-    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-      <Animated.View style={[styles.ambientBlue, { transform: [{ scale: ambientScale }] }]} />
-      <Animated.View style={[styles.ambientViolet, { transform: [{ scale: ambientScale }] }]} />
-      <Animated.View style={[styles.ambientCyan, { transform: [{ scale: ambientScale }] }]} />
-      <Animated.View style={[styles.actionHalo, { opacity: haloOpacity, transform: [{ scale: haloScale }] }]} />
-      <Animated.View style={[styles.edgeTopSegment, { opacity: segmentOpacity, transform: [{ translateX: topX }] }]} />
-      <Animated.View style={[styles.edgeRightSegment, { opacity: segmentOpacity, transform: [{ translateY: rightY }] }]} />
-      <Animated.View style={[styles.edgeBottomSegment, { opacity: segmentOpacity, transform: [{ translateX: bottomX }] }]} />
-      <Animated.View style={[styles.edgeLeftSegment, { opacity: segmentOpacity, transform: [{ translateY: leftY }] }]} />
-    </View>
-  );
-}
-
-function ActionTransition({
-  visible,
-  reduceMotion,
-  label
-}: {
-  visible: boolean;
-  reduceMotion: boolean;
-  label: string;
-}) {
-  const opacity = useRef(new Animated.Value(0)).current;
-  const pulse = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.timing(opacity, {
-      toValue: visible ? 1 : 0,
-      duration: reduceMotion ? 100 : 220,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true
-    }).start();
-
-    if (!visible || reduceMotion) {
-      pulse.stopAnimation();
-      pulse.setValue(0.4);
-      return;
-    }
-
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 1100, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0, duration: 1100, easing: Easing.inOut(Easing.sin), useNativeDriver: true })
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [opacity, pulse, reduceMotion, visible]);
-
-  const ringScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.86, 1.14] });
-  const coreOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.22, 0.62] });
-
-  return (
-    <Animated.View pointerEvents="none" style={[styles.actionTransition, { opacity }]}>
-      <Animated.View style={[styles.transitionGlow, { transform: [{ scale: ringScale }] }]} />
-      <Animated.View style={[styles.transitionRing, { transform: [{ scale: ringScale }] }]} />
-      <Animated.View style={[styles.transitionCore, { opacity: coreOpacity }]} />
-      <Text style={styles.transitionTitle}>{label}</Text>
-      <Text style={styles.transitionSubtitle}>Ich prüfe nur verifizierte iPhone-Wege und öffentliche APIs.</Text>
-    </Animated.View>
-  );
 }
 
 export default function App() {
@@ -559,7 +427,7 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <AuraLayer phase={motionPhase} reduceMotion={reduceMotion} />
+      <AuraV2 phase={motionPhase} reduceMotion={reduceMotion} />
 
       <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <View style={styles.header}>
@@ -916,36 +784,36 @@ export default function App() {
         ) : null}
       </KeyboardAvoidingView>
 
-      <ActionTransition visible={isSearching || actionRunning} reduceMotion={reduceMotion} label={transitionLabel} />
+      <ActionTransitionV2 visible={isSearching || actionRunning} reduceMotion={reduceMotion} label={transitionLabel} />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#F4F7FB" },
-  screen: { flex: 1, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 10 },
-  glassFallback: { backgroundColor: "rgba(255,255,255,0.78)", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(255,255,255,0.92)" },
+  safe: { flex: 1, backgroundColor: "#F7F9FC" },
+  screen: { flex: 1, paddingHorizontal: 18, paddingTop: 8, paddingBottom: 10 },
+  glassFallback: { backgroundColor: "rgba(255,255,255,0.82)", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(255,255,255,0.96)" },
   header: { minHeight: 54, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
   brand: { fontSize: 19, fontWeight: "700", letterSpacing: -0.45, color: "#111827" },
-  modePill: { fontSize: 9, fontWeight: "800", letterSpacing: 0.7, color: "#506174", backgroundColor: "rgba(255,255,255,0.72)", paddingHorizontal: 9, paddingVertical: 6, borderRadius: 999, overflow: "hidden" },
+  modePill: { fontSize: 9, fontWeight: "800", letterSpacing: 0.7, color: "#506174", backgroundColor: "rgba(255,255,255,0.76)", paddingHorizontal: 9, paddingVertical: 6, borderRadius: 999, overflow: "hidden" },
   moreButton: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center", overflow: "hidden" },
   moreButtonText: { fontSize: 17, fontWeight: "700", color: "#53606F", marginTop: -5 },
   mainContent: { flex: 1 },
-  contentContainer: { flexGrow: 1, paddingBottom: 18 },
-  guideScrollContent: { flexGrow: 1, justifyContent: "center", paddingVertical: 18 },
-  heroBlock: { paddingTop: 74, paddingHorizontal: 8, alignItems: "center" },
-  heroBlockAnswer: { paddingTop: 38 },
-  sectionHeroBlock: { paddingTop: 52, paddingHorizontal: 8, alignItems: "center", marginBottom: 24 },
+  contentContainer: { flexGrow: 1, paddingBottom: 16 },
+  guideScrollContent: { flexGrow: 1, justifyContent: "center", paddingVertical: 14 },
+  heroBlock: { paddingTop: 58, paddingHorizontal: 8, alignItems: "center" },
+  heroBlockAnswer: { paddingTop: 30 },
+  sectionHeroBlock: { paddingTop: 42, paddingHorizontal: 8, alignItems: "center", marginBottom: 22 },
   hero: { maxWidth: 350, fontSize: 36, lineHeight: 40, fontWeight: "700", letterSpacing: -1.15, color: "#101725", textAlign: "center" },
-  heroSubtext: { maxWidth: 330, marginTop: 18, fontSize: 16, lineHeight: 22, color: "#667181", textAlign: "center" },
-  askBox: { height: 64, marginTop: 42, borderRadius: 32, flexDirection: "row", alignItems: "center", paddingLeft: 18, paddingRight: 9, overflow: "hidden", shadowColor: "#426185", shadowOpacity: 0.10, shadowRadius: 24, shadowOffset: { width: 0, height: 10 } },
+  heroSubtext: { maxWidth: 330, marginTop: 16, fontSize: 16, lineHeight: 22, color: "#667181", textAlign: "center" },
+  askBox: { height: 64, marginTop: 34, borderRadius: 32, flexDirection: "row", alignItems: "center", paddingLeft: 18, paddingRight: 9, overflow: "hidden", shadowColor: "#426185", shadowOpacity: 0.11, shadowRadius: 26, shadowOffset: { width: 0, height: 11 } },
   input: { flex: 1, height: 56, fontSize: 16, color: "#17202B", paddingRight: 12 },
   askButton: { width: 46, height: 46, borderRadius: 23, backgroundColor: "#087BFF", alignItems: "center", justifyContent: "center", shadowColor: "#007AFF", shadowOpacity: 0.25, shadowRadius: 14, shadowOffset: { width: 0, height: 6 } },
   askButtonText: { color: "#FFFFFF", fontSize: 23, lineHeight: 26, fontWeight: "700" },
-  ideaList: { marginTop: 42, paddingHorizontal: 4 },
-  sectionLabel: { fontSize: 12, fontWeight: "700", letterSpacing: 0.8, color: "#858F9D", marginBottom: 14 },
-  ideaRow: { minHeight: 66, flexDirection: "row", alignItems: "center", paddingVertical: 8 },
+  ideaList: { marginTop: 34, paddingHorizontal: 4 },
+  sectionLabel: { fontSize: 12, fontWeight: "700", letterSpacing: 0.8, color: "#858F9D", marginBottom: 12 },
+  ideaRow: { minHeight: 68, flexDirection: "row", alignItems: "center", paddingVertical: 9 },
   ideaTextWrap: { flex: 1, paddingRight: 12 },
   ideaText: { fontSize: 16, lineHeight: 20, fontWeight: "600", color: "#202B39" },
   ideaSubtext: { marginTop: 4, fontSize: 12, lineHeight: 16, color: "#7C8795" },
@@ -954,34 +822,34 @@ const styles = StyleSheet.create({
   answerTopBar: { flexDirection: "row", alignItems: "center", minHeight: 42, marginTop: 4 },
   backButton: { width: 34, fontSize: 38, lineHeight: 40, color: "#007AFF", fontWeight: "300" },
   answerTopTitle: { fontSize: 18, fontWeight: "700", color: "#17202B", marginLeft: 4 },
-  answerArea: { paddingTop: 34, paddingHorizontal: 2 },
+  answerArea: { paddingTop: 30, paddingHorizontal: 2 },
   answerMetaRow: { flexDirection: "row", alignItems: "center" },
   answerEyebrow: { fontSize: 10, fontWeight: "800", letterSpacing: 0.8, color: "#7890A6", marginBottom: 8 },
   answerTitle: { fontSize: 25, lineHeight: 30, fontWeight: "700", letterSpacing: -0.45, color: "#17202B" },
   answerSummary: { marginTop: 10, fontSize: 15, lineHeight: 21, color: "#667181" },
   noticeText: { marginTop: 12, fontSize: 13, lineHeight: 18, color: "#62758A" },
-  capabilityCard: { marginTop: 24, minHeight: 96, borderRadius: 26, padding: 18, flexDirection: "row", alignItems: "center", overflow: "hidden" },
+  capabilityCard: { marginTop: 22, minHeight: 96, borderRadius: 26, padding: 18, flexDirection: "row", alignItems: "center", overflow: "hidden" },
   capabilityIcon: { width: 38, height: 38, borderRadius: 19, backgroundColor: "rgba(26,199,114,0.13)", alignItems: "center", justifyContent: "center" },
   capabilityIconText: { color: "#18A864", fontSize: 20, fontWeight: "800" },
   capabilityTextWrap: { flex: 1, marginLeft: 14 },
   capabilityTitle: { fontSize: 16, fontWeight: "700", color: "#1A2531" },
   capabilityText: { marginTop: 4, fontSize: 13, lineHeight: 18, color: "#6E7A88" },
-  primaryAction: { marginTop: 24, minHeight: 58, borderRadius: 29, alignItems: "center", justifyContent: "center", backgroundColor: "#087BFF", shadowColor: "#087BFF", shadowOpacity: 0.20, shadowRadius: 20, shadowOffset: { width: 0, height: 10 } },
+  primaryAction: { marginTop: 22, minHeight: 58, borderRadius: 29, alignItems: "center", justifyContent: "center", backgroundColor: "#087BFF", shadowColor: "#087BFF", shadowOpacity: 0.20, shadowRadius: 20, shadowOffset: { width: 0, height: 10 } },
   primaryActionText: { color: "#FFFFFF", fontSize: 17, fontWeight: "700" },
   secondaryAction: { marginTop: 16, minHeight: 50, borderRadius: 25, alignItems: "center", justifyContent: "center", backgroundColor: "#17202B" },
   secondaryActionText: { color: "#FFFFFF", fontSize: 14, fontWeight: "700" },
   textAction: { alignItems: "center", paddingVertical: 18 },
   textActionText: { fontSize: 15, color: "#566375", fontWeight: "600" },
-  followUpCard: { marginTop: 34, borderRadius: 28, padding: 20, overflow: "hidden" },
+  followUpCard: { marginTop: 30, borderRadius: 28, padding: 20, overflow: "hidden" },
   followUpText: { fontSize: 19, lineHeight: 25, fontWeight: "700", color: "#293640" },
-  followUpInputRow: { marginTop: 18, flexDirection: "row", alignItems: "center", backgroundColor: "rgba(255,255,255,0.62)", borderRadius: 22, paddingLeft: 14, paddingRight: 6 },
+  followUpInputRow: { marginTop: 18, flexDirection: "row", alignItems: "center", backgroundColor: "rgba(255,255,255,0.66)", borderRadius: 22, paddingLeft: 14, paddingRight: 6 },
   followUpInput: { flex: 1, height: 48, fontSize: 15, color: "#17202B" },
   smallSendButton: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: "#087BFF" },
   smallSendText: { color: "#FFFFFF", fontSize: 20, fontWeight: "700" },
   choiceSection: { marginTop: 22 },
   choiceTitle: { fontSize: 13, fontWeight: "700", color: "#566375", marginBottom: 10 },
   choiceRow: { flexDirection: "row", gap: 8 },
-  choiceChip: { flex: 1, paddingVertical: 12, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.72)", alignItems: "center" },
+  choiceChip: { flex: 1, paddingVertical: 12, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.76)", alignItems: "center" },
   choiceChipText: { fontSize: 13, fontWeight: "700", color: "#263548" },
   resultBanner: { marginTop: 14, borderRadius: 22, padding: 16, overflow: "hidden" },
   resultBannerSuccess: { backgroundColor: "rgba(223,249,235,0.78)" },
@@ -994,12 +862,12 @@ const styles = StyleSheet.create({
   shortcutText: { marginTop: 8, fontSize: 14, lineHeight: 20, color: "#677485" },
   shortcutQuestion: { marginTop: 15, fontSize: 14, lineHeight: 20, fontWeight: "700", color: "#334155" },
   shortcutChoices: { marginTop: 10, gap: 8 },
-  shortcutChoice: { minHeight: 44, borderRadius: 17, backgroundColor: "rgba(255,255,255,0.72)", justifyContent: "center", paddingHorizontal: 14 },
+  shortcutChoice: { minHeight: 44, borderRadius: 17, backgroundColor: "rgba(255,255,255,0.76)", justifyContent: "center", paddingHorizontal: 14 },
   shortcutChoiceText: { fontSize: 14, fontWeight: "600", color: "#344154" },
   feedbackSection: { marginTop: 24 },
   feedbackTitle: { fontSize: 13, fontWeight: "700", color: "#5C6979", marginBottom: 10 },
   feedbackRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  feedbackChip: { paddingHorizontal: 12, paddingVertical: 9, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.70)" },
+  feedbackChip: { paddingHorizontal: 12, paddingVertical: 9, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.74)" },
   feedbackChipActive: { backgroundColor: "#17202B" },
   feedbackChipText: { fontSize: 12, fontWeight: "700", color: "#5D6875" },
   feedbackChipTextActive: { color: "#FFFFFF" },
@@ -1034,26 +902,10 @@ const styles = StyleSheet.create({
   radarHint: { marginTop: 18, fontSize: 12, lineHeight: 17, color: "#71808B" },
   resetButton: { marginTop: 16, alignSelf: "flex-start" },
   resetText: { fontSize: 12, fontWeight: "600", color: "#7E8996" },
-  settingsHint: { marginTop: 10, fontSize: 12, lineHeight: 17, color: "#78838C", textAlign: "center", paddingHorizontal: 12 },
-  tabBar: { height: 64, borderRadius: 32, flexDirection: "row", alignItems: "center", padding: 7, overflow: "hidden", shadowColor: "#30465F", shadowOpacity: 0.10, shadowRadius: 22, shadowOffset: { width: 0, height: 8 } },
+  settingsHint: { marginTop: 12, fontSize: 12, lineHeight: 17, color: "#697783", textAlign: "center", paddingHorizontal: 12 },
+  tabBar: { height: 64, borderRadius: 32, flexDirection: "row", alignItems: "center", padding: 7, overflow: "hidden", shadowColor: "#30465F", shadowOpacity: 0.11, shadowRadius: 24, shadowOffset: { width: 0, height: 9 } },
   tabButton: { flex: 1, height: 50, borderRadius: 25, alignItems: "center", justifyContent: "center" },
-  tabButtonActive: { backgroundColor: "rgba(255,255,255,0.76)" },
+  tabButtonActive: { backgroundColor: "rgba(255,255,255,0.82)" },
   tabText: { fontSize: 13, fontWeight: "600", color: "#7A8592" },
-  tabTextActive: { color: "#1F2937", fontWeight: "700" },
-
-  ambientBlue: { position: "absolute", width: 330, height: 330, borderRadius: 165, backgroundColor: "rgba(0,122,255,0.09)", top: -165, left: -95 },
-  ambientViolet: { position: "absolute", width: 330, height: 330, borderRadius: 165, backgroundColor: "rgba(128,82,255,0.065)", right: -160, bottom: 90 },
-  ambientCyan: { position: "absolute", width: 260, height: 260, borderRadius: 130, backgroundColor: "rgba(22,203,240,0.055)", right: -70, top: 150 },
-  actionHalo: { position: "absolute", width: 250, height: 90, borderRadius: 125, backgroundColor: "rgba(70,135,255,0.20)", top: "33%", alignSelf: "center", shadowColor: "#6B72FF", shadowOpacity: 0.28, shadowRadius: 54, shadowOffset: { width: 0, height: 0 } },
-  edgeTopSegment: { position: "absolute", width: 128, height: 3, top: 0, borderRadius: 999, backgroundColor: "#46DDF4", shadowColor: "#46DDF4", shadowOpacity: 0.9, shadowRadius: 14, shadowOffset: { width: 0, height: 0 } },
-  edgeRightSegment: { position: "absolute", width: 3, height: 142, right: 0, borderRadius: 999, backgroundColor: "#8F73FF", shadowColor: "#8F73FF", shadowOpacity: 0.9, shadowRadius: 15, shadowOffset: { width: 0, height: 0 } },
-  edgeBottomSegment: { position: "absolute", width: 126, height: 3, bottom: 0, borderRadius: 999, backgroundColor: "#D96CC5", shadowColor: "#D96CC5", shadowOpacity: 0.85, shadowRadius: 14, shadowOffset: { width: 0, height: 0 } },
-  edgeLeftSegment: { position: "absolute", width: 3, height: 142, left: 0, borderRadius: 999, backgroundColor: "#3A8CFF", shadowColor: "#3A8CFF", shadowOpacity: 0.9, shadowRadius: 15, shadowOffset: { width: 0, height: 0 } },
-
-  actionTransition: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, zIndex: 100, backgroundColor: "rgba(4,7,14,0.96)", alignItems: "center", justifyContent: "center", paddingHorizontal: 34 },
-  transitionGlow: { position: "absolute", width: 260, height: 100, borderRadius: 130, backgroundColor: "rgba(35,143,255,0.12)", shadowColor: "#765CFF", shadowOpacity: 0.45, shadowRadius: 70, shadowOffset: { width: 0, height: 0 } },
-  transitionRing: { width: 210, height: 74, borderRadius: 105, borderWidth: 1.5, borderColor: "rgba(75,211,244,0.36)", shadowColor: "#3ACBF3", shadowOpacity: 0.35, shadowRadius: 18, shadowOffset: { width: 0, height: 0 } },
-  transitionCore: { position: "absolute", width: 86, height: 24, borderRadius: 43, backgroundColor: "rgba(70,132,255,0.34)", shadowColor: "#7E67FF", shadowOpacity: 0.75, shadowRadius: 34, shadowOffset: { width: 0, height: 0 } },
-  transitionTitle: { marginTop: 84, color: "#F8FAFF", fontSize: 22, lineHeight: 28, fontWeight: "700", letterSpacing: -0.4, textAlign: "center" },
-  transitionSubtitle: { marginTop: 10, maxWidth: 300, color: "rgba(226,232,240,0.70)", fontSize: 13, lineHeight: 19, textAlign: "center" }
+  tabTextActive: { color: "#1F2937", fontWeight: "700" }
 });
