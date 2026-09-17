@@ -23,7 +23,7 @@ async function safe(run: () => Promise<void>) {
 export async function hapticDive() {
   await safe(async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid);
-    await new Promise((resolve) => setTimeout(resolve, 55));
+    await new Promise<void>((resolve) => setTimeout(() => resolve(), 55));
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   });
 }
