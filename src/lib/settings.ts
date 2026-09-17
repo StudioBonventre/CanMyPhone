@@ -36,14 +36,18 @@ export function settingsActionLabel(solution: Solution): string {
   if (solution.id === "ios-back-tap") return "Kurzbefehle öffnen";
   if (isShortcutSettingsFlow(solution)) return "Kurzbefehle öffnen";
   if (solution.settings?.openMode === "app-settings") return "App-Einstellungen öffnen";
-  return "Nächsten Schritt anzeigen";
+  return "Pfad anzeigen";
+}
+
+function hasCurrentShortcutBridge(): boolean {
+  return typeof CanMyPhoneNative?.openShortcuts === "function";
 }
 
 async function openShortcutsDestination(destination: "app" | "create"): Promise<boolean> {
   const url = destination === "create" ? "shortcuts://create-shortcut" : "shortcuts://";
 
-  // Prefer the public URL scheme directly. This also works with an older
-  // Development Build that does not yet contain our native openShortcuts bridge.
+  // Apple's documented Shortcuts URL scheme works even when the installed
+  // Development Build predates our native bridge.
   try {
     await Linking.openURL(url);
     return true;
@@ -64,7 +68,10 @@ async function openShortcutsDestination(destination: "app" | "create"): Promise<
 }
 
 async function openShortcutHandoff(solution: Solution): Promise<SettingsLaunchResult> {
-  const destination = solution.id === "ios-back-tap" ? "app" : "create";
+  // Personal automations belong on the Shortcuts app's main surface. A blank
+  // shortcut editor is useful for ordinary shortcut creation, but misleading for automations.
+  const destination = solution.id === "ios-back-tap" || solution.category === "automation" ? "app" : "create";
+  const currentNativeBuild = hasCurrentShortcutBridge();
   const opened = await openShortcutsDestination(destination);
 
   if (solution.id === "ios-back-tap") {
@@ -72,7 +79,9 @@ async function openShortcutHandoff(solution: Solution): Promise<SettingsLaunchRe
       opened,
       reason: opened ? "opened-shortcuts" : "manual-system-path",
       message: opened
-        ? "Kurzbefehle ist geöffnet. CanMyPhone stellt seinen App Shortcut automatisch bereit. Danach fehlt nur noch die von Apple vorgeschriebene Zuordnung unter Bedienungshilfen → Tippen → Auf Rückseite tippen."
+        ? currentNativeBuild
+          ? "Kurzbefehle ist geöffnet und der CanMyPhone App-Kurzbefehl ist im aktuellen Build verfügbar. Danach ordnest du ihn nur noch unter Bedienungshilfen → Tippen → Auf Rückseite tippen zu."
+          : "Kurzbefehle ist geöffnet. Dein installierter Test-Build enthält den neuen CanMyPhone App-Kurzbefehl noch nicht; dafür brauchst du einmal den aktuellen Development Build."
         : "Kurzbefehle konnte nicht geöffnet werden. Öffne die Apple-App Kurzbefehle manuell; CanMyPhone merkt sich deinen Fortschritt."
     };
   }
@@ -81,9 +90,30 @@ async function openShortcutHandoff(solution: Solution): Promise<SettingsLaunchRe
     opened,
     reason: opened ? "opened-shortcuts" : "manual-system-path",
     message: opened
-      ? "Der Kurzbefehle-Editor ist geöffnet. CanMyPhone hält den nächsten Schritt im Guide für dich bereit."
+      ? destination === "app"
+        ? "Kurzbefehle ist geöffnet. CanMyPhone hält den passenden Automationsschritt im Guide bereit."
+        : "Der Kurzbefehle-Editor ist geöffnet. CanMyPhone hält den nächsten Schritt im Guide für dich bereit."
       : "Kurzbefehle konnte nicht geöffnet werden. CanMyPhone zeigt dir stattdessen den kürzesten manuellen Weg."
   };
+}
+
+async function openAppSettingsFallback(): Promise<boolean> {
+  try {
+    const openAppSettings = CanMyPhoneNative?.openAppSettings;
+    if (typeof openAppSettings === "function") {
+      const opened = await openAppSettings.call(CanMyPhoneNative);
+      if (opened) return true;
+    }
+  } catch {
+    // Fall through to React Native's public settings API.
+  }
+
+  try {
+    await Linking.openSettings();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -117,74 +147,83 @@ export async function openSupportedSettings(solution: Solution): Promise<Setting
   const permission = permissionForSolution(solution);
 
   if (permission) {
-    if (!CanMyPhoneNative) {
+    const permissionStatus = CanMyPhoneNative?.permissionStatus;
+    const requestPermission = CanMyPhoneNative?.requestPermission;
+
+    if (typeof permissionStatus !== "function" || typeof requestPermission !== "function") {
       return {
         opened: false,
         reason: "native-permission-unavailable",
-        message: "Der native iOS-Berechtigungsdialog ist in diesem Build noch nicht verfügbar."
+        message: "Dein installierter Test-Build enthält diesen nativen iOS-Berechtigungsdialog noch nicht. Installiere den aktuellen Development Build."
       };
     }
 
-    const current = await CanMyPhoneNative.permissionStatus(permission);
-
-    if (current.granted) {
-      return {
-        opened: false,
-        reason: "permission-granted",
-        message: current.message
-      };
-    }
-
-    if (current.status === "notDetermined") {
-      const requested = await CanMyPhoneNative.requestPermission(permission);
-      return {
-        opened: false,
-        reason: requested.granted ? "permission-granted" : "permission-denied",
-        message: requested.message
-      };
-    }
-
-    const opened = permission === "notifications"
-      ? await CanMyPhoneNative.openNotificationSettings()
-      : await CanMyPhoneNative.openAppSettings();
-
-    return {
-      opened,
-      reason: permission === "notifications" ? "opened-notification-settings" : "opened-app-settings",
-      message: opened
-        ? permission === "notifications"
-          ? "Die Mitteilungseinstellungen für CanMyPhone wurden geöffnet."
-          : "Die CanMyPhone-Einstellungen wurden geöffnet."
-        : current.message
-    };
-  }
-
-  if (solution.settings.openMode === "app-settings") {
     try {
-      if (CanMyPhoneNative) {
-        const opened = await CanMyPhoneNative.openAppSettings();
+      const current = await permissionStatus.call(CanMyPhoneNative, permission);
+
+      if (current.granted) {
         return {
-          opened,
-          reason: "opened-app-settings",
-          message: opened
-            ? "Die CanMyPhone-Einstellungen wurden geöffnet."
-            : "Die App-Einstellungen konnten nicht geöffnet werden."
+          opened: false,
+          reason: "permission-granted",
+          message: "Der Zugriff ist bereits erlaubt. Du kannst direkt mit dem nächsten Schritt weitermachen."
         };
       }
 
-      await Linking.openSettings();
+      if (current.status === "notDetermined") {
+        const requested = await requestPermission.call(CanMyPhoneNative, permission);
+        return {
+          opened: false,
+          reason: requested.granted ? "permission-granted" : "permission-denied",
+          message: requested.granted
+            ? "Erlaubt. Der Zugriff ist eingerichtet und du kannst direkt weitermachen."
+            : "Nicht erlaubt. Tippe erneut auf den blauen Button, wenn du die Berechtigung in den iOS-Einstellungen ändern möchtest."
+        };
+      }
+
+      if (permission === "notifications") {
+        try {
+          const openNotificationSettings = CanMyPhoneNative?.openNotificationSettings;
+          if (typeof openNotificationSettings === "function") {
+            const opened = await openNotificationSettings.call(CanMyPhoneNative);
+            if (opened) {
+              return {
+                opened: true,
+                reason: "opened-notification-settings",
+                message: "Die Mitteilungseinstellungen für CanMyPhone wurden geöffnet."
+              };
+            }
+          }
+        } catch {
+          // Use app settings fallback below.
+        }
+      }
+
+      const opened = await openAppSettingsFallback();
       return {
-        opened: true,
+        opened,
         reason: "opened-app-settings",
-        message: "Die CanMyPhone-Einstellungen wurden geöffnet."
+        message: opened
+          ? "Die CanMyPhone-Einstellungen wurden geöffnet."
+          : "Die App-Einstellungen konnten nicht geöffnet werden. Folge dem angezeigten Pfad manuell."
       };
     } catch {
       return {
         opened: false,
-        reason: "manual-system-path",
-        message: "Die App-Einstellungen konnten nicht geöffnet werden."
+        reason: "native-permission-unavailable",
+        message: "Der Berechtigungsstatus konnte gerade nicht gelesen werden. CanMyPhone hat keine Einstellung verändert."
       };
     }
+  }
+
+  if (solution.settings.openMode === "app-settings") {
+    const opened = await openAppSettingsFallback();
+    return {
+      opened,
+      reason: opened ? "opened-app-settings" : "manual-system-path",
+      message: opened
+        ? "Die CanMyPhone-Einstellungen wurden geöffnet."
+        : "Die App-Einstellungen konnten nicht geöffnet werden."
+    };
   }
 
   return {
