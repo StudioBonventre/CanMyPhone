@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
   },
   stepOrbText: { color: "#EAF5FF", fontSize: 13, fontWeight: "900" },
   stepLabel: { marginLeft: 10, fontSize: 9, fontWeight: "900", letterSpacing: 1.3, color: "rgba(214,231,248,0.58)" },
-  step: { fontSize: 19, lineHeight: 26, fontWeight: "750", color: "#FFFFFF", letterSpacing: -0.2 },
+  step: { fontSize: 19, lineHeight: 26, fontWeight: "700", color: "#FFFFFF", letterSpacing: -0.2 },
   stepBeginner: { fontSize: 23, lineHeight: 31 },
   companionRow: { marginTop: 15, flexDirection: "row", alignItems: "flex-start", gap: 9 },
   statusDot: { width: 7, height: 7, borderRadius: 99, backgroundColor: "#B7C0CA", marginTop: 6 },
@@ -272,7 +272,7 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 9 }
   },
-  settingsButtonText: { fontSize: 14, fontWeight: "850", color: "#1A415F" },
+  settingsButtonText: { fontSize: 14, fontWeight: "800", color: "#1A415F" },
   settingsButtonTextPermission: { color: "#FFFFFF" },
   settingsButtonArrow: { fontSize: 24, lineHeight: 24, color: "#72879A", marginTop: -2 },
   settingsButtonArrowPermission: { color: "rgba(255,255,255,0.9)" },
