@@ -585,6 +585,7 @@ export default function App() {
               solution={guideSolution}
               returnedFromBackground={returnedFromBackground}
               liveActivityActive={liveActivityActive}
+              beginnerMode={preferences.beginnerMode}
               onPrevious={() => updateGuideStep(guideSession.currentStep - 1)}
               onNext={() => updateGuideStep(guideSession.currentStep + 1)}
               onLeaveForSettings={leaveForSettings}
@@ -1049,7 +1050,7 @@ const styles = StyleSheet.create({
   edgeBottomSegment: { position: "absolute", width: 126, height: 3, bottom: 0, borderRadius: 999, backgroundColor: "#D96CC5", shadowColor: "#D96CC5", shadowOpacity: 0.85, shadowRadius: 14, shadowOffset: { width: 0, height: 0 } },
   edgeLeftSegment: { position: "absolute", width: 3, height: 142, left: 0, borderRadius: 999, backgroundColor: "#3A8CFF", shadowColor: "#3A8CFF", shadowOpacity: 0.9, shadowRadius: 15, shadowOffset: { width: 0, height: 0 } },
 
-  actionTransition: { ...StyleSheet.absoluteFillObject, zIndex: 100, backgroundColor: "rgba(4,7,14,0.96)", alignItems: "center", justifyContent: "center", paddingHorizontal: 34 },
+  actionTransition: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, zIndex: 100, backgroundColor: "rgba(4,7,14,0.96)", alignItems: "center", justifyContent: "center", paddingHorizontal: 34 },
   transitionGlow: { position: "absolute", width: 260, height: 100, borderRadius: 130, backgroundColor: "rgba(35,143,255,0.12)", shadowColor: "#765CFF", shadowOpacity: 0.45, shadowRadius: 70, shadowOffset: { width: 0, height: 0 } },
   transitionRing: { width: 210, height: 74, borderRadius: 105, borderWidth: 1.5, borderColor: "rgba(75,211,244,0.36)", shadowColor: "#3ACBF3", shadowOpacity: 0.35, shadowRadius: 18, shadowOffset: { width: 0, height: 0 } },
   transitionCore: { position: "absolute", width: 86, height: 24, borderRadius: 43, backgroundColor: "rgba(70,132,255,0.34)", shadowColor: "#7E67FF", shadowOpacity: 0.75, shadowRadius: 34, shadowOffset: { width: 0, height: 0 } },
