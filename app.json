@@ -2,7 +2,7 @@
   "expo": {
     "name": "CanMyPhone",
     "slug": "canmyphone",
-    "version": "0.9.0",
+    "version": "0.10.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "scheme": "canmyphone",
@@ -26,7 +26,10 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.studiobonventre.canmyphone",
       "infoPlist": {
-        "NSSupportsLiveActivities": true
+        "NSSupportsLiveActivities": true,
+        "NSCameraUsageDescription": "CanMyPhone nutzt die Kamera nur, wenn du eine Funktion ausdrücklich startest, die Kamerazugriff benötigt.",
+        "NSMicrophoneUsageDescription": "CanMyPhone nutzt das Mikrofon nur, wenn du eine Funktion ausdrücklich startest, die Mikrofonzugriff benötigt.",
+        "NSPhotoLibraryUsageDescription": "CanMyPhone greift nur auf deine Fotomediathek zu, wenn du eine Funktion ausdrücklich startest, die Fotos benötigt."
       }
     },
     "android": {

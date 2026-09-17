@@ -1,7 +1,9 @@
 export type Platform = "ios" | "android" | "both";
 export type Region = "eu" | "outside_eu" | "unknown";
 export type VoiceRoute = "siri-direct" | "shortcut" | "siri-ai" | "none";
-export type DropPhase = "idle" | "listening" | "diving" | "searching" | "answer" | "guiding" | "submerged" | "emerging";
+export type MotionPhase = "idle" | "listening" | "diving" | "searching" | "answer" | "guiding" | "submerged" | "emerging" | "success";
+/** Kept for compatibility with older modules. */
+export type DropPhase = MotionPhase;
 
 export type Source = {
   label: string;
@@ -23,11 +25,15 @@ export type VoiceIntegration = {
   fallback?: string;
 };
 
+export type PermissionKind = "notifications" | "camera" | "microphone" | "photos";
+
 export type SettingsGuide = {
   /** Human-readable public path the user can follow in Settings. */
   path: string[];
   /** Public iOS APIs only. Never use private App-Prefs/prefs URLs. */
   openMode?: "app-settings" | "manual-system";
+  /** Optional app-owned permission CanMyPhone can request through the real iOS system sheet. */
+  permission?: PermissionKind;
   note?: string;
 };
 
@@ -108,4 +114,15 @@ export type GuideSession = {
   status: GuideSessionStatus;
   startedAt: number;
   updatedAt: number;
+};
+
+export type AppPreferences = {
+  beginnerMode: boolean;
+  motionIntensity: "system" | "reduced" | "full";
+};
+
+export type EntitlementState = {
+  pro: boolean;
+  credits: number;
+  freeAutomaticActionUsed: boolean;
 };

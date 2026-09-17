@@ -1,0 +1,32 @@
+name: CanMyPhone Quality
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [feat/v1-product-core]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: TypeScript
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Expo doctor
+        run: npx expo-doctor

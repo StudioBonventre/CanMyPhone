@@ -56,11 +56,15 @@ function needsClarification(query: string, matches: Solution[], intent: QueryInt
 
   const genericEnable = /^(wie\s+)?(mach|mache|schalt|schalte|aktivier|aktiviere).{0,10}(an|ein)[?.! ]*$/i.test(compact)
     || /^(how do i )?(turn|switch) (it )?on[?.! ]*$/i.test(compact);
-  if (genericEnable && intent.entities.length === 0) return "Was genau möchtest du einschalten oder aktivieren?";
+
+  if (genericEnable && intent.entities.length === 0) {
+    return "Was genau möchtest du einschalten oder aktivieren?";
+  }
 
   if (!matches.length && compact.split(/\s+/).length <= 4 && /\b(wie|how|an|ein|aktivieren|siri)\b/i.test(compact)) {
-    return "Was genau möchtest du auf deinem Smartphone machen oder steuern?";
+    return "Was genau möchtest du mit deinem Smartphone machen oder steuern?";
   }
+
   return undefined;
 }
 
@@ -71,12 +75,13 @@ export function resolveConversation(query: string, items: Solution[], context: D
   const followUp = needsClarification(query, available, intent);
 
   let notice: string | undefined;
+
   if (context.platform === "ios" && context.region === "eu" && intent.wantsAppleIntelligence) {
-    notice = "Siri AI is not currently available on iPhone in the EU. CanMyPhone will prefer classic Siri, App Shortcuts and Shortcuts automations when they can solve the same task.";
+    notice = "Falls eine neue Siri-KI-Funktion in deiner Region nicht verfügbar ist, bevorzugt CanMyPhone klassische Siri und Apple Kurzbefehle, wenn sie dein Ziel ebenfalls lösen können.";
   } else if (intent.wantsSiri) {
     const voiceMatch = available.find((solution) => solution.voice && solution.voice.route !== "none");
     if (voiceMatch?.voice?.route === "shortcut") {
-      notice = "This works through Siri + Apple Shortcuts, so it does not require Siri AI.";
+      notice = "Das funktioniert über Siri plus Apple Kurzbefehle und benötigt keine zusätzliche Siri-KI.";
     }
   }
 

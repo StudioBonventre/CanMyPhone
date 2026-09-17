@@ -36,33 +36,38 @@ export function rankSolutions(
         ...(item.entities ?? [])
       ].join(" "));
       const hay = new Set(haystack);
-      let score = 0;
+      let relevance = 0;
 
       for (const token of q) {
-        if (hay.has(token)) score += 4;
-        if (item.aliases.some((a) => a.toLowerCase().includes(token))) score += 2;
-        if (item.title.toLowerCase().includes(token)) score += 2;
-        if (item.entities?.some((entity) => entity.toLowerCase().includes(token))) score += 3;
+        if (hay.has(token)) relevance += 4;
+        if (item.aliases.some((a) => a.toLowerCase().includes(token))) relevance += 2;
+        if (item.title.toLowerCase().includes(token)) relevance += 2;
+        if (item.entities?.some((entity) => entity.toLowerCase().includes(token))) relevance += 3;
       }
 
       for (const alias of item.aliases) {
-        if (alias.length > 5 && raw.includes(alias.toLowerCase())) score += 9;
+        if (alias.length > 5 && raw.includes(alias.toLowerCase())) relevance += 9;
       }
 
       if (intent) {
-        if (item.intents?.includes(intent.kind)) score += 6;
-        if (intent.wantsSiri && item.voice && item.voice.route !== "none") score += 8;
-        if (intent.wantsAppleIntelligence && item.entities?.includes("apple-intelligence")) score += 12;
-        if (intent.wantsAppleIntelligence && item.voice?.route === "siri-ai") score += 10;
+        if (item.intents?.includes(intent.kind) && intent.kind !== "general") relevance += 6;
+        if (intent.wantsSiri && item.voice && item.voice.route !== "none") relevance += 8;
+        if (intent.wantsAppleIntelligence && item.entities?.includes("apple-intelligence")) relevance += 12;
+        if (intent.wantsAppleIntelligence && item.voice?.route === "siri-ai") relevance += 10;
         for (const entity of intent.entities) {
-          if (item.entities?.includes(entity)) score += 8;
+          if (item.entities?.includes(entity)) relevance += 8;
         }
       }
 
-      if (item.builtIn) score += 0.25;
-      return { item, score };
+      // Ranking preferences must never create a match by themselves.
+      // They only break ties after the query has real semantic/lexical relevance.
+      const preferenceBonus = relevance > 0
+        ? (item.builtIn ? 0.5 : 0) + (item.setupMinutes <= 2 ? 0.15 : 0)
+        : 0;
+
+      return { item, relevance, score: relevance + preferenceBonus };
     })
-    .filter((entry) => entry.score > 0)
+    .filter((entry) => entry.relevance > 0)
     .sort((a, b) => b.score - a.score)
     .map((entry) => entry.item);
 }
