@@ -48,6 +48,22 @@ test("generic enable request asks one useful clarification", () => {
   assert.ok((result.followUp ?? "").length > 8);
 });
 
+test("core German user journeys route to the intended capability", () => {
+  const journeys = [
+    ["Helligkeit auf 25 Prozent stellen", "ios-set-brightness"],
+    ["Bluetooth einschalten", "ios-enable-bluetooth"],
+    ["Ich will hinten doppelt auf mein iPhone tippen", "ios-back-tap"],
+    ["Dokument als PDF scannen", "ios-scan-document"],
+    ["Meine Türklingel erkennen lassen", "ios-sound-recognition"],
+    ["Beim Losfahren Navigation starten", "ios-leave-location-automation"]
+  ] as const;
+
+  for (const [query, expectedId] of journeys) {
+    const result = resolveConversation(query, solutions, iosContext);
+    assert.equal(result.solutions[0]?.id, expectedId, `wrong route for: ${query}`);
+  }
+});
+
 test("notification permission is discoverable as a direct action", () => {
   const result = resolveConversation("Benachrichtigungen für CanMyPhone erlauben", solutions, iosContext);
   assert.equal(result.solutions[0]?.id, "ios-canmyphone-notifications");
