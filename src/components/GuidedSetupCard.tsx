@@ -1,6 +1,11 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { isPermissionSettingsFlow, isShortcutSettingsFlow, settingsActionLabel } from "../lib/settings";
+import {
+  consumeRecentPermissionGrant,
+  isPermissionSettingsFlow,
+  isShortcutSettingsFlow,
+  settingsActionLabel
+} from "../lib/settings";
 import type { GuideSession, Solution } from "../types";
 
 type Props = {
@@ -11,7 +16,7 @@ type Props = {
   beginnerMode?: boolean;
   onPrevious: () => void;
   onNext: () => void;
-  onLeaveForSettings: () => void;
+  onLeaveForSettings: () => void | Promise<void>;
   onFinish: () => void;
 };
 
@@ -35,6 +40,17 @@ export function GuidedSetupCard({
   const appSettingsFlow = solution.settings?.openMode === "app-settings" && !permissionFlow;
   const hasSettingsAction = permissionFlow || shortcutFlow || appSettingsFlow;
   const manualSystemFlow = Boolean(solution.settings) && !hasSettingsAction;
+
+  const handleSettingsPress = async () => {
+    await onLeaveForSettings();
+
+    // The native iOS sheet is authoritative. If it just reported a successful
+    // grant, don't make the person press "Weiter" for a step CanMyPhone can verify.
+    if (permissionFlow && consumeRecentPermissionGrant()) {
+      if (isLast) onFinish();
+      else onNext();
+    }
+  };
 
   return (
     <View style={styles.card}>
@@ -98,7 +114,7 @@ export function GuidedSetupCard({
           <Pressable
             accessibilityRole="button"
             style={[styles.settingsButton, (permissionFlow || shortcutFlow) && styles.settingsButtonPermission]}
-            onPress={onLeaveForSettings}
+            onPress={() => handleSettingsPress().catch(() => undefined)}
           >
             <Text style={[styles.settingsButtonText, (permissionFlow || shortcutFlow) && styles.settingsButtonTextPermission]}>
               {settingsActionLabel(solution)}
@@ -107,7 +123,7 @@ export function GuidedSetupCard({
           </Pressable>
           {permissionFlow ? (
             <Text style={styles.permissionHint}>
-              Beim ersten Mal erscheint direkt der iOS-Systemdialog. Nach einer Ablehnung öffnen sich die passenden App-Einstellungen.
+              Beim ersten Mal erscheint direkt der iOS-Systemdialog. Sobald du erlaubst, geht CanMyPhone automatisch zum nächsten Schritt.
             </Text>
           ) : shortcutFlow ? (
             <Text style={styles.permissionHint}>
