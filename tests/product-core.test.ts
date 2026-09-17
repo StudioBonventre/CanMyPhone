@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { solutions } from "../src/data/solutions";
 import { resolveConversation } from "../src/lib/conversation";
 import { rankSolutions } from "../src/lib/search";
+import { directActionPlan } from "../src/lib/actions";
 import { shortcutAssistantPlan } from "../src/lib/shortcutAssistant";
 import type { DeviceContext } from "../src/types";
 
@@ -28,6 +29,23 @@ test("generic enable request asks one useful clarification", () => {
   const result = resolveConversation("Wie mache ich das an?", solutions, iosContext);
   assert.equal(typeof result.followUp, "string");
   assert.ok((result.followUp ?? "").length > 8);
+});
+
+test("notification permission is discoverable as a direct action", () => {
+  const result = resolveConversation("Benachrichtigungen für CanMyPhone erlauben", solutions, iosContext);
+  assert.equal(result.solutions[0]?.id, "ios-canmyphone-notifications");
+  const plan = directActionPlan(result.solutions[0], "benachrichtigungen erlauben");
+  assert.equal(plan.supported, true);
+  assert.equal(plan.kind, "permission");
+});
+
+test("brightness request is discoverable and parsed as executable", () => {
+  const result = resolveConversation("Helligkeit auf 35 Prozent stellen", solutions, iosContext);
+  assert.equal(result.solutions[0]?.id, "ios-set-brightness");
+  const plan = directActionPlan(result.solutions[0], "Helligkeit auf 35 Prozent stellen");
+  assert.equal(plan.supported, true);
+  assert.equal(plan.kind, "brightness");
+  assert.equal(plan.brightness, 0.35);
 });
 
 test("car automation creates a human-readable shortcut clarification", () => {
