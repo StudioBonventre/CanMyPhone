@@ -71,13 +71,21 @@ public final class CanMyPhoneNativeModule: Module {
     }
 
     AsyncFunction("setBrightness") { (level: Double) async -> [String: Any] in
-      let clamped = max(0.0, min(1.0, level))
+      guard level.isFinite, (0.0...1.0).contains(level) else {
+        return [
+          "success": false,
+          "requested": level,
+          "applied": -1.0,
+          "message": "Bitte wähle eine Helligkeit zwischen 0 und 100 %."
+        ]
+      }
+
       return await MainActor.run {
-        UIScreen.main.brightness = CGFloat(clamped)
+        UIScreen.main.brightness = CGFloat(level)
         let applied = Double(UIScreen.main.brightness)
         return [
-          "success": abs(applied - clamped) < 0.02,
-          "requested": clamped,
+          "success": abs(applied - level) < 0.02,
+          "requested": level,
           "applied": applied,
           "message": "Helligkeit auf \(Int(round(applied * 100))) % gestellt."
         ]
