@@ -46,7 +46,7 @@ async function entitlementGate(): Promise<{
   return {
     allowed: false,
     state,
-    message: "Deine erste automatische Aktion war kostenlos. Für weitere automatische Aktionen brauchst du CanMyPhone Pro oder ein Credit. Anleitungen bleiben kostenlos."
+    message: "Deine erste automatische Aktion war kostenlos. Für weitere automatische Änderungen brauchst du CanMyPhone Pro oder ein Credit. Anleitungen bleiben kostenlos."
   };
 }
 
@@ -63,6 +63,18 @@ export async function runDirectAction(solution: Solution, query: string): Promis
   }
 
   try {
+    // App-owned permissions are infrastructure, not a premium automation.
+    // A person must never spend a credit merely to grant CanMyPhone access it needs.
+    if (plan.kind === "permission") {
+      const result = await openSupportedSettings(solution);
+      return {
+        handled: true,
+        succeeded: result.reason === "permission-granted",
+        kind: "permission",
+        message: result.message
+      };
+    }
+
     const gate = await entitlementGate();
     if (!gate.allowed) {
       return {
@@ -70,7 +82,7 @@ export async function runDirectAction(solution: Solution, query: string): Promis
         succeeded: false,
         locked: true,
         kind: plan.kind,
-        message: gate.message ?? "Für weitere automatische Aktionen brauchst du CanMyPhone Pro oder ein Credit."
+        message: gate.message ?? "Für weitere automatische Änderungen brauchst du CanMyPhone Pro oder ein Credit."
       };
     }
 
@@ -122,15 +134,11 @@ export async function runDirectAction(solution: Solution, query: string): Promis
       }
     }
 
-    const result = await openSupportedSettings(solution);
-    const succeeded = result.reason === "permission-granted";
-    if (succeeded) await persistSuccessfulAutomaticAction(gate.state);
-
     return {
-      handled: true,
-      succeeded,
-      kind: "permission",
-      message: result.message
+      handled: false,
+      succeeded: false,
+      kind: plan.kind,
+      message: "Für diese Aktion ist derzeit kein sicherer direkter iOS-Weg hinterlegt."
     };
   } catch {
     return {
