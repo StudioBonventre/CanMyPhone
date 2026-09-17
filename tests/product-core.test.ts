@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { solutions } from "../src/data/solutions";
 import { resolveConversation } from "../src/lib/conversation";
 import { rankSolutions } from "../src/lib/search";
-import { directActionPlan } from "../src/lib/actions";
+import { directActionPlan } from "../src/lib/actionPlanning";
 import { shortcutAssistantPlan } from "../src/lib/shortcutAssistant";
 import type { DeviceContext } from "../src/types";
 
