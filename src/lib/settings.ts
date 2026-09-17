@@ -26,40 +26,75 @@ export function isPermissionSettingsFlow(solution: Solution): boolean {
 }
 
 export function isShortcutSettingsFlow(solution: Solution): boolean {
-  return solution.id === "ios-back-tap";
+  return solution.id === "ios-back-tap" || solution.voice?.route === "shortcut" || solution.category === "automation";
 }
 
 export function settingsActionLabel(solution: Solution): string {
   const permission = permissionForSolution(solution);
   if (permission === "notifications") return "Mitteilungen prüfen";
   if (permission) return "Zugriff erlauben";
-  if (isShortcutSettingsFlow(solution)) return "Shortcut vorbereiten";
+  if (solution.id === "ios-back-tap") return "Shortcut vorbereiten";
+  if (isShortcutSettingsFlow(solution)) return "Kurzbefehle öffnen";
   if (solution.settings?.openMode === "app-settings") return "App-Einstellungen öffnen";
   return "Nächsten Schritt anzeigen";
+}
+
+async function openShortcutHandoff(solution: Solution): Promise<SettingsLaunchResult> {
+  if (!CanMyPhoneNative) {
+    return {
+      opened: false,
+      reason: "manual-system-path",
+      message: "Der Shortcut-Handoff benötigt den aktuellen CanMyPhone iOS-Build. Danach öffnet CanMyPhone Kurzbefehle automatisch für dich."
+    };
+  }
+
+  const destination = solution.id === "ios-back-tap" ? "app" : "create";
+  const opened = await CanMyPhoneNative.openShortcuts(destination);
+
+  if (solution.id === "ios-back-tap") {
+    return {
+      opened,
+      reason: opened ? "opened-shortcuts" : "manual-system-path",
+      message: opened
+        ? "Kurzbefehle ist geöffnet. CanMyPhone stellt seinen App Shortcut automatisch bereit. Danach fehlt nur noch die von Apple vorgeschriebene Zuordnung unter Bedienungshilfen → Tippen → Auf Rückseite tippen."
+        : "Kurzbefehle konnte nicht geöffnet werden. Folge dem angezeigten Systempfad; CanMyPhone merkt sich deinen Fortschritt."
+    };
+  }
+
+  return {
+    opened,
+    reason: opened ? "opened-shortcuts" : "manual-system-path",
+    message: opened
+      ? "Der Kurzbefehle-Editor ist geöffnet. CanMyPhone hält den nächsten Schritt im Guide für dich bereit."
+      : "Kurzbefehle konnte nicht geöffnet werden. CanMyPhone zeigt dir stattdessen den kürzesten manuellen Weg."
+  };
 }
 
 /**
  * Public iOS APIs only.
  * - App-owned permissions: ask through the real system permission sheet first.
  * - If a permission was already denied, open the official app/notification settings.
- * - Back Tap: hand off to Apple's documented Shortcuts URL scheme so the CanMyPhone App Shortcut
- *   is ready before the person performs the final system assignment.
+ * - Shortcut-capable flows: use Apple's documented Shortcuts URL scheme.
  * - Arbitrary system panes: never use private App-Prefs/prefs URLs. Keep the shortest breadcrumb instead.
  */
 export async function openSupportedSettings(solution: Solution): Promise<SettingsLaunchResult> {
-  if (!solution.settings) {
-    return {
-      opened: false,
-      reason: "no-settings-guide",
-      message: "Für diese Lösung ist kein Einstellungsweg hinterlegt."
-    };
-  }
-
   if (Platform.OS !== "ios") {
     return {
       opened: false,
       reason: "not-ios",
       message: "Dieser Einstellungsweg ist für iOS vorgesehen."
+    };
+  }
+
+  if (isShortcutSettingsFlow(solution) && !solution.settings?.permission) {
+    return openShortcutHandoff(solution);
+  }
+
+  if (!solution.settings) {
+    return {
+      opened: false,
+      reason: "no-settings-guide",
+      message: "Für diese Lösung ist kein Einstellungsweg hinterlegt."
     };
   }
 
@@ -105,25 +140,6 @@ export async function openSupportedSettings(solution: Solution): Promise<Setting
           ? "Die Mitteilungseinstellungen für CanMyPhone wurden geöffnet."
           : "Die CanMyPhone-Einstellungen wurden geöffnet."
         : current.message
-    };
-  }
-
-  if (isShortcutSettingsFlow(solution)) {
-    if (!CanMyPhoneNative) {
-      return {
-        opened: false,
-        reason: "manual-system-path",
-        message: "Der Shortcut-Handoff benötigt den aktuellen CanMyPhone iOS-Build. Danach öffnet CanMyPhone Kurzbefehle automatisch für dich."
-      };
-    }
-
-    const opened = await CanMyPhoneNative.openShortcuts("app");
-    return {
-      opened,
-      reason: opened ? "opened-shortcuts" : "manual-system-path",
-      message: opened
-        ? "Kurzbefehle ist geöffnet. CanMyPhone stellt seinen App Shortcut automatisch bereit. Danach fehlt nur noch die von Apple vorgeschriebene Zuordnung unter Bedienungshilfen → Tippen → Auf Rückseite tippen."
-        : "Kurzbefehle konnte nicht geöffnet werden. Folge dem angezeigten Systempfad; CanMyPhone merkt sich deinen Fortschritt."
     };
   }
 
