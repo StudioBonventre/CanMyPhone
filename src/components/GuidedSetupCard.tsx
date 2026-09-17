@@ -1,6 +1,6 @@
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { isPermissionSettingsFlow, settingsActionLabel } from "../lib/settings";
+import { isPermissionSettingsFlow, isShortcutSettingsFlow, settingsActionLabel } from "../lib/settings";
 import type { GuideSession, Solution } from "../types";
 
 type Props = {
@@ -29,8 +29,9 @@ export function GuidedSetupCard({
   const step = session.steps[session.currentStep] ?? "Weiter";
   const isLast = session.currentStep >= session.steps.length - 1;
   const path = solution.settings?.path ?? [];
-  const hasSettingsAction = Boolean(solution.settings);
   const permissionFlow = isPermissionSettingsFlow(solution);
+  const shortcutFlow = isShortcutSettingsFlow(solution) && !permissionFlow;
+  const hasSettingsAction = Boolean(solution.settings) || shortcutFlow;
 
   return (
     <View style={styles.card}>
@@ -60,7 +61,9 @@ export function GuidedSetupCard({
 
       {path.length ? (
         <View style={styles.pathWrap}>
-          <Text style={styles.pathLabel}>{permissionFlow ? "FALLS DU SCHON ABGELEHNT HAST" : "KÜRZESTER PFAD"}</Text>
+          <Text style={styles.pathLabel}>
+            {permissionFlow ? "FALLS DU SCHON ABGELEHNT HAST" : shortcutFlow ? "LETZTER SYSTEMSCHRITT" : "KÜRZESTER PFAD"}
+          </Text>
           <Text style={styles.path}>{path.join("  ›  ")}</Text>
         </View>
       ) : null}
@@ -88,23 +91,27 @@ export function GuidedSetupCard({
       {hasSettingsAction ? (
         <>
           <Pressable
-            style={[styles.settingsButton, permissionFlow && styles.settingsButtonPermission]}
+            style={[styles.settingsButton, (permissionFlow || shortcutFlow) && styles.settingsButtonPermission]}
             onPress={onLeaveForSettings}
           >
-            <Text style={[styles.settingsButtonText, permissionFlow && styles.settingsButtonTextPermission]}>
+            <Text style={[styles.settingsButtonText, (permissionFlow || shortcutFlow) && styles.settingsButtonTextPermission]}>
               {settingsActionLabel(solution)}
             </Text>
-            <Text style={[styles.settingsButtonArrow, permissionFlow && styles.settingsButtonArrowPermission]}>›</Text>
+            <Text style={[styles.settingsButtonArrow, (permissionFlow || shortcutFlow) && styles.settingsButtonArrowPermission]}>›</Text>
           </Pressable>
           {permissionFlow ? (
             <Text style={styles.permissionHint}>
               Beim ersten Mal erscheint direkt der iOS-Systemdialog. Nach einer Ablehnung öffnen sich die passenden App-Einstellungen.
             </Text>
+          ) : shortcutFlow ? (
+            <Text style={styles.permissionHint}>
+              CanMyPhone nutzt dafür nur Apples offiziellen Kurzbefehle-Deep-Link. Systemzuordnungen, die iOS nicht freigibt, bestätigst du einmal selbst.
+            </Text>
           ) : null}
         </>
       ) : null}
 
-      {!permissionFlow && solution.settings?.note ? <Text style={styles.note}>{solution.settings.note}</Text> : null}
+      {!permissionFlow && !shortcutFlow && solution.settings?.note ? <Text style={styles.note}>{solution.settings.note}</Text> : null}
 
       <View style={styles.actions}>
         <Pressable
