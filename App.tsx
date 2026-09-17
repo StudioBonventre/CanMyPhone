@@ -360,6 +360,19 @@ export default function App() {
     }
   };
 
+  const exitGuide = async () => {
+    if (guideSession) {
+      await endGuideLiveActivity("Einrichtung beendet");
+      await saveGuideSession(null);
+    }
+    setGuideSession(null);
+    setLiveActivityActive(false);
+    setReturnedFromBackground(false);
+    setSettingsHint(null);
+    setMotionPhase(submittedQuery ? "answer" : "idle");
+    await hapticStep();
+  };
+
   const finishGuide = async () => {
     if (guideSession) {
       await endGuideLiveActivity("Einrichtung abgeschlossen");
@@ -431,15 +444,31 @@ export default function App() {
 
       <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <View style={styles.header}>
-          <Text style={styles.brand}>CanMyPhone</Text>
-          <View style={styles.headerActions}>
-            {preferences.beginnerMode ? <Text style={styles.modePill}>EINFACH</Text> : null}
-            <Pressable accessibilityLabel="Bereich Du öffnen" onPress={() => switchTab("you")}>
-              <GlassSurface style={styles.moreButton} interactive>
-                <Text style={styles.moreButtonText}>•••</Text>
-              </GlassSurface>
+          {guideSession ? (
+            <Pressable
+              style={styles.guideBackButton}
+              onPress={() => exitGuide().catch(() => undefined)}
+              hitSlop={10}
+              accessibilityLabel="Guide verlassen und zurück"
+            >
+              <Text style={styles.guideBackIcon}>‹</Text>
+              <Text style={styles.guideBackText}>Zurück</Text>
             </Pressable>
-          </View>
+          ) : (
+            <Text style={styles.brand}>CanMyPhone</Text>
+          )}
+          {guideSession ? (
+            <Text style={styles.guideHeaderTitle}>Anleitung</Text>
+          ) : (
+            <View style={styles.headerActions}>
+              {preferences.beginnerMode ? <Text style={styles.modePill}>EINFACH</Text> : null}
+              <Pressable accessibilityLabel="Bereich Du öffnen" onPress={() => switchTab("you")}>
+                <GlassSurface style={styles.moreButton} interactive>
+                  <Text style={styles.moreButtonText}>•••</Text>
+                </GlassSurface>
+              </Pressable>
+            </View>
+          )}
         </View>
 
         {guideSession && guideSolution ? (
@@ -489,7 +518,7 @@ export default function App() {
                           : "Ja — ich habe einen Weg gefunden."
                         : submittedQuery
                           ? "Dafür habe ich noch keinen sicheren Treffer."
-                          : "Was soll dein iPhone für dich tun?"}
+                          : "Was soll ich dir einstellen?"}
                   </Text>
                   <Text style={styles.heroSubtext}>
                     {needsFollowUp
@@ -499,8 +528,8 @@ export default function App() {
                         : submittedQuery
                           ? "Formuliere dein Ziel etwas konkreter. Ich erfinde keine Funktionen oder Menüpfade."
                           : preferences.beginnerMode
-                            ? "Sag einfach, was du möchtest. Ich erkläre dir immer nur den nächsten Schritt."
-                            : "Sag einfach, was du erreichen möchtest. CanMyPhone findet den einfachsten Weg."}
+                            ? "Sag einfach, was ich einstellen soll. Ich zeige dir immer nur den nächsten sinnvollen Schritt."
+                            : "Sag mir einfach, was du an deinem iPhone ändern oder einrichten möchtest."}
                   </Text>
                 </View>
 
@@ -509,7 +538,7 @@ export default function App() {
                     <TextInput
                       value={draftQuery}
                       onChangeText={setDraftQuery}
-                      placeholder="Was möchtest du erreichen?"
+                      placeholder="Was soll ich dir einstellen?"
                       placeholderTextColor="#7D8793"
                       returnKeyType="send"
                       onSubmitEditing={() => runAsk().catch(() => undefined)}
@@ -796,6 +825,10 @@ const styles = StyleSheet.create({
   header: { minHeight: 54, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
   brand: { fontSize: 19, fontWeight: "700", letterSpacing: -0.45, color: "#111827" },
+  guideBackButton: { minHeight: 44, flexDirection: "row", alignItems: "center", paddingRight: 8 },
+  guideBackIcon: { fontSize: 37, lineHeight: 40, color: "#087BFF", fontWeight: "300", marginTop: -2 },
+  guideBackText: { marginLeft: 2, fontSize: 16, fontWeight: "600", color: "#087BFF" },
+  guideHeaderTitle: { fontSize: 15, fontWeight: "700", color: "#657283" },
   modePill: { fontSize: 9, fontWeight: "800", letterSpacing: 0.7, color: "#506174", backgroundColor: "rgba(255,255,255,0.76)", paddingHorizontal: 9, paddingVertical: 6, borderRadius: 999, overflow: "hidden" },
   moreButton: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center", overflow: "hidden" },
   moreButtonText: { fontSize: 17, fontWeight: "700", color: "#53606F", marginTop: -5 },
