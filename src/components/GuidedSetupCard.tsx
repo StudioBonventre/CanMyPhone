@@ -27,6 +27,7 @@ export function GuidedSetupCard({
   onFinish
 }: Props) {
   const step = session.steps[session.currentStep] ?? "Weiter";
+  const isFirst = session.currentStep === 0;
   const isLast = session.currentStep >= session.steps.length - 1;
   const path = solution.settings?.path ?? [];
   const permissionFlow = isPermissionSettingsFlow(solution);
@@ -54,7 +55,7 @@ export function GuidedSetupCard({
           <Text style={styles.eyebrow}>CANMYPHONE GUIDE</Text>
           <Text style={[styles.title, beginnerMode && styles.titleBeginner]}>{session.title}</Text>
         </View>
-        <View style={styles.progressPill}>
+        <View style={styles.progressPill} accessibilityLabel={`Schritt ${session.currentStep + 1} von ${session.steps.length}`}>
           <Text style={styles.progress}>{session.currentStep + 1}</Text>
           <Text style={styles.progressDivider}>/</Text>
           <Text style={styles.progressTotal}>{session.steps.length}</Text>
@@ -85,7 +86,9 @@ export function GuidedSetupCard({
         <View style={[styles.statusDot, liveActivityActive && styles.statusDotActive]} />
         <Text style={[styles.companion, beginnerMode && styles.companionBeginner]}>
           {liveActivityActive
-            ? "Der nächste Schritt bleibt als Live Activity sichtbar, wenn du CanMyPhone verlässt."
+            ? beginnerMode
+              ? "Der nächste Schritt bleibt oben auf deinem iPhone sichtbar, wenn du CanMyPhone verlässt."
+              : "Der nächste Schritt bleibt als Live Activity sichtbar, wenn du CanMyPhone verlässt."
             : "Dein Fortschritt bleibt lokal gespeichert. Du kannst jederzeit hier weitermachen."}
         </Text>
       </View>
@@ -123,19 +126,17 @@ export function GuidedSetupCard({
       ) : null}
 
       <View style={styles.actions}>
-        <Pressable
-          disabled={session.currentStep === 0}
-          onPress={onPrevious}
-          style={[styles.secondary, session.currentStep === 0 && styles.disabled]}
-        >
-          <Text style={styles.secondaryText}>Zurück</Text>
-        </Pressable>
+        {!isFirst ? (
+          <Pressable onPress={onPrevious} style={styles.secondary} accessibilityRole="button">
+            <Text style={styles.secondaryText}>Vorheriger Schritt</Text>
+          </Pressable>
+        ) : null}
         {isLast ? (
-          <Pressable onPress={onFinish} style={styles.primary}>
+          <Pressable onPress={onFinish} style={[styles.primary, isFirst && styles.primarySolo]} accessibilityRole="button">
             <Text style={styles.primaryText}>Fertig</Text>
           </Pressable>
         ) : (
-          <Pressable onPress={onNext} style={styles.primary}>
+          <Pressable onPress={onNext} style={[styles.primary, isFirst && styles.primarySolo]} accessibilityRole="button">
             <Text style={styles.primaryText}>Weiter</Text>
           </Pressable>
         )}
@@ -302,7 +303,7 @@ const styles = StyleSheet.create({
     borderRadius: 19,
     backgroundColor: "rgba(239,243,247,0.98)"
   },
-  secondaryText: { textAlign: "center", fontSize: 14, fontWeight: "800", color: "#4D5A66" },
+  secondaryText: { textAlign: "center", fontSize: 13, fontWeight: "800", color: "#4D5A66" },
   primary: {
     flex: 1.3,
     minHeight: 50,
@@ -314,6 +315,6 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 6 }
   },
-  primaryText: { textAlign: "center", fontSize: 14, fontWeight: "900", color: "#FFFFFF" },
-  disabled: { opacity: 0.32 }
+  primarySolo: { flex: 1 },
+  primaryText: { textAlign: "center", fontSize: 14, fontWeight: "900", color: "#FFFFFF" }
 });
