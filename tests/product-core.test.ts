@@ -48,6 +48,16 @@ test("brightness request is discoverable and parsed as executable", () => {
   assert.equal(plan.brightness, 0.35);
 });
 
+test("back tap gets the official App Shortcut handoff", () => {
+  const backTap = solutions.find((item) => item.id === "ios-back-tap") ?? null;
+  assert.ok(backTap);
+  const plan = shortcutAssistantPlan("hinten doppelt tippen", backTap);
+  assert.equal(plan.applicable, true);
+  assert.match(plan.title, /Back Tap/i);
+  assert.ok(plan.steps.some((step) => /Kurzbefehle/i.test(step)));
+  assert.ok(plan.steps.some((step) => /Bedienungshilfen/i.test(step)));
+});
+
 test("car automation creates a human-readable shortcut clarification", () => {
   const plan = shortcutAssistantPlan("Beim Losfahren automatisch Navigation starten", null);
   assert.equal(plan.applicable, true);
