@@ -13,9 +13,11 @@ export type DirectActionPlan = {
 };
 
 function brightnessFromQuery(query: string): number | null {
-  const match = query.match(/(?:auf\s*)?(\d{1,3})(?:\s*%|\s*prozent)/i);
+  const match = query.match(/(?:auf\s*)?(-?\d{1,3})(?:\s*%|\s*prozent)/i);
   if (!match) return null;
-  const percent = Math.max(0, Math.min(100, Number(match[1])));
+
+  const percent = Number(match[1]);
+  if (!Number.isFinite(percent) || percent < 0 || percent > 100) return null;
   return percent / 100;
 }
 
