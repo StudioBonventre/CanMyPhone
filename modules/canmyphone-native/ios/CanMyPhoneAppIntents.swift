@@ -29,9 +29,12 @@ struct SetCanMyPhoneBrightnessIntent: AppIntent {
       return .result(dialog: "Diese Schnellaktion gehört zu CanMyPhone Pro. Öffne CanMyPhone, um Pro zu aktivieren.")
     }
 
-    let bounded = max(0, min(100, percent))
+    guard (0...100).contains(percent) else {
+      return .result(dialog: "Bitte wähle eine Helligkeit zwischen 0 und 100 Prozent.")
+    }
+
     let applied = await MainActor.run { () -> Int in
-      UIScreen.main.brightness = CGFloat(Double(bounded) / 100.0)
+      UIScreen.main.brightness = CGFloat(Double(percent) / 100.0)
       return Int(round(Double(UIScreen.main.brightness) * 100.0))
     }
 
