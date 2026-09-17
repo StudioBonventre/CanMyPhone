@@ -1,6 +1,7 @@
 import { Linking, Platform } from "react-native";
 import { CanMyPhoneNative, type PermissionKind } from "../../modules/canmyphone-native";
 import type { Solution } from "../types";
+import { loadEntitlementState } from "./storage";
 
 export type SettingsLaunchResult = {
   opened: boolean;
@@ -43,6 +44,17 @@ function hasCurrentShortcutBridge(): boolean {
   return typeof CanMyPhoneNative?.openShortcuts === "function";
 }
 
+async function syncNativePremiumForShortcuts(): Promise<void> {
+  try {
+    const syncPremium = CanMyPhoneNative?.setPremiumEntitlement;
+    if (typeof syncPremium !== "function") return;
+    const state = await loadEntitlementState();
+    await syncPremium.call(CanMyPhoneNative, Boolean(state?.pro));
+  } catch {
+    // Shortcut handoff must still work if entitlement persistence is temporarily unavailable.
+  }
+}
+
 async function openShortcutsDestination(destination: "app" | "create"): Promise<boolean> {
   const url = destination === "create" ? "shortcuts://create-shortcut" : "shortcuts://";
 
@@ -68,6 +80,10 @@ async function openShortcutsDestination(destination: "app" | "create"): Promise<
 }
 
 async function openShortcutHandoff(solution: Solution): Promise<SettingsLaunchResult> {
+  // Keep native App Intents aligned with the purchase state before the user
+  // leaves CanMyPhone to configure or run a shortcut.
+  await syncNativePremiumForShortcuts();
+
   // Personal automations belong on the Shortcuts app's main surface. A blank
   // shortcut editor is useful for ordinary shortcut creation, but misleading for automations.
   const destination = solution.id === "ios-back-tap" || solution.category === "automation" ? "app" : "create";
