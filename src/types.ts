@@ -116,11 +116,6 @@ export type GuideSession = {
   updatedAt: number;
 };
 
-export type AppPreferences = {
-  beginnerMode: boolean;
-  motionIntensity: "system" | "reduced" | "full";
-};
-
 export type EntitlementState = {
   pro: boolean;
   credits: number;
