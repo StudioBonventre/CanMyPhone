@@ -1,6 +1,7 @@
 import { Linking, Platform } from "react-native";
 import { CanMyPhoneNative, type PermissionKind } from "../../modules/canmyphone-native";
 import type { Solution } from "../types";
+import { developmentPremiumEnabled } from "./entitlements";
 import { loadEntitlementState } from "./storage";
 
 export type SettingsLaunchResult = {
@@ -65,6 +66,12 @@ async function syncNativePremiumForShortcuts(): Promise<void> {
   try {
     const syncPremium = CanMyPhoneNative?.setPremiumEntitlement;
     if (typeof syncPremium !== "function") return;
+
+    if (developmentPremiumEnabled()) {
+      await syncPremium.call(CanMyPhoneNative, true);
+      return;
+    }
+
     const state = await loadEntitlementState();
     await syncPremium.call(CanMyPhoneNative, Boolean(state?.pro));
   } catch {
