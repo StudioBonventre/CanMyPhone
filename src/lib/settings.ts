@@ -33,23 +33,39 @@ export function settingsActionLabel(solution: Solution): string {
   const permission = permissionForSolution(solution);
   if (permission === "notifications") return "Mitteilungen prüfen";
   if (permission) return "Zugriff erlauben";
-  if (solution.id === "ios-back-tap") return "Shortcut vorbereiten";
+  if (solution.id === "ios-back-tap") return "Kurzbefehle öffnen";
   if (isShortcutSettingsFlow(solution)) return "Kurzbefehle öffnen";
   if (solution.settings?.openMode === "app-settings") return "App-Einstellungen öffnen";
   return "Nächsten Schritt anzeigen";
 }
 
-async function openShortcutHandoff(solution: Solution): Promise<SettingsLaunchResult> {
-  if (!CanMyPhoneNative) {
-    return {
-      opened: false,
-      reason: "manual-system-path",
-      message: "Der Shortcut-Handoff benötigt den aktuellen CanMyPhone iOS-Build. Danach öffnet CanMyPhone Kurzbefehle automatisch für dich."
-    };
+async function openShortcutsDestination(destination: "app" | "create"): Promise<boolean> {
+  const url = destination === "create" ? "shortcuts://create-shortcut" : "shortcuts://";
+
+  // Prefer the public URL scheme directly. This also works with an older
+  // Development Build that does not yet contain our native openShortcuts bridge.
+  try {
+    await Linking.openURL(url);
+    return true;
+  } catch {
+    // Fall through to the native bridge if the JS handoff fails.
   }
 
+  try {
+    const openShortcuts = CanMyPhoneNative?.openShortcuts;
+    if (typeof openShortcuts === "function") {
+      return await openShortcuts.call(CanMyPhoneNative, destination);
+    }
+  } catch {
+    // Keep the guide alive and show the manual fallback below.
+  }
+
+  return false;
+}
+
+async function openShortcutHandoff(solution: Solution): Promise<SettingsLaunchResult> {
   const destination = solution.id === "ios-back-tap" ? "app" : "create";
-  const opened = await CanMyPhoneNative.openShortcuts(destination);
+  const opened = await openShortcutsDestination(destination);
 
   if (solution.id === "ios-back-tap") {
     return {
@@ -57,7 +73,7 @@ async function openShortcutHandoff(solution: Solution): Promise<SettingsLaunchRe
       reason: opened ? "opened-shortcuts" : "manual-system-path",
       message: opened
         ? "Kurzbefehle ist geöffnet. CanMyPhone stellt seinen App Shortcut automatisch bereit. Danach fehlt nur noch die von Apple vorgeschriebene Zuordnung unter Bedienungshilfen → Tippen → Auf Rückseite tippen."
-        : "Kurzbefehle konnte nicht geöffnet werden. Folge dem angezeigten Systempfad; CanMyPhone merkt sich deinen Fortschritt."
+        : "Kurzbefehle konnte nicht geöffnet werden. Öffne die Apple-App Kurzbefehle manuell; CanMyPhone merkt sich deinen Fortschritt."
     };
   }
 
