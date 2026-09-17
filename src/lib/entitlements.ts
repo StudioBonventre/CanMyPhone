@@ -12,6 +12,15 @@ export const DEFAULT_ENTITLEMENTS: EntitlementState = {
   freeAutomaticActionUsed: false
 };
 
+/**
+ * Pre-alpha development clients need to exercise every premium path before the
+ * StoreKit purchase/restore flow is connected. This is compile-time development
+ * behavior only; release bundles keep the persisted entitlement rules below.
+ */
+export function developmentPremiumEnabled(): boolean {
+  return typeof __DEV__ !== "undefined" && __DEV__ === true;
+}
+
 export function automaticActionAccess(state: EntitlementState): AutomaticActionAccess {
   if (state.pro) return { allowed: true, costCredits: 0, reason: "pro" };
   if (!state.freeAutomaticActionUsed) return { allowed: true, costCredits: 0, reason: "first-free" };
