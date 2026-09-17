@@ -1,9 +1,8 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import type { AppPreferences, EntitlementState, GuideSession, NeedRadarProfile } from "../types";
+import type { EntitlementState, GuideSession, NeedRadarProfile } from "../types";
 
 const RADAR_KEY = "canmyphone.needRadar.v1";
 const GUIDE_KEY = "canmyphone.guideSession.v1";
-const PREFERENCES_KEY = "canmyphone.preferences.v1";
 const ENTITLEMENTS_KEY = "canmyphone.entitlements.v1";
 
 async function readJson<T>(key: string): Promise<T | null> {
@@ -53,14 +52,6 @@ export async function saveGuideSession(session: GuideSession | null): Promise<vo
   } catch {
     // The in-memory guide continues even if persistence fails.
   }
-}
-
-export function loadAppPreferences(): Promise<AppPreferences | null> {
-  return readJson<AppPreferences>(PREFERENCES_KEY);
-}
-
-export function saveAppPreferences(preferences: AppPreferences): Promise<void> {
-  return writeJson(PREFERENCES_KEY, preferences);
 }
 
 export function loadEntitlementState(): Promise<EntitlementState | null> {
