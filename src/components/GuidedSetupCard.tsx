@@ -7,6 +7,7 @@ import {
   settingsActionLabel
 } from "../lib/settings";
 import type { GuideSession, Solution } from "../types";
+import { GlassSurface } from "./GlassSurface";
 
 type Props = {
   session: GuideSession;
@@ -43,9 +44,6 @@ export function GuidedSetupCard({
 
   const handleSettingsPress = async () => {
     await onLeaveForSettings();
-
-    // The native iOS sheet is authoritative. If it just reported a successful
-    // grant, don't make the person press "Weiter" for a step CanMyPhone can verify.
     if (permissionFlow && consumeRecentPermissionGrant()) {
       if (isLast) onFinish();
       else onNext();
@@ -53,9 +51,12 @@ export function GuidedSetupCard({
   };
 
   return (
-    <View style={styles.card}>
+    <GlassSurface style={styles.card} tintColor="rgba(192,226,255,0.08)">
+      <View pointerEvents="none" style={styles.cardTopLight} />
+      <View pointerEvents="none" style={styles.cardBloom} />
+
       {returnedFromBackground ? (
-        <View style={styles.returnBanner}>
+        <GlassSurface style={styles.returnBanner} tintColor="rgba(176,225,255,0.10)">
           <View style={styles.returnIcon}>
             <View style={styles.returnDot} />
           </View>
@@ -63,7 +64,7 @@ export function GuidedSetupCard({
             <Text style={styles.returnTitle}>Willkommen zurück</Text>
             <Text style={styles.returnText}>Dein Guide ist noch genau an derselben Stelle.</Text>
           </View>
-        </View>
+        </GlassSurface>
       ) : null}
 
       <View style={styles.header}>
@@ -79,16 +80,18 @@ export function GuidedSetupCard({
       </View>
 
       {path.length ? (
-        <View style={styles.pathWrap}>
+        <GlassSurface style={styles.pathWrap} tintColor="rgba(214,237,255,0.06)">
+          <View pointerEvents="none" style={styles.innerTopLight} />
           <Text style={styles.pathLabel}>
             {permissionFlow ? "FALLS DU SCHON ABGELEHNT HAST" : shortcutFlow ? "LETZTER SYSTEMSCHRITT" : "KÜRZESTER PFAD"}
           </Text>
           <Text style={styles.path}>{path.join("  ›  ")}</Text>
-        </View>
+        </GlassSurface>
       ) : null}
 
-      <View style={[styles.stepBox, beginnerMode && styles.stepBoxBeginner]}>
-        <View style={styles.stepAccent} />
+      <GlassSurface style={[styles.stepBox, beginnerMode && styles.stepBoxBeginner]} tintColor="rgba(159,213,255,0.10)">
+        <View pointerEvents="none" style={styles.stepGlow} />
+        <View pointerEvents="none" style={styles.innerTopLight} />
         <View style={styles.stepTopRow}>
           <View style={styles.stepOrb}>
             <Text style={styles.stepOrbText}>{session.currentStep + 1}</Text>
@@ -96,7 +99,7 @@ export function GuidedSetupCard({
           <Text style={styles.stepLabel}>JETZT</Text>
         </View>
         <Text style={[styles.step, beginnerMode && styles.stepBeginner]}>{step}</Text>
-      </View>
+      </GlassSurface>
 
       <View style={styles.companionRow}>
         <View style={[styles.statusDot, liveActivityActive && styles.statusDotActive]} />
@@ -113,9 +116,14 @@ export function GuidedSetupCard({
         <>
           <Pressable
             accessibilityRole="button"
-            style={[styles.settingsButton, (permissionFlow || shortcutFlow) && styles.settingsButtonPermission]}
+            style={({ pressed }) => [
+              styles.settingsButton,
+              (permissionFlow || shortcutFlow) && styles.settingsButtonPermission,
+              pressed && styles.buttonPressed
+            ]}
             onPress={() => handleSettingsPress().catch(() => undefined)}
           >
+            <View pointerEvents="none" style={styles.buttonTopLight} />
             <Text style={[styles.settingsButtonText, (permissionFlow || shortcutFlow) && styles.settingsButtonTextPermission]}>
               {settingsActionLabel(solution)}
             </Text>
@@ -143,66 +151,58 @@ export function GuidedSetupCard({
 
       <View style={styles.actions}>
         {!isFirst ? (
-          <Pressable onPress={onPrevious} style={styles.secondary} accessibilityRole="button">
+          <Pressable onPress={onPrevious} style={({ pressed }) => [styles.secondary, pressed && styles.buttonPressed]} accessibilityRole="button">
             <Text style={styles.secondaryText}>Vorheriger Schritt</Text>
           </Pressable>
         ) : null}
         {isLast ? (
-          <Pressable onPress={onFinish} style={[styles.primary, isFirst && styles.primarySolo]} accessibilityRole="button">
+          <Pressable onPress={onFinish} style={({ pressed }) => [styles.primary, isFirst && styles.primarySolo, pressed && styles.buttonPressed]} accessibilityRole="button">
+            <View pointerEvents="none" style={styles.buttonTopLight} />
             <Text style={styles.primaryText}>Fertig</Text>
           </Pressable>
         ) : (
-          <Pressable onPress={onNext} style={[styles.primary, isFirst && styles.primarySolo]} accessibilityRole="button">
+          <Pressable onPress={onNext} style={({ pressed }) => [styles.primary, isFirst && styles.primarySolo, pressed && styles.buttonPressed]} accessibilityRole="button">
+            <View pointerEvents="none" style={styles.buttonTopLight} />
             <Text style={styles.primaryText}>Weiter</Text>
           </Pressable>
         )}
       </View>
-    </View>
+    </GlassSurface>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
     width: "100%",
-    borderRadius: 34,
+    borderRadius: 36,
     padding: 22,
-    backgroundColor: "rgba(255,255,255,0.9)",
+    overflow: "hidden",
+    backgroundColor: "rgba(220,240,255,0.10)",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.98)",
-    shadowColor: "#476A90",
-    shadowOpacity: 0.12,
-    shadowRadius: 34,
+    borderColor: "rgba(255,255,255,0.84)",
+    shadowColor: "#75A9D4",
+    shadowOpacity: 0.13,
+    shadowRadius: 36,
     shadowOffset: { width: 0, height: 16 }
   },
+  cardTopLight: { position: "absolute", left: 24, right: 24, top: 1, height: 1, backgroundColor: "rgba(255,255,255,0.94)" },
+  cardBloom: { position: "absolute", right: -70, top: -80, width: 230, height: 230, borderRadius: 115, backgroundColor: "rgba(164,216,255,0.12)" },
+  innerTopLight: { position: "absolute", left: 16, right: 16, top: 1, height: 1, backgroundColor: "rgba(255,255,255,0.88)" },
+  buttonTopLight: { position: "absolute", left: 14, right: 14, top: 1, height: 1, backgroundColor: "rgba(255,255,255,0.88)" },
   returnBanner: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
     padding: 14,
-    borderRadius: 20,
-    backgroundColor: "rgba(232,247,255,0.92)",
+    borderRadius: 22,
+    overflow: "hidden",
+    backgroundColor: "rgba(209,238,255,0.16)",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(10,132,255,0.12)",
+    borderColor: "rgba(255,255,255,0.80)",
     marginBottom: 20
   },
-  returnIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(10,132,255,0.11)"
-  },
-  returnDot: {
-    width: 9,
-    height: 9,
-    borderRadius: 99,
-    backgroundColor: "#0A84FF",
-    shadowColor: "#0A84FF",
-    shadowOpacity: 0.5,
-    shadowRadius: 7,
-    shadowOffset: { width: 0, height: 0 }
-  },
+  returnIcon: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(10,132,255,0.09)" },
+  returnDot: { width: 9, height: 9, borderRadius: 99, backgroundColor: "#0A84FF", shadowColor: "#0A84FF", shadowOpacity: 0.45, shadowRadius: 7, shadowOffset: { width: 0, height: 0 } },
   returnTextWrap: { flex: 1 },
   returnTitle: { fontSize: 14, fontWeight: "800", color: "#163047" },
   returnText: { marginTop: 2, fontSize: 12, lineHeight: 17, color: "#60788B" },
@@ -211,126 +211,40 @@ const styles = StyleSheet.create({
   eyebrow: { fontSize: 10, fontWeight: "800", letterSpacing: 1.35, color: "#7189A0", marginBottom: 7 },
   title: { fontSize: 23, lineHeight: 28, fontWeight: "800", color: "#0F1722", letterSpacing: -0.5 },
   titleBeginner: { fontSize: 26, lineHeight: 32 },
-  progressPill: {
-    minWidth: 56,
-    paddingHorizontal: 11,
-    paddingVertical: 8,
-    borderRadius: 999,
-    flexDirection: "row",
-    justifyContent: "center",
-    backgroundColor: "rgba(236,242,249,0.95)"
-  },
-  progress: { fontSize: 12, fontWeight: "900", color: "#1E3449" },
+  progressPill: { minWidth: 56, paddingHorizontal: 11, paddingVertical: 8, borderRadius: 999, flexDirection: "row", justifyContent: "center", backgroundColor: "rgba(211,235,252,0.24)", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(255,255,255,0.78)" },
+  progress: { fontSize: 12, fontWeight: "900", color: "#1E5B86" },
   progressDivider: { marginHorizontal: 2, fontSize: 12, fontWeight: "700", color: "#9AA7B3" },
   progressTotal: { fontSize: 12, fontWeight: "800", color: "#7C8996" },
-  pathWrap: {
-    marginTop: 20,
-    paddingHorizontal: 15,
-    paddingVertical: 14,
-    borderRadius: 20,
-    backgroundColor: "rgba(244,248,252,0.94)",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(68,91,115,0.08)"
-  },
-  pathLabel: { fontSize: 9, fontWeight: "900", letterSpacing: 1.05, color: "#8394A4", marginBottom: 7 },
-  path: { fontSize: 13, lineHeight: 19, fontWeight: "700", color: "#3C4D5D" },
-  stepBox: {
-    marginTop: 16,
-    minHeight: 146,
-    justifyContent: "center",
-    padding: 20,
-    borderRadius: 27,
-    overflow: "hidden",
-    backgroundColor: "#0B1320",
-    shadowColor: "#246BFD",
-    shadowOpacity: 0.16,
-    shadowRadius: 28,
-    shadowOffset: { width: 0, height: 14 }
-  },
+  pathWrap: { marginTop: 20, paddingHorizontal: 15, paddingVertical: 14, borderRadius: 22, overflow: "hidden", backgroundColor: "rgba(224,242,255,0.11)", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(255,255,255,0.78)" },
+  pathLabel: { fontSize: 9, fontWeight: "900", letterSpacing: 1.05, color: "#7392AA", marginBottom: 7 },
+  path: { fontSize: 13, lineHeight: 19, fontWeight: "700", color: "#3C566A" },
+  stepBox: { marginTop: 16, minHeight: 150, justifyContent: "center", padding: 20, borderRadius: 29, overflow: "hidden", backgroundColor: "rgba(203,232,255,0.13)", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(255,255,255,0.84)", shadowColor: "#67A7D8", shadowOpacity: 0.12, shadowRadius: 28, shadowOffset: { width: 0, height: 12 } },
   stepBoxBeginner: { minHeight: 176, padding: 23 },
-  stepAccent: {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 4,
-    backgroundColor: "#0A84FF",
-    shadowColor: "#5AC8FA",
-    shadowOpacity: 0.8,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 0 }
-  },
+  stepGlow: { position: "absolute", width: 180, height: 180, borderRadius: 90, right: -46, top: -66, backgroundColor: "rgba(139,207,255,0.14)" },
   stepTopRow: { flexDirection: "row", alignItems: "center", marginBottom: 14 },
-  stepOrb: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(74,160,255,0.16)",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(120,200,255,0.28)"
-  },
-  stepOrbText: { color: "#EAF5FF", fontSize: 13, fontWeight: "900" },
-  stepLabel: { marginLeft: 10, fontSize: 9, fontWeight: "900", letterSpacing: 1.3, color: "rgba(214,231,248,0.58)" },
-  step: { fontSize: 19, lineHeight: 26, fontWeight: "700", color: "#FFFFFF", letterSpacing: -0.2 },
+  stepOrb: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(125,194,247,0.16)", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(255,255,255,0.80)" },
+  stepOrbText: { color: "#236FA8", fontSize: 13, fontWeight: "900" },
+  stepLabel: { marginLeft: 10, fontSize: 9, fontWeight: "900", letterSpacing: 1.3, color: "#7193AD" },
+  step: { fontSize: 19, lineHeight: 26, fontWeight: "700", color: "#17344B", letterSpacing: -0.2 },
   stepBeginner: { fontSize: 23, lineHeight: 31 },
   companionRow: { marginTop: 15, flexDirection: "row", alignItems: "flex-start", gap: 9 },
   statusDot: { width: 7, height: 7, borderRadius: 99, backgroundColor: "#B7C0CA", marginTop: 6 },
-  statusDotActive: {
-    backgroundColor: "#34C759",
-    shadowColor: "#34C759",
-    shadowOpacity: 0.45,
-    shadowRadius: 5,
-    shadowOffset: { width: 0, height: 0 }
-  },
+  statusDotActive: { backgroundColor: "#34C759", shadowColor: "#34C759", shadowOpacity: 0.45, shadowRadius: 5, shadowOffset: { width: 0, height: 0 } },
   companion: { flex: 1, fontSize: 12, lineHeight: 18, color: "#687684" },
   companionBeginner: { fontSize: 15, lineHeight: 22 },
-  settingsButton: {
-    marginTop: 18,
-    minHeight: 54,
-    paddingVertical: 15,
-    paddingLeft: 17,
-    paddingRight: 13,
-    borderRadius: 21,
-    backgroundColor: "rgba(235,242,249,0.96)",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between"
-  },
-  settingsButtonPermission: {
-    backgroundColor: "#0A84FF",
-    shadowColor: "#0A84FF",
-    shadowOpacity: 0.24,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 9 }
-  },
-  settingsButtonText: { fontSize: 14, fontWeight: "800", color: "#1A415F" },
-  settingsButtonTextPermission: { color: "#FFFFFF" },
+  settingsButton: { marginTop: 18, minHeight: 54, paddingVertical: 15, paddingLeft: 17, paddingRight: 13, borderRadius: 23, backgroundColor: "rgba(219,239,255,0.16)", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(255,255,255,0.82)", flexDirection: "row", alignItems: "center", justifyContent: "space-between", overflow: "hidden" },
+  settingsButtonPermission: { backgroundColor: "rgba(164,215,255,0.24)", shadowColor: "#75B9ED", shadowOpacity: 0.13, shadowRadius: 18, shadowOffset: { width: 0, height: 8 } },
+  settingsButtonText: { fontSize: 14, fontWeight: "800", color: "#315E7E" },
+  settingsButtonTextPermission: { color: "#146EA9" },
   settingsButtonArrow: { fontSize: 24, lineHeight: 24, color: "#72879A", marginTop: -2 },
-  settingsButtonArrowPermission: { color: "rgba(255,255,255,0.9)" },
+  settingsButtonArrowPermission: { color: "#2D7FB8" },
   permissionHint: { marginTop: 10, paddingHorizontal: 4, fontSize: 11, lineHeight: 16, color: "#73808C" },
   note: { marginTop: 10, paddingHorizontal: 4, fontSize: 11, lineHeight: 16, color: "#7A8792" },
   actions: { flexDirection: "row", gap: 10, marginTop: 20 },
-  secondary: {
-    flex: 1,
-    minHeight: 50,
-    justifyContent: "center",
-    borderRadius: 19,
-    backgroundColor: "rgba(239,243,247,0.98)"
-  },
-  secondaryText: { textAlign: "center", fontSize: 13, fontWeight: "800", color: "#4D5A66" },
-  primary: {
-    flex: 1.3,
-    minHeight: 50,
-    justifyContent: "center",
-    borderRadius: 19,
-    backgroundColor: "#111924",
-    shadowColor: "#111924",
-    shadowOpacity: 0.13,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 }
-  },
+  secondary: { flex: 1, minHeight: 50, justifyContent: "center", borderRadius: 21, backgroundColor: "rgba(224,240,252,0.13)", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(255,255,255,0.78)" },
+  secondaryText: { textAlign: "center", fontSize: 13, fontWeight: "800", color: "#536879" },
+  primary: { flex: 1.3, minHeight: 50, justifyContent: "center", borderRadius: 21, overflow: "hidden", backgroundColor: "rgba(143,205,250,0.24)", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(255,255,255,0.84)", shadowColor: "#6EACD7", shadowOpacity: 0.13, shadowRadius: 14, shadowOffset: { width: 0, height: 7 } },
   primarySolo: { flex: 1 },
-  primaryText: { textAlign: "center", fontSize: 14, fontWeight: "900", color: "#FFFFFF" }
+  primaryText: { textAlign: "center", fontSize: 14, fontWeight: "900", color: "#176DA9" },
+  buttonPressed: { transform: [{ scale: 0.988 }], opacity: 0.86 }
 });
