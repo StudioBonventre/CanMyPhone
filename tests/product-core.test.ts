@@ -94,6 +94,20 @@ test("brightness never silently clamps invalid percentages", () => {
   assert.equal(negative.needsInput, "brightness-percent");
 });
 
+test("relative brightness language is never mistaken for an absolute target", () => {
+  const brightness = solutions.find((item) => item.id === "ios-set-brightness");
+  assert.ok(brightness);
+
+  const relativeUp = directActionPlan(brightness, "Mach das Display 25 Prozent heller");
+  const relativeDown = directActionPlan(brightness, "Helligkeit 20 Prozent dunkler");
+  const explicitTarget = directActionPlan(brightness, "Mach es heller, aber auf 60 Prozent");
+
+  assert.equal(relativeUp.brightness, undefined);
+  assert.equal(relativeUp.needsInput, "brightness-percent");
+  assert.equal(relativeDown.brightness, undefined);
+  assert.equal(explicitTarget.brightness, 0.6);
+});
+
 test("brightness accepts the exact boundary values", () => {
   const brightness = solutions.find((item) => item.id === "ios-set-brightness");
   assert.ok(brightness);
