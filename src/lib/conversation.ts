@@ -58,11 +58,11 @@ function needsClarification(query: string, matches: Solution[], intent: QueryInt
     || /^(how do i )?(turn|switch) (it )?on[?.! ]*$/i.test(compact);
 
   if (genericEnable && intent.entities.length === 0) {
-    return "Was genau möchtest du einschalten oder aktivieren?";
+    return "Was genau soll ich dir am iPhone einschalten oder einrichten?";
   }
 
   if (!matches.length && compact.split(/\s+/).length <= 4 && /\b(wie|how|an|ein|aktivieren|siri)\b/i.test(compact)) {
-    return "Was genau möchtest du mit deinem Smartphone machen oder steuern?";
+    return "Was genau soll ich dir am iPhone einstellen, einrichten oder automatisieren?";
   }
 
   return undefined;
@@ -77,7 +77,7 @@ export function resolveConversation(query: string, items: Solution[], context: D
   let notice: string | undefined;
 
   if (context.platform === "ios" && context.region === "eu" && intent.wantsAppleIntelligence) {
-    notice = "Falls eine neue Siri-KI-Funktion in deiner Region nicht verfügbar ist, bevorzugt CanMyPhone klassische Siri und Apple Kurzbefehle, wenn sie dein Ziel ebenfalls lösen können.";
+    notice = "Apple Intelligence ist in der EU auf unterstützten Geräten verfügbar. Die neue Siri AI hat eine eigene regionale Verfügbarkeit und ist auf iPhone in der EU zunächst nicht verfügbar.";
   } else if (intent.wantsSiri) {
     const voiceMatch = available.find((solution) => solution.voice && solution.voice.route !== "none");
     if (voiceMatch?.voice?.route === "shortcut") {
