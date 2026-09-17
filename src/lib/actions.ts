@@ -4,7 +4,8 @@ import { directActionPlan, type DirectActionKind } from "./actionPlanning";
 import {
   automaticActionAccess,
   consumeAutomaticAction,
-  DEFAULT_ENTITLEMENTS
+  DEFAULT_ENTITLEMENTS,
+  developmentPremiumEnabled
 } from "./entitlements";
 import { openSupportedSettings } from "./settings";
 import { loadEntitlementState, saveEntitlementState } from "./storage";
@@ -37,20 +38,32 @@ async function entitlementGate(): Promise<{
   state: EntitlementState;
   message?: string;
 }> {
-  const state = await loadEntitlementState() ?? DEFAULT_ENTITLEMENTS;
-  await syncPremiumEntitlement(state.pro);
+  const stored = await loadEntitlementState() ?? DEFAULT_ENTITLEMENTS;
 
-  const access = automaticActionAccess(state);
-  if (access.allowed) return { allowed: true, state };
+  if (developmentPremiumEnabled()) {
+    const developmentState: EntitlementState = { ...stored, pro: true };
+    await syncPremiumEntitlement(true);
+    return { allowed: true, state: developmentState };
+  }
+
+  await syncPremiumEntitlement(stored.pro);
+  const access = automaticActionAccess(stored);
+  if (access.allowed) return { allowed: true, state: stored };
 
   return {
     allowed: false,
-    state,
+    state: stored,
     message: "Deine erste automatische Aktion war kostenlos. Für weitere automatische Änderungen brauchst du CanMyPhone Pro oder ein Credit. Anleitungen bleiben kostenlos."
   };
 }
 
 async function persistSuccessfulAutomaticAction(state: EntitlementState): Promise<void> {
+  // Never mutate the user's persisted purchase/credit state because of a development-only Pro override.
+  if (developmentPremiumEnabled()) {
+    await syncPremiumEntitlement(true);
+    return;
+  }
+
   const next = consumeAutomaticAction(state);
   await saveEntitlementState(next);
   await syncPremiumEntitlement(next.pro);
