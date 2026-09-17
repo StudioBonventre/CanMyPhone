@@ -1,6 +1,6 @@
 {
   "name": "canmyphone",
-  "version": "0.4.0",
+  "version": "0.9.0",
   "private": true,
   "main": "node_modules/expo/AppEntry.js",
   "scripts": {
@@ -19,14 +19,14 @@
     "expo": "~57.0.0",
     "expo-blur": "~57.0.3",
     "expo-dev-client": "~57.0.19",
+    "expo-glass-effect": "~57.0.3",
     "expo-haptics": "~57.0.1",
     "expo-widgets": "~57.0.8",
-    "react": "19.2.0",
-    "react-native": "0.86.0",
-    "expo-glass-effect": "~57.0.1"
+    "react": "19.2.3",
+    "react-native": "0.86.3"
   },
   "devDependencies": {
     "@types/react": "~19.2.0",
-    "typescript": "~5.9.0"
+    "typescript": "~6.0.3"
   }
 }
