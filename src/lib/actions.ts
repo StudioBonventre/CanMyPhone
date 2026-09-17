@@ -20,17 +20,25 @@ export type DirectActionResult = {
   locked?: boolean;
 };
 
+async function syncPremiumEntitlement(enabled: boolean): Promise<void> {
+  try {
+    const sync = CanMyPhoneNative?.setPremiumEntitlement;
+    if (typeof sync === "function") {
+      await sync.call(CanMyPhoneNative, enabled);
+    }
+  } catch {
+    // Older development builds may not contain this native method yet.
+    // Entitlement sync must never block the action the user actually requested.
+  }
+}
+
 async function entitlementGate(): Promise<{
   allowed: boolean;
   state: EntitlementState;
   message?: string;
 }> {
   const state = await loadEntitlementState() ?? DEFAULT_ENTITLEMENTS;
-
-  // Keep the native App Intents layer aligned with the app's entitlement state.
-  if (CanMyPhoneNative) {
-    await CanMyPhoneNative.setPremiumEntitlement(state.pro).catch(() => undefined);
-  }
+  await syncPremiumEntitlement(state.pro);
 
   const access = automaticActionAccess(state);
   if (access.allowed) return { allowed: true, state };
@@ -45,9 +53,7 @@ async function entitlementGate(): Promise<{
 async function persistSuccessfulAutomaticAction(state: EntitlementState): Promise<void> {
   const next = consumeAutomaticAction(state);
   await saveEntitlementState(next);
-  if (CanMyPhoneNative) {
-    await CanMyPhoneNative.setPremiumEntitlement(next.pro).catch(() => undefined);
-  }
+  await syncPremiumEntitlement(next.pro);
 }
 
 export async function runDirectAction(solution: Solution, query: string): Promise<DirectActionResult> {
@@ -56,72 +62,82 @@ export async function runDirectAction(solution: Solution, query: string): Promis
     return { handled: false, succeeded: false, message: "Für diese Lösung ist eine Anleitung der sichere Weg." };
   }
 
-  const gate = await entitlementGate();
-  if (!gate.allowed) {
-    return {
-      handled: true,
-      succeeded: false,
-      locked: true,
-      kind: plan.kind,
-      message: gate.message ?? "Für weitere automatische Aktionen brauchst du CanMyPhone Pro oder ein Credit."
-    };
-  }
-
-  if (plan.kind === "brightness") {
-    if (plan.brightness === undefined) {
+  try {
+    const gate = await entitlementGate();
+    if (!gate.allowed) {
       return {
         handled: true,
         succeeded: false,
-        kind: "brightness",
-        message: "Sag mir die gewünschte Helligkeit, zum Beispiel „35 %“."
+        locked: true,
+        kind: plan.kind,
+        message: gate.message ?? "Für weitere automatische Aktionen brauchst du CanMyPhone Pro oder ein Credit."
       };
     }
 
-    if (!CanMyPhoneNative) {
-      return {
-        handled: true,
-        succeeded: false,
-        kind: "brightness",
-        message: "Diese Version von CanMyPhone braucht einen neuen iOS-Build, bevor sie die Displayhelligkeit direkt ändern kann."
-      };
-    }
-
-    try {
-      const applied = await CanMyPhoneNative.setBrightness(plan.brightness);
-      if (!applied.success) {
+    if (plan.kind === "brightness") {
+      if (plan.brightness === undefined) {
         return {
           handled: true,
           succeeded: false,
           kind: "brightness",
-          message: applied.message || "Die Helligkeit konnte auf diesem Gerät gerade nicht geändert werden."
+          message: "Sag mir die gewünschte Helligkeit zwischen 0 und 100 Prozent, zum Beispiel „35 %“."
         };
       }
 
-      await persistSuccessfulAutomaticAction(gate.state);
-      return {
-        handled: true,
-        succeeded: true,
-        kind: "brightness",
-        message: applied.message
-      };
-    } catch {
-      return {
-        handled: true,
-        succeeded: false,
-        kind: "brightness",
-        message: "Die Helligkeit konnte auf diesem Gerät gerade nicht geändert werden. Installiere bei Bedarf den aktuellen Development Build."
-      };
+      const setBrightness = CanMyPhoneNative?.setBrightness;
+      if (typeof setBrightness !== "function") {
+        return {
+          handled: true,
+          succeeded: false,
+          kind: "brightness",
+          message: "Dein installierter CanMyPhone-Testbuild enthält die neue Helligkeitsfunktion noch nicht. Installiere den aktuellen Development Build und versuche es erneut."
+        };
+      }
+
+      try {
+        const applied = await setBrightness.call(CanMyPhoneNative, plan.brightness);
+        if (!applied.success) {
+          return {
+            handled: true,
+            succeeded: false,
+            kind: "brightness",
+            message: applied.message || "Die Helligkeit konnte auf diesem Gerät gerade nicht geändert werden."
+          };
+        }
+
+        await persistSuccessfulAutomaticAction(gate.state);
+        return {
+          handled: true,
+          succeeded: true,
+          kind: "brightness",
+          message: applied.message
+        };
+      } catch {
+        return {
+          handled: true,
+          succeeded: false,
+          kind: "brightness",
+          message: "Die Helligkeit konnte gerade nicht geändert werden. Prüfe, ob der aktuelle Development Build installiert ist."
+        };
+      }
     }
+
+    const result = await openSupportedSettings(solution);
+    const succeeded = result.reason === "permission-granted";
+    if (succeeded) await persistSuccessfulAutomaticAction(gate.state);
+
+    return {
+      handled: true,
+      succeeded,
+      kind: "permission",
+      message: result.message
+    };
+  } catch {
+    return {
+      handled: true,
+      succeeded: false,
+      kind: plan.kind,
+      message: "Die Aktion konnte gerade nicht abgeschlossen werden. CanMyPhone hat nichts verändert; versuche es bitte noch einmal."
+    };
   }
-
-  const result = await openSupportedSettings(solution);
-  const succeeded = result.reason === "permission-granted";
-  if (succeeded) await persistSuccessfulAutomaticAction(gate.state);
-
-  return {
-    handled: true,
-    succeeded,
-    kind: "permission",
-    message: result.message
-  };
 }
