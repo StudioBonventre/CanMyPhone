@@ -18,6 +18,23 @@ export type SettingsLaunchResult = {
   message: string;
 };
 
+let permissionGrantSignal = 0;
+
+function markPermissionGranted(): void {
+  permissionGrantSignal = Date.now();
+}
+
+/**
+ * Lets the guide advance after the real iOS permission sheet succeeds without
+ * coupling the UI component to native permission APIs. The signal is one-shot
+ * and deliberately short-lived so a later tap can never inherit old success.
+ */
+export function consumeRecentPermissionGrant(maxAgeMs = 3000): boolean {
+  const signal = permissionGrantSignal;
+  permissionGrantSignal = 0;
+  return signal > 0 && Date.now() - signal <= maxAgeMs;
+}
+
 function permissionForSolution(solution: Solution): PermissionKind | null {
   return solution.settings?.permission ?? null;
 }
@@ -178,6 +195,7 @@ export async function openSupportedSettings(solution: Solution): Promise<Setting
       const current = await permissionStatus.call(CanMyPhoneNative, permission);
 
       if (current.granted) {
+        markPermissionGranted();
         return {
           opened: false,
           reason: "permission-granted",
@@ -187,6 +205,7 @@ export async function openSupportedSettings(solution: Solution): Promise<Setting
 
       if (current.status === "notDetermined") {
         const requested = await requestPermission.call(CanMyPhoneNative, permission);
+        if (requested.granted) markPermissionGranted();
         return {
           opened: false,
           reason: requested.granted ? "permission-granted" : "permission-denied",
