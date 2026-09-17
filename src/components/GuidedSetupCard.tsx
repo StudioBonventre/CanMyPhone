@@ -152,7 +152,7 @@ const styles = StyleSheet.create({
   stepBoxBeginner: { minHeight: 160, padding: 22 },
   stepOrb: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(255,255,255,0.11)", marginBottom: 13 },
   stepOrbText: { color: "#DDEBFF", fontSize: 13, fontWeight: "900" },
-  step: { fontSize: 18, lineHeight: 25, fontWeight: "750", color: "#FFFFFF" },
+  step: { fontSize: 18, lineHeight: 25, fontWeight: "700", color: "#FFFFFF" },
   stepBeginner: { fontSize: 22, lineHeight: 30 },
   companion: { marginTop: 13, fontSize: 12, lineHeight: 18, color: "#6D7984" },
   companionBeginner: { fontSize: 15, lineHeight: 22 },
