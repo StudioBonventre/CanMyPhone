@@ -23,7 +23,7 @@ function includesAny(value: string, terms: string[]): boolean {
 
 export function shortcutAssistantPlan(query: string, solution?: Solution | null): ShortcutAssistantPlan {
   const q = query.trim();
-  const shortcutCapable = solution?.voice?.route === "shortcut" || solution?.category === "automation" || includesAny(q, ["automatisch", "automation", "kurzbefehl", "shortcut", "siri"]);
+  const shortcutCapable = solution?.id === "ios-back-tap" || solution?.voice?.route === "shortcut" || solution?.category === "automation" || includesAny(q, ["automatisch", "automation", "kurzbefehl", "shortcut", "siri"]);
 
   if (!shortcutCapable) {
     return {
@@ -31,6 +31,21 @@ export function shortcutAssistantPlan(query: string, solution?: Solution | null)
       title: "Kein Kurzbefehl nötig",
       explanation: "Für dieses Ziel ist ein direkter iPhone-Weg einfacher.",
       steps: []
+    };
+  }
+
+  if (solution?.id === "ios-back-tap") {
+    return {
+      applicable: true,
+      title: "Back Tap mit CanMyPhone vorbereiten",
+      explanation: "CanMyPhone registriert einen eigenen App Shortcut automatisch. Apple verlangt nur die letzte Zuordnung zu Doppeltippen oder Dreimal tippen in den Bedienungshilfen.",
+      suggestedName: "CanMyPhone öffnen",
+      steps: [
+        "Tippe auf „Shortcut vorbereiten“ — CanMyPhone öffnet die Kurzbefehle-App über Apples offiziellen Deep Link",
+        "Prüfe, dass der CanMyPhone App Shortcut verfügbar ist",
+        "Öffne Einstellungen → Bedienungshilfen → Tippen → Auf Rückseite tippen",
+        "Wähle Doppeltippen oder Dreimal tippen und ordne den CanMyPhone Shortcut zu"
+      ]
     };
   }
 
