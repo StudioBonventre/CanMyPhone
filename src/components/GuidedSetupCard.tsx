@@ -7,6 +7,7 @@ import {
   settingsActionLabel
 } from "../lib/settings";
 import type { GuideSession, Solution } from "../types";
+import { liquidIce } from "../theme/liquidIce";
 import { GlassSurface } from "./GlassSurface";
 
 type Props = {
