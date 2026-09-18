@@ -532,17 +532,17 @@ export default function App() {
                     <Text style={styles.answerSummary}>{bestResult.summary}</Text>
                     {conversation.notice ? <Text style={styles.noticeText}>{conversation.notice}</Text> : null}
 
-                    <GlassSurface style={styles.capabilityCard} tintColor="rgba(255,255,255,0.16)">
-                      <View style={styles.capabilityIcon}><Text style={styles.capabilityIconText}>✓</Text></View>
-                      <View style={styles.capabilityTextWrap}>
-                        <Text style={styles.capabilityTitle}>{actionPlan?.supported ? "Kann direkt helfen" : "Sicherer Weg verfügbar"}</Text>
-                        <Text style={styles.capabilityText}>
-                          {actionPlan?.supported
-                            ? "Wenn iOS eine öffentliche Aktion erlaubt, führt CanMyPhone sie direkt aus."
-                            : "Keine privaten Einstellungslinks und keine erfundenen Schritte."}
-                        </Text>
-                      </View>
-                    </GlassSurface>
+                    <CapabilityCard
+                      level={actionPlan?.supported ? "direct" : shortcutPlan.applicable ? "shortcut" : "confirm"}
+                      title={actionPlan?.supported ? "CanMyPhone erledigt es" : shortcutPlan.applicable ? "CanMyPhone automatisiert es" : "Deine Bestätigung in iOS nötig"}
+                      description={
+                        actionPlan?.supported
+                          ? "Die Änderung läuft über eine öffentliche iOS-Aktion und kann direkt ausgeführt werden."
+                          : shortcutPlan.applicable
+                            ? "CanMyPhone bereitet den offiziellen Kurzbefehls-Weg vor und führt dich bis zum letzten geschützten Schritt."
+                            : "iOS schützt diese Einstellung. CanMyPhone zeigt dir deshalb den kürzesten öffentlichen Weg und merkt sich deinen Fortschritt."
+                      }
+                    />
 
                     {actionPlan?.needsInput === "brightness-percent" ? (
                       <View style={styles.choiceSection}>
