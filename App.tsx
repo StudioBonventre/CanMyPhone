@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   AccessibilityInfo,
-  ActivityIndicator,
   AppState,
   AppStateStatus,
   Keyboard,
@@ -10,18 +9,16 @@ import {
   Pressable,
   SafeAreaView,
   ScrollView,
-  StyleProp,
   StyleSheet,
   Text,
   TextInput,
-  View,
-  ViewStyle
+  View
 } from "react-native";
-import { GlassView, isGlassEffectAPIAvailable } from "expo-glass-effect";
 import { ActionTransitionV2 } from "./src/components/ActionTransitionV2";
 import { AuraV2 } from "./src/components/AuraV2";
 import { GuidedSetupCard } from "./src/components/GuidedSetupCard";
 import { Top100Section } from "./src/components/Top100Section";
+import { liquidIce } from "./src/theme/liquidIce";
 import { solutions } from "./src/data/solutions";
 import { directActionPlan, runDirectAction, type DirectActionResult } from "./src/lib/actions";
 import { resolveWithOnDeviceAI } from "./src/lib/aiResolver";
@@ -66,6 +63,25 @@ import {
 } from "./src/types";
 
 type Tab = AppTab;
+
+const quickIdeas = [
+  { title: "Benachrichtigungen erlauben", query: "benachrichtigungen erlauben" },
+  { title: "Beim Losfahren Navigation starten", query: "automation shortcut leave work navigation" },
+  { title: "Was kann mein iPhone noch?", query: "discover hidden iphone features" }
+];
+
+const hiddenFeatures = [
+  { title: "Die Rückseite deines iPhones als Taste nutzen", query: "back tap" },
+  { title: "Dokumente ohne zusätzliche App scannen", query: "scan document pdf" },
+  { title: "Wichtige Geräusche automatisch erkennen lassen", query: "sound recognition" }
+];
+
+const feedbackOptions: { value: SolutionFeedback; label: string }[] = [
+  { value: "worked", label: "Hat geklappt" },
+  { value: "didnt_work", label: "Ging nicht" },
+  { value: "already_knew", label: "Kannte ich" },
+  { value: "not_relevant", label: "Nicht relevant" }
+];
 
 function makeGuideSession(solution: Solution, steps = solution.steps, title = solution.title): GuideSession {
   const now = Date.now();
