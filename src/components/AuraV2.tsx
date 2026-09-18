@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import { Animated, Easing, StyleSheet, View } from "react-native";
 import type { MotionPhase } from "../types";
+import { liquidIce } from "../theme/liquidIce";
 
 function phaseIntensity(phase: MotionPhase): number {
   switch (phase) {
@@ -27,7 +28,7 @@ export function AuraV2({ phase, reduceMotion }: { phase: MotionPhase; reduceMoti
   useEffect(() => {
     Animated.timing(activity, {
       toValue: phaseIntensity(phase),
-      duration: reduceMotion ? 120 : phase === "searching" ? 260 : 480,
+      duration: reduceMotion ? 120 : phase === "searching" ? liquidIce.motion.focus : liquidIce.motion.handoff,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true
     }).start();
@@ -44,13 +45,13 @@ export function AuraV2({ phase, reduceMotion }: { phase: MotionPhase; reduceMoti
       Animated.sequence([
         Animated.timing(breathe, {
           toValue: 1,
-          duration: 5200,
+          duration: liquidIce.motion.ambient / 2,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true
         }),
         Animated.timing(breathe, {
           toValue: 0,
-          duration: 5200,
+          duration: liquidIce.motion.ambient / 2,
           easing: Easing.inOut(Easing.sin),
           useNativeDriver: true
         })
@@ -200,7 +201,7 @@ const styles = StyleSheet.create({
     width: 420,
     height: 420,
     borderRadius: 210,
-    backgroundColor: "rgba(0,122,255,0.10)",
+    backgroundColor: "rgba(8,123,255,0.075)",
     top: -260,
     left: -170
   },
@@ -209,7 +210,7 @@ const styles = StyleSheet.create({
     width: 320,
     height: 320,
     borderRadius: 160,
-    backgroundColor: "rgba(50,215,255,0.085)",
+    backgroundColor: "rgba(128,222,255,0.075)",
     top: 130,
     right: -170
   },
@@ -218,7 +219,7 @@ const styles = StyleSheet.create({
     width: 420,
     height: 420,
     borderRadius: 210,
-    backgroundColor: "rgba(120,86,255,0.085)",
+    backgroundColor: "rgba(120,86,255,0.030)",
     bottom: -70,
     left: -230
   },
@@ -227,7 +228,7 @@ const styles = StyleSheet.create({
     width: 300,
     height: 300,
     borderRadius: 150,
-    backgroundColor: "rgba(255,72,150,0.07)",
+    backgroundColor: "rgba(255,72,150,0.022)",
     bottom: -120,
     right: -130
   },
