@@ -443,7 +443,7 @@ export default function App() {
             <View style={styles.headerActions}>
               {preferences.beginnerMode ? <Text style={styles.modePill}>EINFACH</Text> : null}
               <Pressable accessibilityLabel="Bereich Du öffnen" onPress={() => switchTab("you")}>
-                <GlassSurface style={styles.moreButton} interactive>
+                <GlassSurface variant="inset" style={styles.moreButton} interactive>
                   <Text style={styles.moreButtonText}>•••</Text>
                 </GlassSurface>
               </Pressable>
@@ -526,10 +526,10 @@ export default function App() {
                 ) : null}
 
                 {needsFollowUp ? (
-                  <GlassSurface style={styles.followUpCard} tintColor="rgba(255,255,255,0.18)">
+                  <GlassSurface variant="floating" style={styles.followUpCard}>
                     <Text style={styles.answerEyebrow}>EINE KURZE RÜCKFRAGE</Text>
                     <Text style={styles.followUpText}>{conversation.followUp}</Text>
-                    <View style={styles.followUpInputRow}>
+                    <GlassSurface variant="inset" style={styles.followUpInputRow}>
                       <TextInput
                         value={followUpDraft}
                         onChangeText={setFollowUpDraft}
@@ -586,14 +586,14 @@ export default function App() {
                     )}
 
                     {actionResult ? (
-                      <GlassSurface style={[styles.resultBanner, actionResult.succeeded && styles.resultBannerSuccess]} tintColor="rgba(255,255,255,0.18)">
+                      <GlassSurface variant="surface" style={[styles.resultBanner, actionResult.succeeded && styles.resultBannerSuccess]}>
                         <Text style={[styles.resultTitle, actionResult.succeeded && styles.resultTitleSuccess]}>{actionResult.succeeded ? "Erledigt" : "Hinweis"}</Text>
                         <Text style={styles.resultText}>{actionResult.message}</Text>
                       </GlassSurface>
                     ) : null}
 
                     {shortcutPlan.applicable && !actionPlan?.supported ? (
-                      <GlassSurface style={styles.shortcutCard} tintColor="rgba(255,255,255,0.15)">
+                      <GlassSurface variant="floating" style={styles.shortcutCard}>
                         <Text style={styles.shortcutBadge}>KURZBEFEHL-ASSISTENT</Text>
                         <Text style={styles.shortcutTitle}>{shortcutPlan.title}</Text>
                         <Text style={styles.shortcutText}>{shortcutPlan.explanation}</Text>
@@ -601,15 +601,20 @@ export default function App() {
                         {shortcutPlan.choices?.length ? (
                           <View style={styles.shortcutChoices}>
                             {shortcutPlan.choices.map((choice) => (
-                              <Pressable key={choice.id} style={styles.shortcutChoice} onPress={() => runAsk(`${submittedQuery}. ${choice.queryHint}`).catch(() => undefined)}>
-                                <Text style={styles.shortcutChoiceText}>{choice.label}</Text>
+                              <Pressable key={choice.id} onPress={() => runAsk(`${submittedQuery}. ${choice.queryHint}`).catch(() => undefined)}>
+                                <GlassSurface variant="inset" interactive style={styles.shortcutChoice}>
+                                  <Text style={styles.shortcutChoiceText}>{choice.label}</Text>
+                                </GlassSurface>
                               </Pressable>
                             ))}
                           </View>
                         ) : null}
-                        <Pressable style={styles.secondaryAction} onPress={() => startGuide(bestResult, shortcutPlan.steps, shortcutPlan.title)}>
-                          <Text style={styles.secondaryActionText}>Automation vorbereiten</Text>
-                        </Pressable>
+                        <LiquidButton
+                          variant="glass"
+                          style={styles.secondaryAction}
+                          label="Automation vorbereiten"
+                          onPress={() => startGuide(bestResult, shortcutPlan.steps, shortcutPlan.title)}
+                        />
                       </GlassSurface>
                     ) : null}
 
@@ -634,11 +639,11 @@ export default function App() {
                   </View>
                 ) : submittedQuery ? (
                   <View style={styles.noResultArea}>
-                    <GlassSurface style={styles.noResultCard} tintColor="rgba(255,255,255,0.16)">
+                    <GlassSurface variant="surface" style={styles.noResultCard}>
                       <Text style={styles.noResultTitle}>Lieber keine erfundene Antwort.</Text>
                       <Text style={styles.noResultText}>Ich habe in unserem verifizierten Katalog keinen sicheren Treffer gefunden.</Text>
                     </GlassSurface>
-                    <Pressable onPress={resetQuestion} style={styles.primaryAction}><Text style={styles.primaryActionText}>Anders formulieren</Text></Pressable>
+                    <LiquidButton style={styles.primaryAction} label="Anders formulieren" onPress={resetQuestion} />
                   </View>
                 ) : (
                   <View style={styles.ideaList}>
@@ -686,7 +691,7 @@ export default function App() {
                   <View style={styles.discoveryList}>
                     {radarResults.map((item, index) => (
                       <Pressable key={item.id} onPress={() => runAsk(item.title).catch(() => undefined)}>
-                        <GlassSurface style={styles.discoveryCard} interactive tintColor="rgba(255,255,255,0.14)">
+                        <GlassSurface variant="surface" style={styles.discoveryCard} interactive>
                           <View style={styles.discoveryNumber}><Text style={styles.discoveryNumberText}>{index + 1}</Text></View>
                           <View style={styles.discoveryTextWrap}>
                             <Text style={styles.discoveryBadge}>FÜR DICH</Text>
@@ -701,7 +706,7 @@ export default function App() {
                   <View style={styles.discoveryList}>
                     {hiddenFeatures.map((item) => (
                       <Pressable key={item.title} onPress={() => runAsk(item.query).catch(() => undefined)}>
-                        <GlassSurface style={styles.discoveryCard} interactive tintColor="rgba(255,255,255,0.14)">
+                        <GlassSurface variant="surface" style={styles.discoveryCard} interactive>
                           <View style={styles.discoveryTextWrap}>
                             <Text style={styles.discoveryBadge}>ENTDECKEN</Text>
                             <Text style={styles.discoveryTitle}>{item.title}</Text>
@@ -722,7 +727,7 @@ export default function App() {
                   <Text style={styles.heroSubtext}>Wenige Einstellungen, klar erklärt und jederzeit zurücksetzbar.</Text>
                 </View>
 
-                <GlassSurface style={styles.youCard} tintColor="rgba(255,255,255,0.16)">
+                <GlassSurface variant="floating" style={styles.youCard}>
                   <View style={styles.youRow}>
                     <View style={styles.youTextWrap}>
                       <Text style={styles.youTitle}>Einsteiger-Modus</Text>
@@ -798,12 +803,12 @@ const styles = StyleSheet.create({
   headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
   brand: { ...liquidIce.type.titleMedium, color: liquidIce.color.textPrimary },
   guideBackButton: { minHeight: 44, flexDirection: "row", alignItems: "center", paddingRight: 8 },
-  guideBackIcon: { fontSize: 37, lineHeight: 40, color: "#087BFF", fontWeight: "300", marginTop: -2 },
-  guideBackText: { marginLeft: 2, fontSize: 16, fontWeight: "600", color: "#087BFF" },
+  guideBackIcon: { fontSize: 37, lineHeight: 40, color: liquidIce.color.accent, fontWeight: "300", marginTop: -2 },
+  guideBackText: { marginLeft: 2, fontSize: 16, fontWeight: "600", color: liquidIce.color.accent },
   guideHeaderTitle: { fontSize: 15, fontWeight: "700", color: "#657283" },
   modePill: { fontSize: 9, fontWeight: "800", letterSpacing: 0.7, color: "#506174", backgroundColor: "rgba(255,255,255,0.76)", paddingHorizontal: 9, paddingVertical: 6, borderRadius: 999, overflow: "hidden" },
   moreButton: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center", overflow: "hidden" },
-  moreButtonText: { fontSize: 17, fontWeight: "700", color: "#53606F", marginTop: -5 },
+  moreButtonText: { fontSize: 17, fontWeight: "700", color: liquidIce.color.textSecondary, marginTop: -5 },
   mainContent: { flex: 1 },
   contentContainer: { flexGrow: 1, paddingBottom: 16 },
   guideScrollContent: { flexGrow: 1, justifyContent: "center", paddingVertical: 14 },
@@ -843,13 +848,13 @@ const styles = StyleSheet.create({
   capabilityText: { marginTop: 4, fontSize: 13, lineHeight: 18, color: "#6E7A88" },
   primaryAction: { marginTop: 22 },
   primaryActionText: { color: "#FFFFFF", fontSize: 17, fontWeight: "700" },
-  secondaryAction: { marginTop: 16, minHeight: 50, borderRadius: 25, alignItems: "center", justifyContent: "center", backgroundColor: "#17202B" },
+  secondaryAction: { marginTop: 16 },
   secondaryActionText: { color: "#FFFFFF", fontSize: 14, fontWeight: "700" },
   textAction: { alignItems: "center", paddingVertical: 18 },
   textActionText: { fontSize: 15, color: "#566375", fontWeight: "600" },
   followUpCard: { marginTop: 30, borderRadius: 28, padding: 20, overflow: "hidden" },
   followUpText: { fontSize: 19, lineHeight: 25, fontWeight: "700", color: "#293640" },
-  followUpInputRow: { marginTop: 18, flexDirection: "row", alignItems: "center", backgroundColor: "rgba(255,255,255,0.66)", borderRadius: 22, paddingLeft: 14, paddingRight: 6 },
+  followUpInputRow: { marginTop: 18, flexDirection: "row", alignItems: "center", borderRadius: 22, paddingLeft: 14, paddingRight: 6, overflow: "hidden" },
   followUpInput: { flex: 1, height: 48, fontSize: 15, color: "#17202B" },
   smallSendButton: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: "#087BFF" },
   smallSendText: { color: "#FFFFFF", fontSize: 20, fontWeight: "700" },
@@ -859,7 +864,7 @@ const styles = StyleSheet.create({
   choiceChip: { flex: 1, paddingVertical: 12, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.76)", alignItems: "center" },
   choiceChipText: { fontSize: 13, fontWeight: "700", color: "#263548" },
   resultBanner: { marginTop: 14, borderRadius: 22, padding: 16, overflow: "hidden" },
-  resultBannerSuccess: { backgroundColor: "rgba(223,249,235,0.78)" },
+  resultBannerSuccess: { borderColor: "rgba(39,133,110,0.42)" },
   resultTitle: { fontSize: 12, fontWeight: "800", letterSpacing: 0.5, color: "#586777" },
   resultTitleSuccess: { color: "#168A55" },
   resultText: { marginTop: 5, fontSize: 14, lineHeight: 19, color: "#3F4D5D" },
@@ -869,15 +874,15 @@ const styles = StyleSheet.create({
   shortcutText: { marginTop: 8, fontSize: 14, lineHeight: 20, color: "#677485" },
   shortcutQuestion: { marginTop: 15, fontSize: 14, lineHeight: 20, fontWeight: "700", color: "#334155" },
   shortcutChoices: { marginTop: 10, gap: 8 },
-  shortcutChoice: { minHeight: 44, borderRadius: 17, backgroundColor: "rgba(255,255,255,0.76)", justifyContent: "center", paddingHorizontal: 14 },
+  shortcutChoice: { minHeight: 44, borderRadius: 17, justifyContent: "center", paddingHorizontal: 14, overflow: "hidden" },
   shortcutChoiceText: { fontSize: 14, fontWeight: "600", color: "#344154" },
   feedbackSection: { marginTop: 24 },
   feedbackTitle: { fontSize: 13, fontWeight: "700", color: "#5C6979", marginBottom: 10 },
   feedbackRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  feedbackChip: { paddingHorizontal: 12, paddingVertical: 9, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.74)" },
-  feedbackChipActive: { backgroundColor: "#17202B" },
+  feedbackChip: { minHeight: 40, justifyContent: "center", paddingHorizontal: 13, paddingVertical: 9, borderRadius: 999, backgroundColor: liquidIce.color.glassSubtle, borderWidth: StyleSheet.hairlineWidth, borderColor: liquidIce.color.glassBorder },
+  feedbackChipActive: { backgroundColor: "rgba(8,123,255,0.10)", borderColor: "rgba(8,123,255,0.42)" },
   feedbackChipText: { fontSize: 12, fontWeight: "700", color: "#5D6875" },
-  feedbackChipTextActive: { color: "#FFFFFF" },
+  feedbackChipTextActive: { color: liquidIce.color.accent },
   noResultArea: { paddingTop: 24 },
   noResultCard: { borderRadius: 28, padding: 20, overflow: "hidden" },
   noResultTitle: { fontSize: 18, fontWeight: "700", color: "#26303D" },
@@ -896,16 +901,16 @@ const styles = StyleSheet.create({
   youTextWrap: { flex: 1 },
   youTitle: { fontSize: 16, fontWeight: "700", color: "#26323C" },
   youText: { marginTop: 5, fontSize: 13, lineHeight: 18, color: "#6F7B84" },
-  toggle: { minWidth: 54, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, backgroundColor: "rgba(116,126,139,0.12)" },
-  toggleOn: { backgroundColor: "#087BFF" },
+  toggle: { minWidth: 54, minHeight: 40, justifyContent: "center", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, backgroundColor: liquidIce.color.glassSubtle, borderWidth: StyleSheet.hairlineWidth, borderColor: liquidIce.color.glassBorder },
+  toggleOn: { backgroundColor: liquidIce.color.accent, borderColor: "rgba(255,255,255,0.72)" },
   toggleText: { textAlign: "center", fontSize: 10, fontWeight: "800", color: "#78848E" },
   toggleTextOn: { color: "#FFFFFF" },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: "rgba(79,94,110,0.14)", marginVertical: 20 },
   regionRow: { flexDirection: "row", gap: 8, marginTop: 10 },
-  regionButton: { flex: 1, paddingVertical: 11, borderRadius: 15, backgroundColor: "rgba(112,125,140,0.09)" },
-  regionButtonActive: { backgroundColor: "#18212D" },
+  regionButton: { flex: 1, minHeight: 44, justifyContent: "center", paddingVertical: 11, borderRadius: 22, backgroundColor: liquidIce.color.glassSubtle, borderWidth: StyleSheet.hairlineWidth, borderColor: liquidIce.color.glassBorder },
+  regionButtonActive: { backgroundColor: liquidIce.color.glassStrong, borderColor: "rgba(8,123,255,0.34)" },
   regionButtonText: { textAlign: "center", fontSize: 12, fontWeight: "700", color: "#66717A" },
-  regionButtonTextActive: { color: "#FFFFFF" },
+  regionButtonTextActive: { color: liquidIce.color.accent },
   radarHint: { marginTop: 18, fontSize: 12, lineHeight: 17, color: "#71808B" },
   resetButton: { marginTop: 16, alignSelf: "flex-start" },
   resetText: { fontSize: 12, fontWeight: "600", color: "#7E8996" },
