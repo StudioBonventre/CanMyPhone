@@ -1,12 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Easing, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { top100Settings } from "../data/top100Settings";
+import { liquidIce } from "../theme/liquidIce";
 import {
   top100CapabilityCounts,
   top100CapabilityFor,
   type Top100CapabilityLevel
 } from "../lib/top100Capabilities";
 import { GlassSurface } from "./GlassSurface";
+import { CapabilityStatusChip } from "./CapabilityStatusChip";
 
 type Props = {
   onSelect: (query: string) => void;
