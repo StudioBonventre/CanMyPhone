@@ -16,6 +16,11 @@ import {
 } from "react-native";
 import { ActionTransitionV2 } from "./src/components/ActionTransitionV2";
 import { AuraV2 } from "./src/components/AuraV2";
+import { CapabilityCard } from "./src/components/CapabilityCard";
+import { FloatingTabBar, type AppTab } from "./src/components/FloatingTabBar";
+import { GlassSurface } from "./src/components/GlassSurface";
+import { LiquidButton } from "./src/components/LiquidButton";
+import { LiquidComposer } from "./src/components/LiquidComposer";
 import { GuidedSetupCard } from "./src/components/GuidedSetupCard";
 import { Top100Section } from "./src/components/Top100Section";
 import { liquidIce } from "./src/theme/liquidIce";
