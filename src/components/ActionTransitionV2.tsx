@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { Animated, Easing, StyleSheet, Text, View } from "react-native";
+import { liquidIce } from "../theme/liquidIce";
 
 type Props = {
   visible: boolean;
@@ -16,7 +17,7 @@ export function ActionTransitionV2({ visible, reduceMotion, label }: Props) {
   useEffect(() => {
     Animated.timing(opacity, {
       toValue: visible ? 1 : 0,
-      duration: reduceMotion ? 100 : visible ? 180 : 260,
+      duration: reduceMotion ? 100 : visible ? liquidIce.motion.focus : liquidIce.motion.reveal,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true
     }).start();
@@ -141,7 +142,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 34,
-    backgroundColor: "rgba(247,249,253,0.92)"
+    backgroundColor: "rgba(248,252,255,0.78)"
   },
   blueBlob: {
     position: "absolute",
@@ -150,7 +151,7 @@ const styles = StyleSheet.create({
     borderRadius: 240,
     left: -250,
     top: -230,
-    backgroundColor: "rgba(0,122,255,0.16)"
+    backgroundColor: "rgba(8,123,255,0.11)"
   },
   violetBlob: {
     position: "absolute",
@@ -159,7 +160,7 @@ const styles = StyleSheet.create({
     borderRadius: 210,
     right: -250,
     top: 90,
-    backgroundColor: "rgba(128,86,255,0.14)"
+    backgroundColor: "rgba(128,86,255,0.08)"
   },
   cyanBlob: {
     position: "absolute",
@@ -168,7 +169,7 @@ const styles = StyleSheet.create({
     borderRadius: 180,
     left: -220,
     bottom: 0,
-    backgroundColor: "rgba(46,210,255,0.12)"
+    backgroundColor: "rgba(128,222,255,0.09)"
   },
   roseBlob: {
     position: "absolute",
@@ -177,7 +178,7 @@ const styles = StyleSheet.create({
     borderRadius: 180,
     right: -190,
     bottom: -180,
-    backgroundColor: "rgba(255,78,162,0.11)"
+    backgroundColor: "rgba(255,78,162,0.055)"
   },
   stage: {
     width: 290,
@@ -223,7 +224,7 @@ const styles = StyleSheet.create({
   title: {
     marginTop: 18,
     maxWidth: 330,
-    color: "#111827",
+    color: liquidIce.color.textPrimary,
     fontSize: 23,
     lineHeight: 29,
     fontWeight: "700",
@@ -233,7 +234,7 @@ const styles = StyleSheet.create({
   subtitle: {
     marginTop: 10,
     maxWidth: 310,
-    color: "rgba(57,70,87,0.68)",
+    color: liquidIce.color.textSecondary,
     fontSize: 13,
     lineHeight: 19,
     textAlign: "center"
