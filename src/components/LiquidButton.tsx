@@ -54,6 +54,7 @@ const styles = StyleSheet.create({
     fontWeight: "700"
   },
   glass: {
+    width: "100%",
     minHeight: 50,
     borderRadius: 25,
     alignItems: "center",
