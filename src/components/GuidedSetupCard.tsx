@@ -9,6 +9,7 @@ import {
 import type { GuideSession, Solution } from "../types";
 import { liquidIce } from "../theme/liquidIce";
 import { GlassSurface } from "./GlassSurface";
+import { LiquidButton } from "./LiquidButton";
 
 type Props = {
   session: GuideSession;
@@ -117,18 +118,22 @@ export function GuidedSetupCard({
         <>
           <Pressable
             accessibilityRole="button"
-            style={({ pressed }) => [
-              styles.settingsButton,
-              (permissionFlow || shortcutFlow) && styles.settingsButtonPermission,
-              pressed && styles.buttonPressed
-            ]}
             onPress={() => handleSettingsPress().catch(() => undefined)}
+            style={({ pressed }) => [styles.settingsPressable, pressed && styles.buttonPressed]}
           >
-            <View pointerEvents="none" style={styles.buttonTopLight} />
-            <Text style={[styles.settingsButtonText, (permissionFlow || shortcutFlow) && styles.settingsButtonTextPermission]}>
-              {settingsActionLabel(solution)}
-            </Text>
-            <Text style={[styles.settingsButtonArrow, (permissionFlow || shortcutFlow) && styles.settingsButtonArrowPermission]}>›</Text>
+            <GlassSurface
+              variant="inset"
+              interactive
+              style={[
+                styles.settingsButton,
+                (permissionFlow || shortcutFlow) && styles.settingsButtonPermission
+              ]}
+            >
+              <Text style={[styles.settingsButtonText, (permissionFlow || shortcutFlow) && styles.settingsButtonTextPermission]}>
+                {settingsActionLabel(solution)}
+              </Text>
+              <Text style={[styles.settingsButtonArrow, (permissionFlow || shortcutFlow) && styles.settingsButtonArrowPermission]}>›</Text>
+            </GlassSurface>
           </Pressable>
           {permissionFlow ? (
             <Text style={styles.permissionHint}>
@@ -152,21 +157,18 @@ export function GuidedSetupCard({
 
       <View style={styles.actions}>
         {!isFirst ? (
-          <Pressable onPress={onPrevious} style={({ pressed }) => [styles.secondary, pressed && styles.buttonPressed]} accessibilityRole="button">
-            <Text style={styles.secondaryText}>Vorheriger Schritt</Text>
-          </Pressable>
+          <LiquidButton
+            variant="glass"
+            label="Vorheriger Schritt"
+            onPress={onPrevious}
+            style={styles.secondary}
+          />
         ) : null}
-        {isLast ? (
-          <Pressable onPress={onFinish} style={({ pressed }) => [styles.primary, isFirst && styles.primarySolo, pressed && styles.buttonPressed]} accessibilityRole="button">
-            <View pointerEvents="none" style={styles.buttonTopLight} />
-            <Text style={styles.primaryText}>Fertig</Text>
-          </Pressable>
-        ) : (
-          <Pressable onPress={onNext} style={({ pressed }) => [styles.primary, isFirst && styles.primarySolo, pressed && styles.buttonPressed]} accessibilityRole="button">
-            <View pointerEvents="none" style={styles.buttonTopLight} />
-            <Text style={styles.primaryText}>Weiter</Text>
-          </Pressable>
-        )}
+        <LiquidButton
+          label={isLast ? "Fertig" : "Weiter"}
+          onPress={isLast ? onFinish : onNext}
+          style={[styles.primary, isFirst && styles.primarySolo]}
+        />
       </View>
     </GlassSurface>
   );
@@ -223,8 +225,9 @@ const styles = StyleSheet.create({
   statusDotActive: { backgroundColor: "#34C759", shadowColor: "#34C759", shadowOpacity: 0.45, shadowRadius: 5, shadowOffset: { width: 0, height: 0 } },
   companion: { flex: 1, fontSize: 12, lineHeight: 18, color: liquidIce.color.textSecondary },
   companionBeginner: { fontSize: 15, lineHeight: 22 },
-  settingsButton: { marginTop: 18, minHeight: 54, paddingVertical: 15, paddingLeft: 17, paddingRight: 13, borderRadius: 23, backgroundColor: "rgba(219,239,255,0.16)", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(255,255,255,0.82)", flexDirection: "row", alignItems: "center", justifyContent: "space-between", overflow: "hidden" },
-  settingsButtonPermission: { backgroundColor: "rgba(164,215,255,0.24)", shadowColor: "#75B9ED", shadowOpacity: 0.13, shadowRadius: 18, shadowOffset: { width: 0, height: 8 } },
+  settingsPressable: { marginTop: 18, borderRadius: 23 },
+  settingsButton: { minHeight: 54, paddingVertical: 15, paddingLeft: 17, paddingRight: 13, borderRadius: 23, flexDirection: "row", alignItems: "center", justifyContent: "space-between", overflow: "hidden" },
+  settingsButtonPermission: { borderColor: "rgba(128,222,255,0.58)" },
   settingsButtonText: { fontSize: 14, fontWeight: "800", color: "#315E7E" },
   settingsButtonTextPermission: { color: "#146EA9" },
   settingsButtonArrow: { fontSize: 24, lineHeight: 24, color: "#72879A", marginTop: -2 },
@@ -232,9 +235,9 @@ const styles = StyleSheet.create({
   permissionHint: { marginTop: 10, paddingHorizontal: 4, ...liquidIce.type.caption, color: liquidIce.color.textTertiary },
   note: { marginTop: 10, paddingHorizontal: 4, ...liquidIce.type.caption, color: liquidIce.color.textTertiary },
   actions: { flexDirection: "row", gap: 10, marginTop: 20 },
-  secondary: { flex: 1, minHeight: 50, justifyContent: "center", borderRadius: 21, backgroundColor: "rgba(224,240,252,0.13)", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(255,255,255,0.78)" },
+  secondary: { flex: 1 },
   secondaryText: { textAlign: "center", fontSize: 13, fontWeight: "800", color: "#536879" },
-  primary: { flex: 1.3, minHeight: 50, justifyContent: "center", borderRadius: 21, overflow: "hidden", backgroundColor: "rgba(143,205,250,0.24)", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(255,255,255,0.84)", shadowColor: "#6EACD7", shadowOpacity: 0.13, shadowRadius: 14, shadowOffset: { width: 0, height: 7 } },
+  primary: { flex: 1.3 },
   primarySolo: { flex: 1 },
   primaryText: { textAlign: "center", fontSize: 14, fontWeight: "900", color: "#176DA9" },
   buttonPressed: { transform: [{ scale: liquidIce.motion.pressScale }], opacity: 0.86 }
