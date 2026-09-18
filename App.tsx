@@ -1,4 +1,4 @@
-import React, { PropsWithChildren, useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   AccessibilityInfo,
   ActivityIndicator,
@@ -65,49 +65,7 @@ import {
   SolutionFeedback
 } from "./src/types";
 
-type Tab = "ask" | "discover" | "you";
-
-type GlassSurfaceProps = PropsWithChildren<{
-  style?: StyleProp<ViewStyle>;
-  interactive?: boolean;
-  tintColor?: string;
-}>;
-
-const quickIdeas = [
-  { title: "Benachrichtigungen erlauben", query: "benachrichtigungen erlauben" },
-  { title: "Beim Losfahren Navigation starten", query: "automation shortcut leave work navigation" },
-  { title: "Was kann mein iPhone noch?", query: "discover hidden iphone features" }
-];
-
-const hiddenFeatures = [
-  { title: "Die Rückseite deines iPhones als Taste nutzen", query: "back tap" },
-  { title: "Dokumente ohne zusätzliche App scannen", query: "scan document pdf" },
-  { title: "Wichtige Geräusche automatisch erkennen lassen", query: "sound recognition" }
-];
-
-const feedbackOptions: { value: SolutionFeedback; label: string }[] = [
-  { value: "worked", label: "Hat geklappt" },
-  { value: "didnt_work", label: "Ging nicht" },
-  { value: "already_knew", label: "Kannte ich" },
-  { value: "not_relevant", label: "Nicht relevant" }
-];
-
-function GlassSurface({ children, style, interactive = false, tintColor }: GlassSurfaceProps) {
-  const available = Platform.OS === "ios" && isGlassEffectAPIAvailable();
-  if (available) {
-    return (
-      <GlassView
-        style={style}
-        glassEffectStyle="regular"
-        isInteractive={interactive}
-        tintColor={tintColor}
-      >
-        {children}
-      </GlassView>
-    );
-  }
-  return <View style={[styles.glassFallback, style]}>{children}</View>;
-}
+type Tab = AppTab;
 
 function makeGuideSession(solution: Solution, steps = solution.steps, title = solution.title): GuideSession {
   const now = Date.now();
@@ -535,23 +493,15 @@ export default function App() {
                 </View>
 
                 {!submittedQuery && !isSearching ? (
-                  <GlassSurface style={styles.askBox} interactive tintColor="rgba(255,255,255,0.20)">
-                    <TextInput
-                      value={draftQuery}
-                      onChangeText={setDraftQuery}
-                      placeholder="Was soll ich dir einstellen?"
-                      placeholderTextColor="#7D8793"
-                      returnKeyType="send"
-                      onSubmitEditing={() => runAsk().catch(() => undefined)}
-                      onFocus={() => setMotionPhase("listening")}
-                      onBlur={() => !submittedQuery && setMotionPhase("idle")}
-                      style={styles.input}
-                      accessibilityLabel="Frage an CanMyPhone"
-                    />
-                    <Pressable style={styles.askButton} onPress={() => runAsk().catch(() => undefined)} hitSlop={6} accessibilityLabel="Frage senden">
-                      <Text style={styles.askButtonText}>↑</Text>
-                    </Pressable>
-                  </GlassSurface>
+                  <LiquidComposer
+                    value={draftQuery}
+                    onChangeText={setDraftQuery}
+                    onSubmitEditing={() => runAsk().catch(() => undefined)}
+                    onFocus={() => setMotionPhase("listening")}
+                    onBlur={() => !submittedQuery && setMotionPhase("idle")}
+                    onSend={() => runAsk().catch(() => undefined)}
+                    accessibilityLabel="Frage an CanMyPhone"
+                  />
                 ) : null}
 
                 {needsFollowUp ? (
@@ -606,9 +556,12 @@ export default function App() {
                         </View>
                       </View>
                     ) : (
-                      <Pressable style={styles.primaryAction} onPress={() => runPrimaryAction().catch(() => undefined)} disabled={actionRunning}>
-                        {actionRunning ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryActionText}>{actionPlan?.supported ? actionPlan.label : "Zeig mir wie"}</Text>}
-                      </Pressable>
+                      <LiquidButton
+                        style={styles.primaryAction}
+                        label={actionPlan?.supported ? actionPlan.label : "Zeig mir wie"}
+                        loading={actionRunning}
+                        onPress={() => runPrimaryAction().catch(() => undefined)}
+                      />
                     )}
 
                     {actionResult ? (
@@ -670,22 +623,25 @@ export default function App() {
                   <View style={styles.ideaList}>
                     <Text style={styles.sectionLabel}>SCHNELL STARTEN</Text>
                     {quickIdeas.map((item, index) => (
-                      <View key={item.title}>
-                        <Pressable style={styles.ideaRow} onPress={() => runAsk(item.query).catch(() => undefined)}>
+                      <Pressable
+                        key={item.title}
+                        onPress={() => runAsk(item.query).catch(() => undefined)}
+                        style={({ pressed }) => [styles.ideaPressable, pressed && styles.ideaPressed]}
+                      >
+                        <GlassSurface variant="inset" interactive style={styles.ideaRow}>
                           <View style={styles.ideaTextWrap}>
                             <Text style={styles.ideaText}>{item.title}</Text>
                             <Text style={styles.ideaSubtext}>
                               {index === 0
-                                ? "CanMyPhone prüft zuerst den direkten iOS-Weg."
+                                ? "Direkter iOS-Weg zuerst."
                                 : index === 1
-                                  ? "Ich prüfe Kurzbefehle und Automationen."
-                                  : "Finde Funktionen, die zu deinen bisherigen Fragen passen."}
+                                  ? "Kurzbefehle und Automationen prüfen."
+                                  : "Funktionen passend zu deinen Fragen."}
                             </Text>
                           </View>
                           <Text style={styles.chevron}>›</Text>
-                        </Pressable>
-                        {index < quickIdeas.length - 1 ? <View style={styles.ideaDivider} /> : null}
-                      </View>
+                        </GlassSurface>
+                      </Pressable>
                     ))}
                   </View>
                 )}
@@ -805,15 +761,7 @@ export default function App() {
           </ScrollView>
         )}
 
-        {!guideSession ? (
-          <GlassSurface style={styles.tabBar} tintColor="rgba(255,255,255,0.18)">
-            {(["ask", "discover", "you"] as Tab[]).map((item) => (
-              <Pressable key={item} onPress={() => switchTab(item)} style={[styles.tabButton, tab === item && styles.tabButtonActive]}>
-                <Text style={[styles.tabText, tab === item && styles.tabTextActive]}>{item === "ask" ? "Fragen" : item === "discover" ? "Entdecken" : "Du"}</Text>
-              </Pressable>
-            ))}
-          </GlassSurface>
-        ) : null}
+        {!guideSession ? <FloatingTabBar selected={tab} onSelect={switchTab} /> : null}
       </KeyboardAvoidingView>
 
       <ActionTransitionV2 visible={isSearching || actionRunning} reduceMotion={reduceMotion} label={transitionLabel} />
@@ -822,12 +770,12 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#F7F9FC" },
-  screen: { flex: 1, paddingHorizontal: 18, paddingTop: 8, paddingBottom: 10 },
+  safe: { flex: 1, backgroundColor: liquidIce.color.bgApp },
+  screen: { flex: 1, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 10 },
   glassFallback: { backgroundColor: "rgba(255,255,255,0.82)", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(255,255,255,0.96)" },
   header: { minHeight: 54, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
-  brand: { fontSize: 19, fontWeight: "700", letterSpacing: -0.45, color: "#111827" },
+  brand: { ...liquidIce.type.titleMedium, color: liquidIce.color.textPrimary },
   guideBackButton: { minHeight: 44, flexDirection: "row", alignItems: "center", paddingRight: 8 },
   guideBackIcon: { fontSize: 37, lineHeight: 40, color: "#087BFF", fontWeight: "300", marginTop: -2 },
   guideBackText: { marginLeft: 2, fontSize: 16, fontWeight: "600", color: "#087BFF" },
@@ -841,19 +789,19 @@ const styles = StyleSheet.create({
   heroBlock: { paddingTop: 58, paddingHorizontal: 8, alignItems: "center" },
   heroBlockAnswer: { paddingTop: 30 },
   sectionHeroBlock: { paddingTop: 42, paddingHorizontal: 8, alignItems: "center", marginBottom: 22 },
-  hero: { maxWidth: 350, fontSize: 36, lineHeight: 40, fontWeight: "700", letterSpacing: -1.15, color: "#101725", textAlign: "center" },
-  heroSubtext: { maxWidth: 330, marginTop: 16, fontSize: 16, lineHeight: 22, color: "#667181", textAlign: "center" },
+  hero: { maxWidth: 354, ...liquidIce.type.display, color: liquidIce.color.textPrimary, textAlign: "center" },
+  heroSubtext: { maxWidth: 334, marginTop: 16, ...liquidIce.type.bodyLarge, color: liquidIce.color.textSecondary, textAlign: "center" },
   askBox: { height: 64, marginTop: 34, borderRadius: 32, flexDirection: "row", alignItems: "center", paddingLeft: 18, paddingRight: 9, overflow: "hidden", shadowColor: "#426185", shadowOpacity: 0.11, shadowRadius: 26, shadowOffset: { width: 0, height: 11 } },
   input: { flex: 1, height: 56, fontSize: 16, color: "#17202B", paddingRight: 12 },
   askButton: { width: 46, height: 46, borderRadius: 23, backgroundColor: "#087BFF", alignItems: "center", justifyContent: "center", shadowColor: "#007AFF", shadowOpacity: 0.25, shadowRadius: 14, shadowOffset: { width: 0, height: 6 } },
   askButtonText: { color: "#FFFFFF", fontSize: 23, lineHeight: 26, fontWeight: "700" },
-  ideaList: { marginTop: 34, paddingHorizontal: 4 },
-  sectionLabel: { fontSize: 12, fontWeight: "700", letterSpacing: 0.8, color: "#858F9D", marginBottom: 12 },
-  ideaRow: { minHeight: 68, flexDirection: "row", alignItems: "center", paddingVertical: 9 },
+  ideaList: { marginTop: 34, gap: 12 },
+  sectionLabel: { ...liquidIce.type.eyebrow, color: liquidIce.color.textTertiary, marginBottom: 2 },
+  ideaPressable: { borderRadius: 24 },\n  ideaPressed: { transform: [{ scale: liquidIce.motion.pressScale }], opacity: 0.9 },\n  ideaRow: { minHeight: 78, borderRadius: 24, flexDirection: "row", alignItems: "center", paddingHorizontal: 17, paddingVertical: 14, overflow: "hidden" },
   ideaTextWrap: { flex: 1, paddingRight: 12 },
-  ideaText: { fontSize: 16, lineHeight: 20, fontWeight: "600", color: "#202B39" },
-  ideaSubtext: { marginTop: 4, fontSize: 12, lineHeight: 16, color: "#7C8795" },
-  chevron: { fontSize: 25, color: "#A1A9B4" },
+  ideaText: { fontSize: 15, lineHeight: 20, fontWeight: "600", color: liquidIce.color.textPrimary },
+  ideaSubtext: { marginTop: 4, ...liquidIce.type.caption, color: liquidIce.color.textTertiary },
+  chevron: { fontSize: 25, color: liquidIce.color.textTertiary },
   ideaDivider: { height: StyleSheet.hairlineWidth, backgroundColor: "rgba(70,86,104,0.13)" },
   answerTopBar: { flexDirection: "row", alignItems: "center", minHeight: 42, marginTop: 4 },
   backButton: { width: 34, fontSize: 38, lineHeight: 40, color: "#007AFF", fontWeight: "300" },
@@ -870,7 +818,7 @@ const styles = StyleSheet.create({
   capabilityTextWrap: { flex: 1, marginLeft: 14 },
   capabilityTitle: { fontSize: 16, fontWeight: "700", color: "#1A2531" },
   capabilityText: { marginTop: 4, fontSize: 13, lineHeight: 18, color: "#6E7A88" },
-  primaryAction: { marginTop: 22, minHeight: 58, borderRadius: 29, alignItems: "center", justifyContent: "center", backgroundColor: "#087BFF", shadowColor: "#087BFF", shadowOpacity: 0.20, shadowRadius: 20, shadowOffset: { width: 0, height: 10 } },
+  primaryAction: { marginTop: 22 },
   primaryActionText: { color: "#FFFFFF", fontSize: 17, fontWeight: "700" },
   secondaryAction: { marginTop: 16, minHeight: 50, borderRadius: 25, alignItems: "center", justifyContent: "center", backgroundColor: "#17202B" },
   secondaryActionText: { color: "#FFFFFF", fontSize: 14, fontWeight: "700" },
