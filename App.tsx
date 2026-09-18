@@ -542,7 +542,7 @@ export default function App() {
                       <Pressable style={styles.smallSendButton} onPress={submitClarification} accessibilityLabel="Antwort senden">
                         <Text style={styles.smallSendText}>↑</Text>
                       </Pressable>
-                    </View>
+                    </GlassSurface>
                   </GlassSurface>
                 ) : bestResult ? (
                   <View style={styles.answerArea}>
@@ -570,8 +570,10 @@ export default function App() {
                         <Text style={styles.choiceTitle}>Welche Helligkeit?</Text>
                         <View style={styles.choiceRow}>
                           {[25, 50, 75, 100].map((percent) => (
-                            <Pressable key={percent} style={styles.choiceChip} onPress={() => runAsk(`${submittedQuery} auf ${percent} %`).catch(() => undefined)}>
-                              <Text style={styles.choiceChipText}>{percent} %</Text>
+                            <Pressable key={percent} onPress={() => runAsk(`${submittedQuery} auf ${percent} %`).catch(() => undefined)}>
+                              <GlassSurface variant="inset" interactive style={styles.choiceChip}>
+                                <Text style={styles.choiceChipText}>{percent} %</Text>
+                              </GlassSurface>
                             </Pressable>
                           ))}
                         </View>
@@ -861,7 +863,7 @@ const styles = StyleSheet.create({
   choiceSection: { marginTop: 22 },
   choiceTitle: { fontSize: 13, fontWeight: "700", color: "#566375", marginBottom: 10 },
   choiceRow: { flexDirection: "row", gap: 8 },
-  choiceChip: { flex: 1, paddingVertical: 12, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.76)", alignItems: "center" },
+  choiceChip: { minWidth: 76, minHeight: 44, paddingHorizontal: 12, borderRadius: 22, alignItems: "center", justifyContent: "center", overflow: "hidden" },
   choiceChipText: { fontSize: 13, fontWeight: "700", color: "#263548" },
   resultBanner: { marginTop: 14, borderRadius: 22, padding: 16, overflow: "hidden" },
   resultBannerSuccess: { borderColor: "rgba(39,133,110,0.42)" },
