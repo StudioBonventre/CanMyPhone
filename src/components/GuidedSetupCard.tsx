@@ -67,7 +67,7 @@ export function GuidedSetupCard({
             <Text style={styles.returnTitle}>Willkommen zurück</Text>
             <Text style={styles.returnText}>Dein Guide ist noch genau an derselben Stelle.</Text>
           </View>
-        </GlassSurface>
+        </ContentSurface>
       ) : null}
 
       <View style={styles.header}>
@@ -89,10 +89,10 @@ export function GuidedSetupCard({
             {permissionFlow ? "FALLS DU SCHON ABGELEHNT HAST" : shortcutFlow ? "LETZTER SYSTEMSCHRITT" : "KÜRZESTER PFAD"}
           </Text>
           <Text style={styles.path}>{path.join("  ›  ")}</Text>
-        </GlassSurface>
+        </ContentSurface>
       ) : null}
 
-      <GlassSurface variant="surface" style={[styles.stepBox, beginnerMode && styles.stepBoxBeginner]}>
+      <ContentSurface emphasis="active" style={[styles.stepBox, beginnerMode && styles.stepBoxBeginner]}>
         <View pointerEvents="none" style={styles.stepGlow} />
         <View pointerEvents="none" style={styles.innerTopLight} />
         <View style={styles.stepTopRow}>
