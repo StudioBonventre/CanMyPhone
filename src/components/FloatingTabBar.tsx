@@ -24,15 +24,10 @@ export function FloatingTabBar({ selected, onSelect }: { selected: AppTab; onSel
             onPress={() => onSelect(tab)}
             style={({ pressed }) => [styles.pressable, pressed && styles.pressed]}
           >
-            {active ? (
-              <GlassSurface variant="inset" style={styles.active}>
-                <Text style={styles.activeText}>{labels[tab]}</Text>
-              </GlassSurface>
-            ) : (
-              <View style={styles.inactive}>
-                <Text style={styles.inactiveText}>{labels[tab]}</Text>
-              </View>
-            )}
+            <View style={[styles.tabContent, active ? styles.active : styles.inactive]}>
+              {active ? <View pointerEvents="none" style={styles.activeRim} /> : null}
+              <Text style={active ? styles.activeText : styles.inactiveText}>{labels[tab]}</Text>
+            </View>
           </Pressable>
         );
       })}
@@ -59,7 +54,7 @@ const styles = StyleSheet.create({
     transform: [{ scale: liquidIce.motion.pressScale }],
     opacity: 0.88
   },
-  active: {
+  tabContent: {
     flex: 1,
     minHeight: 50,
     borderRadius: 25,
@@ -67,13 +62,21 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     overflow: "hidden"
   },
+  active: {
+    backgroundColor: liquidIce.color.contentActive,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: liquidIce.color.contentBorderActive
+  },
   inactive: {
-    flex: 1,
-    minHeight: 50,
-    borderRadius: 25,
-    alignItems: "center",
-    justifyContent: "center",
     opacity: 0.68
+  },
+  activeRim: {
+    position: "absolute",
+    top: 0,
+    left: 16,
+    right: 16,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: "rgba(255,255,255,0.52)"
   },
   activeText: {
     ...liquidIce.type.labelLarge,
