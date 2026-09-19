@@ -171,11 +171,7 @@ export function Top100Section({ onSelect }: Props) {
           const active = capabilityFilter === filter.id;
           return (
             <Pressable key={filter.id} onPress={() => setCapabilityFilter(filter.id)} style={({ pressed }) => pressed && styles.filterPressed}>
-              <GlassSurface
-                interactive
-                style={[styles.filterChip, active && styles.filterChipActive]}
-                tintColor={active ? "rgba(151,207,255,0.16)" : "rgba(215,238,255,0.05)"}
-              >
+              <ContentSurface emphasis={active ? "active" : "quiet"} style={[styles.filterChip, active && styles.filterChipActive]}>
                 <Text style={[styles.filterText, active && styles.filterTextActive]}>{filter.label}</Text>
               </ContentSurface>
             </Pressable>
@@ -206,7 +202,7 @@ export function Top100Section({ onSelect }: Props) {
                   <Text style={styles.capabilityDetail}>{capability.label}</Text>
                 </View>
                 <Text style={styles.chevron}>›</Text>
-              </GlassSurface>
+              </ContentSurface>
             </Pressable>
           );
         })}
