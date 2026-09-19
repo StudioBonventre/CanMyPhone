@@ -9,6 +9,7 @@ import {
 import type { GuideSession, Solution } from "../types";
 import { liquidIce } from "../theme/liquidIce";
 import { GlassSurface } from "./GlassSurface";
+import { ContentSurface } from "./ContentSurface";
 import { LiquidButton } from "./LiquidButton";
 
 type Props = {
@@ -58,7 +59,7 @@ export function GuidedSetupCard({
       <View pointerEvents="none" style={styles.cardBloom} />
 
       {returnedFromBackground ? (
-        <GlassSurface variant="surface" style={styles.returnBanner}>
+        <ContentSurface style={styles.returnBanner}>
           <View style={styles.returnIcon}>
             <View style={styles.returnDot} />
           </View>
@@ -82,7 +83,7 @@ export function GuidedSetupCard({
       </View>
 
       {path.length ? (
-        <GlassSurface variant="inset" style={styles.pathWrap}>
+        <ContentSurface style={styles.pathWrap}>
           <View pointerEvents="none" style={styles.innerTopLight} />
           <Text style={styles.pathLabel}>
             {permissionFlow ? "FALLS DU SCHON ABGELEHNT HAST" : shortcutFlow ? "LETZTER SYSTEMSCHRITT" : "KÜRZESTER PFAD"}
@@ -101,7 +102,7 @@ export function GuidedSetupCard({
           <Text style={styles.stepLabel}>JETZT</Text>
         </View>
         <Text style={[styles.step, beginnerMode && styles.stepBeginner]}>{step}</Text>
-      </GlassSurface>
+      </ContentSurface>
 
       <View style={styles.companionRow}>
         <View style={[styles.statusDot, liveActivityActive && styles.statusDotActive]} />
