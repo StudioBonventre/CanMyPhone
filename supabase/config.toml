@@ -1,0 +1,3 @@
+[functions.plan-automation]
+verify_jwt = true
+

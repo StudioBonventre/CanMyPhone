@@ -2,7 +2,7 @@
   "expo": {
     "name": "CanMyPhone",
     "slug": "canmyphone",
-    "version": "0.11.0",
+    "version": "0.12.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "scheme": "canmyphone",
@@ -25,6 +25,9 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.studiobonventre.canmyphone",
+      "entitlements": {
+        "com.apple.security.application-groups": ["group.com.studiobonventre.canmyphone"]
+      },
       "infoPlist": {
         "NSSupportsLiveActivities": true,
         "NSCameraUsageDescription": "CanMyPhone nutzt die Kamera nur, wenn du eine Funktion ausdrücklich startest, die Kamerazugriff benötigt.",

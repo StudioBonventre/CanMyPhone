@@ -14,6 +14,23 @@ const iosContext: DeviceContext = {
   language: "de"
 };
 
+test("catalogue has unique IDs and usable verified content", () => {
+  const ids = solutions.map((item) => item.id);
+  assert.equal(new Set(ids).size, ids.length);
+
+  for (const solution of solutions) {
+    assert.ok(solution.title.trim().length > 0, `${solution.id}: title missing`);
+    assert.ok(solution.summary.trim().length > 0, `${solution.id}: summary missing`);
+    assert.ok(solution.steps.length > 0, `${solution.id}: steps missing`);
+    assert.ok(solution.steps.every((step) => step.trim().length > 0), `${solution.id}: empty step`);
+    assert.ok(solution.sources.length > 0, `${solution.id}: source missing`);
+    assert.ok(solution.sources.every((source) => /^https:\/\//.test(source.url)), `${solution.id}: invalid source URL`);
+    if (solution.settings) {
+      assert.ok(solution.settings.path.length > 0, `${solution.id}: settings path missing`);
+    }
+  }
+});
+
 test("irrelevant questions do not get a native false-positive", () => {
   const ranked = rankSolutions("züchte tomaten auf dem balkon", solutions, "ios");
   assert.equal(ranked.length, 0);
@@ -31,6 +48,22 @@ test("generic enable request asks one useful clarification", () => {
   assert.ok((result.followUp ?? "").length > 8);
 });
 
+test("core German user journeys route to the intended capability", () => {
+  const journeys = [
+    ["Helligkeit auf 25 Prozent stellen", "ios-set-brightness"],
+    ["Bluetooth einschalten", "ios-enable-bluetooth"],
+    ["Ich will hinten doppelt auf mein iPhone tippen", "ios-back-tap"],
+    ["Dokument als PDF scannen", "ios-scan-document"],
+    ["Meine Türklingel erkennen lassen", "ios-sound-recognition"],
+    ["Beim Losfahren Navigation starten", "ios-leave-location-automation"]
+  ] as const;
+
+  for (const [query, expectedId] of journeys) {
+    const result = resolveConversation(query, solutions, iosContext);
+    assert.equal(result.solutions[0]?.id, expectedId, `wrong route for: ${query}`);
+  }
+});
+
 test("notification permission is discoverable as a direct action", () => {
   const result = resolveConversation("Benachrichtigungen für CanMyPhone erlauben", solutions, iosContext);
   assert.equal(result.solutions[0]?.id, "ios-canmyphone-notifications");
@@ -46,6 +79,50 @@ test("brightness request is discoverable and parsed as executable", () => {
   assert.equal(plan.supported, true);
   assert.equal(plan.kind, "brightness");
   assert.equal(plan.brightness, 0.35);
+});
+
+test("brightness never silently clamps invalid percentages", () => {
+  const brightness = solutions.find((item) => item.id === "ios-set-brightness");
+  assert.ok(brightness);
+
+  const tooHigh = directActionPlan(brightness, "Helligkeit auf 250 Prozent stellen");
+  const negative = directActionPlan(brightness, "Helligkeit auf -10 Prozent stellen");
+
+  assert.equal(tooHigh.brightness, undefined);
+  assert.equal(tooHigh.needsInput, "brightness-percent");
+  assert.equal(negative.brightness, undefined);
+  assert.equal(negative.needsInput, "brightness-percent");
+});
+
+test("relative brightness language is never mistaken for an absolute target", () => {
+  const brightness = solutions.find((item) => item.id === "ios-set-brightness");
+  assert.ok(brightness);
+
+  const relativeUp = directActionPlan(brightness, "Mach das Display 25 Prozent heller");
+  const relativeDown = directActionPlan(brightness, "Helligkeit 20 Prozent dunkler");
+  const explicitTarget = directActionPlan(brightness, "Mach es heller, aber auf 60 Prozent");
+
+  assert.equal(relativeUp.brightness, undefined);
+  assert.equal(relativeUp.needsInput, "brightness-percent");
+  assert.equal(relativeDown.brightness, undefined);
+  assert.equal(explicitTarget.brightness, 0.6);
+});
+
+test("brightness accepts the exact boundary values", () => {
+  const brightness = solutions.find((item) => item.id === "ios-set-brightness");
+  assert.ok(brightness);
+  assert.equal(directActionPlan(brightness, "Helligkeit auf 0 Prozent stellen").brightness, 0);
+  assert.equal(directActionPlan(brightness, "Helligkeit auf 100 Prozent stellen").brightness, 1);
+});
+
+test("back tap gets the official App Shortcut handoff", () => {
+  const backTap = solutions.find((item) => item.id === "ios-back-tap") ?? null;
+  assert.ok(backTap);
+  const plan = shortcutAssistantPlan("hinten doppelt tippen", backTap);
+  assert.equal(plan.applicable, true);
+  assert.match(plan.title, /Back Tap/i);
+  assert.ok(plan.steps.some((step) => /Kurzbefehle öffnen/i.test(step)));
+  assert.ok(plan.steps.some((step) => /Bedienungshilfen/i.test(step)));
 });
 
 test("car automation creates a human-readable shortcut clarification", () => {
