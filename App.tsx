@@ -15,6 +15,7 @@ import {
   View
 } from "react-native";
 import { ActionTransitionV2 } from "./src/components/ActionTransitionV2";
+import { AutomationPlanPreview } from "./src/components/AutomationPlanPreview";
 import { AuraV2 } from "./src/components/AuraV2";
 import { CapabilityCard } from "./src/components/CapabilityCard";
 import { ContentSurface } from "./src/components/ContentSurface";
@@ -28,6 +29,7 @@ import { Top100Section } from "./src/components/Top100Section";
 import { liquidIce } from "./src/theme/liquidIce";
 import { solutions } from "./src/data/solutions";
 import { directActionPlan, runDirectAction, type DirectActionResult } from "./src/lib/actions";
+import { compileVerifiedGoal } from "./src/automation/planner";
 import { resolveWithOnDeviceAI } from "./src/lib/aiResolver";
 import { resolveConversation } from "./src/lib/conversation";
 import { DEFAULT_ENTITLEMENTS, proFeatureAccess } from "./src/lib/entitlements";
@@ -81,9 +83,9 @@ import {
 type Tab = AppTab;
 
 const quickIdeas = [
-  { title: "Benachrichtigungen erlauben", query: "benachrichtigungen erlauben" },
-  { title: "Beim Losfahren Navigation starten", query: "automation shortcut leave work navigation" },
-  { title: "Was kann mein iPhone noch?", query: "discover hidden iphone features" }
+  { title: "Wenn ich meinen Tesla verlasse, schließe den Kofferraum", query: "Wenn ich mich von meinem Tesla entferne, schließe automatisch den Heckkofferraum" },
+  { title: "Wenn ich das Büro verlasse, starte meine Heimfahrt", query: "automation shortcut leave work navigation" },
+  { title: "Wenn mein Akku unter 20 % fällt, aktiviere Stromsparmodus", query: "Akku unter 20 Prozent Stromsparmodus Automation" }
 ];
 
 const hiddenFeatures = [
@@ -270,6 +272,11 @@ export default function App() {
     () => shortcutAssistantPlan(submittedQuery, bestResult),
     [bestResult, submittedQuery]
   );
+  const automationPlan = useMemo(() => {
+    if (!submittedQuery) return null;
+    const result = compileVerifiedGoal(submittedQuery);
+    return result.ok ? result.plan : null;
+  }, [submittedQuery]);
   const isSearching = motionPhase === "diving" || motionPhase === "searching" || motionPhase === "emerging";
 
   const resetQuestion = () => {
@@ -583,7 +590,7 @@ export default function App() {
           >
             {tab === "ask" ? (
               <>
-                {submittedQuery && (bestResult || needsFollowUp) ? (
+                {submittedQuery && (automationPlan || bestResult || needsFollowUp) ? (
                   <View style={styles.answerTopBar}>
                     <Pressable onPress={resetQuestion} hitSlop={12} accessibilityLabel="Zurück zur Frage">
                       <Text style={styles.backButton}>‹</Text>
@@ -594,7 +601,9 @@ export default function App() {
 
                 <View style={[styles.heroBlock, submittedQuery && styles.heroBlockAnswer]}>
                   <Text style={styles.hero}>
-                    {needsFollowUp
+                    {automationPlan
+                      ? "So würde deine Automation funktionieren."
+                      : needsFollowUp
                       ? "Eine Sache muss ich noch wissen."
                       : bestResult
                         ? preferences.beginnerMode
@@ -602,10 +611,12 @@ export default function App() {
                           : "Ja — ich habe einen Weg gefunden."
                         : submittedQuery
                           ? "Dafür habe ich noch keinen sicheren Treffer."
-                          : "Was soll ich dir einstellen?"}
+                          : "Was soll für dich passieren?"}
                   </Text>
                   <Text style={styles.heroSubtext}>
-                    {needsFollowUp
+                    {automationPlan
+                      ? "Prüfe den Ablauf und richte anschließend nur die wirklich benötigten Verbindungen und Freigaben ein."
+                      : needsFollowUp
                       ? "Nur eine kurze Rückfrage, damit ich dir nichts Falsches zeige."
                       : bestResult
                         ? "CanMyPhone bevorzugt native, sichere und möglichst einfache Lösungen."
@@ -613,7 +624,7 @@ export default function App() {
                           ? "Formuliere dein Ziel etwas konkreter. Ich erfinde keine Funktionen oder Menüpfade."
                           : preferences.beginnerMode
                             ? "Sag einfach, was ich einstellen soll. Ich zeige dir immer nur den nächsten sinnvollen Schritt."
-                            : "Sag mir einfach, was du an deinem iPhone ändern oder einrichten möchtest."}
+                            : "Beschreibe dein Ziel. CanMyPhone plant Trigger, Prüfungen und Aktionen und zeigt dir ehrlich, was automatisch möglich ist."}
                   </Text>
                 </View>
 
@@ -629,7 +640,28 @@ export default function App() {
                   />
                 ) : null}
 
-                {needsFollowUp ? (
+                {automationPlan ? (
+                  <View style={styles.answerArea}>
+                    <AutomationPlanPreview
+                      plan={automationPlan}
+                      pro={entitlements.pro}
+                      onConnect={() => {
+                        if (!entitlements.pro) {
+                          setPaywallMessage("Tesla-Integrationen gehören zu CanMyPhone Pro. Die Planvorschau bleibt kostenlos.");
+                          setPaywallVisible(true);
+                          return;
+                        }
+                        setActionResult({
+                          handled: true,
+                          succeeded: false,
+                          message: "Die sichere Tesla-Verbindung wird im nächsten Integrationsblock ergänzt. Es wurde noch keine Automation erstellt."
+                        });
+                      }}
+                    />
+                    {actionResult ? <ContentSurface emphasis="active" style={styles.resultBanner}><Text style={styles.resultTitle}>Status</Text><Text style={styles.resultText}>{actionResult.message}</Text></ContentSurface> : null}
+                    <Pressable onPress={resetQuestion} style={styles.textAction}><Text style={styles.textActionText}>Neue Automation</Text></Pressable>
+                  </View>
+                ) : needsFollowUp ? (
                   <GlassSurface variant="floating" style={styles.followUpCard}>
                     <Text style={styles.answerEyebrow}>EINE KURZE RÜCKFRAGE</Text>
                     <Text style={styles.followUpText}>{conversation.followUp}</Text>
@@ -783,7 +815,7 @@ export default function App() {
             {tab === "discover" ? (
               <>
                 <View style={styles.sectionHeroBlock}>
-                  <Text style={styles.hero}>{radarResults.length ? "Für dich entdeckt." : "Entdecke, was dein iPhone schon kann."}</Text>
+                    <Text style={styles.hero}>{radarResults.length ? "Ideen für dich." : "Entdecke, was dein iPhone schon kann."}</Text>
                   <Text style={styles.heroSubtext}>
                     {radarResults.length
                       ? "Need Radar sortiert nützliche Funktionen nach deinen bisherigen Fragen — lokal und transparent."

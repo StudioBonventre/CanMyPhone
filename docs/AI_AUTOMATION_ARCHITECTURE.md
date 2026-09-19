@@ -10,6 +10,12 @@ CanMyPhone treats model output as an untrusted proposal. A server-side planner (
 4. Explicitly confirm sensitive or destructive automations.
 5. Create the automation and show its real status. Success is shown only after the provider confirms it.
 
+The first visible implementation renders the verified Tesla template as a Liquid Ice plan preview. It deliberately remains in “not created” state until the OAuth, virtual-key, geofence, and provider execution blocks exist and confirm setup.
+
+## Validation boundary
+
+Validation is strict at every nested level. Unknown fields fail closed. Each capability owns a closed parameter schema: the Tesla trunk command fixes the endpoint to `actuate_trunk`, the trunk to `rear`, and the prior state to `open`; geofences accept only approved center sources and radii from 100–1000 meters. Model-provided URLs, coordinates, private iOS routes, provider commands, or risk downgrades are rejected before execution.
+
 Basic planning and a limited automatic action remain free. Multi-step plans, third-party integrations, and proactive suggestions may require Pro. Permissions and safety confirmations never do.
 
 ## Tesla rear-trunk scenario

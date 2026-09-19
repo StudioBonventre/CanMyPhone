@@ -41,6 +41,30 @@ test("unknown capabilities and understated risks are rejected", () => {
   assert.equal(validateAutomationPlan({ ...plan, riskLevel: "low" }).ok, false);
 });
 
+test("nested unknown fields and arbitrary endpoints are rejected", () => {
+  const plan = createTeslaRearTrunkPlan();
+  const unknownField = { ...plan, actions: [{ ...plan.actions[0], secretCommand: true }] };
+  const arbitraryEndpoint = { ...plan, actions: [{ ...plan.actions[0], parameters: { ...plan.actions[0]!.parameters, endpoint: "door_unlock" } }] };
+  assert.equal(validateAutomationPlan(unknownField).ok, false);
+  assert.equal(validateAutomationPlan(arbitraryEndpoint).ok, false);
+});
+
+test("Tesla trunk parameters are closed enums", () => {
+  const plan = createTeslaRearTrunkPlan();
+  const front = { ...plan, actions: [{ ...plan.actions[0], parameters: { endpoint: "actuate_trunk", whichTrunk: "front", expectedPriorState: "open" } }] };
+  const blindToggle = { ...plan, actions: [{ ...plan.actions[0], parameters: { endpoint: "actuate_trunk", whichTrunk: "rear", expectedPriorState: "unknown" } }] };
+  assert.equal(validateAutomationPlan(front).ok, false);
+  assert.equal(validateAutomationPlan(blindToggle).ok, false);
+});
+
+test("geofence parameters reject unsafe radius and model supplied coordinates", () => {
+  const plan = createTeslaRearTrunkPlan();
+  const unsafeRadius = { ...plan, triggers: [{ ...plan.triggers[0], parameters: { radiusMeters: 10, centerSource: "parked-vehicle-location" } }] };
+  const coordinates = { ...plan, triggers: [{ ...plan.triggers[0], parameters: { radiusMeters: 200, centerSource: "coordinates", latitude: 1, longitude: 2 } }] };
+  assert.equal(validateAutomationPlan(unsafeRadius).ok, false);
+  assert.equal(validateAutomationPlan(coordinates).ok, false);
+});
+
 test("sensitive execution requires confirmation and provider success", async () => {
   const plan = createTeslaRearTrunkPlan();
   let calls = 0;
