@@ -17,6 +17,7 @@ import {
 import { ActionTransitionV2 } from "./src/components/ActionTransitionV2";
 import { AuraV2 } from "./src/components/AuraV2";
 import { CapabilityCard } from "./src/components/CapabilityCard";
+import { ContentSurface } from "./src/components/ContentSurface";
 import { FloatingTabBar, type AppTab } from "./src/components/FloatingTabBar";
 import { GlassSurface } from "./src/components/GlassSurface";
 import { LiquidButton } from "./src/components/LiquidButton";
@@ -641,10 +642,10 @@ export default function App() {
                   </View>
                 ) : submittedQuery ? (
                   <View style={styles.noResultArea}>
-                    <GlassSurface variant="surface" style={styles.noResultCard}>
+                    <ContentSurface style={styles.noResultCard}>
                       <Text style={styles.noResultTitle}>Lieber keine erfundene Antwort.</Text>
                       <Text style={styles.noResultText}>Ich habe in unserem verifizierten Katalog keinen sicheren Treffer gefunden.</Text>
-                    </GlassSurface>
+                    </ContentSurface>
                     <LiquidButton style={styles.primaryAction} label="Anders formulieren" onPress={resetQuestion} />
                   </View>
                 ) : (
@@ -656,7 +657,7 @@ export default function App() {
                         onPress={() => runAsk(item.query).catch(() => undefined)}
                         style={({ pressed }) => [styles.ideaPressable, pressed && styles.ideaPressed]}
                       >
-                        <GlassSurface variant="inset" interactive style={styles.ideaRow}>
+                        <ContentSurface style={styles.ideaRow}>
                           <View style={styles.ideaTextWrap}>
                             <Text style={styles.ideaText}>{item.title}</Text>
                             <Text style={styles.ideaSubtext}>
@@ -668,7 +669,7 @@ export default function App() {
                             </Text>
                           </View>
                           <Text style={styles.chevron}>›</Text>
-                        </GlassSurface>
+                        </ContentSurface>
                       </Pressable>
                     ))}
                   </View>
@@ -693,14 +694,14 @@ export default function App() {
                   <View style={styles.discoveryList}>
                     {radarResults.map((item, index) => (
                       <Pressable key={item.id} onPress={() => runAsk(item.title).catch(() => undefined)}>
-                        <GlassSurface variant="surface" style={styles.discoveryCard} interactive>
+                        <ContentSurface style={styles.discoveryCard}>
                           <View style={styles.discoveryNumber}><Text style={styles.discoveryNumberText}>{index + 1}</Text></View>
                           <View style={styles.discoveryTextWrap}>
                             <Text style={styles.discoveryBadge}>FÜR DICH</Text>
                             <Text style={styles.discoveryTitle}>{item.title}</Text>
                             <Text style={styles.discoverySummary}>{item.summary}</Text>
                           </View>
-                        </GlassSurface>
+                        </ContentSurface>
                       </Pressable>
                     ))}
                   </View>
@@ -729,7 +730,7 @@ export default function App() {
                   <Text style={styles.heroSubtext}>Wenige Einstellungen, klar erklärt und jederzeit zurücksetzbar.</Text>
                 </View>
 
-                <GlassSurface variant="floating" style={styles.youCard}>
+                <ContentSurface emphasis="active" style={styles.youCard}>
                   <View style={styles.youRow}>
                     <View style={styles.youTextWrap}>
                       <Text style={styles.youTitle}>Einsteiger-Modus</Text>
@@ -783,7 +784,7 @@ export default function App() {
                   <Pressable onPress={resetRadar} style={styles.resetButton}>
                     <Text style={styles.resetText}>Gelernte Präferenzen löschen</Text>
                   </Pressable>
-                </GlassSurface>
+                </ContentSurface>
               </>
             ) : null}
           </ScrollView>
