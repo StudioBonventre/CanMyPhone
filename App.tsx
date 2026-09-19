@@ -29,7 +29,8 @@ import { Top100Section } from "./src/components/Top100Section";
 import { liquidIce } from "./src/theme/liquidIce";
 import { solutions } from "./src/data/solutions";
 import { directActionPlan, runDirectAction, type DirectActionResult } from "./src/lib/actions";
-import { compileVerifiedGoal } from "./src/automation/planner";
+import { compileVerifiedGoal, planGoal, type PlannerResponse } from "./src/automation/planner";
+import { getSupabasePlannerClient } from "./src/lib/supabasePlanner";
 import { resolveWithOnDeviceAI } from "./src/lib/aiResolver";
 import { resolveConversation } from "./src/lib/conversation";
 import { DEFAULT_ENTITLEMENTS, proFeatureAccess } from "./src/lib/entitlements";
@@ -150,6 +151,7 @@ export default function App() {
   const [paywallMessage, setPaywallMessage] = useState<string | null>(null);
   const [purchasingProductId, setPurchasingProductId] = useState<string | null>(null);
   const [restoreRunning, setRestoreRunning] = useState(false);
+  const [plannerResponse, setPlannerResponse] = useState<PlannerResponse | null>(null);
 
   const appState = useRef<AppStateStatus>(AppState.currentState);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -273,10 +275,11 @@ export default function App() {
     [bestResult, submittedQuery]
   );
   const automationPlan = useMemo(() => {
+    if (plannerResponse?.ok) return plannerResponse.plan;
     if (!submittedQuery) return null;
     const result = compileVerifiedGoal(submittedQuery);
     return result.ok ? result.plan : null;
-  }, [submittedQuery]);
+  }, [submittedQuery, plannerResponse]);
   const isSearching = motionPhase === "diving" || motionPhase === "searching" || motionPhase === "emerging";
 
   const resetQuestion = () => {
@@ -288,6 +291,7 @@ export default function App() {
     setAiSelectedId(null);
     setActionResult(null);
     setAnswerFeedback(null);
+    setPlannerResponse(null);
     setMotionPhase("idle");
   };
 
@@ -322,6 +326,14 @@ export default function App() {
         const candidates = solutions.filter((item) => item.platform === platform || item.platform === "both");
         const resolved = await resolveWithOnDeviceAI(normalized, candidates);
         selectedByAI = resolved.solutionId;
+      }
+
+      if (!deterministic.followUp && deterministic.solutions.length === 0 && !selectedByAI) {
+        const server = getSupabasePlannerClient();
+        if (server) {
+          const planned = await planGoal(normalized, { locale: "de", connectedProviders: [], grantedSignals: [] }, server);
+          setPlannerResponse(planned);
+        }
       }
 
       setAiSelectedId(selectedByAI);
@@ -590,7 +602,7 @@ export default function App() {
           >
             {tab === "ask" ? (
               <>
-                {submittedQuery && (automationPlan || bestResult || needsFollowUp) ? (
+                {submittedQuery && (plannerResponse || automationPlan || bestResult || needsFollowUp) ? (
                   <View style={styles.answerTopBar}>
                     <Pressable onPress={resetQuestion} hitSlop={12} accessibilityLabel="Zurück zur Frage">
                       <Text style={styles.backButton}>‹</Text>
@@ -601,7 +613,9 @@ export default function App() {
 
                 <View style={[styles.heroBlock, submittedQuery && styles.heroBlockAnswer]}>
                   <Text style={styles.hero}>
-                    {automationPlan
+                    {plannerResponse && !plannerResponse.ok && plannerResponse.code === "needs-clarification"
+                      ? "Ich brauche noch eine Angabe."
+                      : automationPlan
                       ? "So würde deine Automation funktionieren."
                       : needsFollowUp
                       ? "Eine Sache muss ich noch wissen."
@@ -614,7 +628,9 @@ export default function App() {
                           : "Was soll für dich passieren?"}
                   </Text>
                   <Text style={styles.heroSubtext}>
-                    {automationPlan
+                    {plannerResponse && !plannerResponse.ok && plannerResponse.code === "needs-clarification"
+                      ? "Ich frage lieber nach, statt eine Automation zu erraten."
+                      : automationPlan
                       ? "Prüfe den Ablauf und richte anschließend nur die wirklich benötigten Verbindungen und Freigaben ein."
                       : needsFollowUp
                       ? "Nur eine kurze Rückfrage, damit ich dir nichts Falsches zeige."
@@ -640,7 +656,18 @@ export default function App() {
                   />
                 ) : null}
 
-                {automationPlan ? (
+                {plannerResponse && !plannerResponse.ok && plannerResponse.code === "needs-clarification" ? (
+                  <GlassSurface variant="floating" style={styles.followUpCard}>
+                    <Text style={styles.answerEyebrow}>ICH BRAUCHE NOCH EINE ANGABE</Text>
+                    <Text style={styles.followUpText}>{plannerResponse.clarificationQuestion}</Text>
+                    <GlassSurface variant="inset" style={styles.followUpInputRow}>
+                      <TextInput value={followUpDraft} onChangeText={setFollowUpDraft} placeholder="Deine Antwort" placeholderTextColor="#87919D" returnKeyType="send" onSubmitEditing={submitClarification} style={styles.followUpInput} />
+                      <Pressable style={styles.smallSendButton} onPress={submitClarification} accessibilityLabel="Antwort senden"><Text style={styles.smallSendText}>↑</Text></Pressable>
+                    </GlassSurface>
+                  </GlassSurface>
+                ) : plannerResponse && !plannerResponse.ok && plannerResponse.code !== "unsupported" ? (
+                  <View style={styles.noResultArea}><ContentSurface style={styles.noResultCard}><Text style={styles.noResultTitle}>Sichere Planung nicht möglich.</Text><Text style={styles.noResultText}>{plannerResponse.message}</Text></ContentSurface><LiquidButton style={styles.primaryAction} label="Erneut versuchen" onPress={() => runAsk(submittedQuery).catch(() => undefined)} /></View>
+                ) : automationPlan ? (
                   <View style={styles.answerArea}>
                     <AutomationPlanPreview
                       plan={automationPlan}
