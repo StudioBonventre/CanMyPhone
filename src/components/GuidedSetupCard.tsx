@@ -122,9 +122,8 @@ export function GuidedSetupCard({
             onPress={() => handleSettingsPress().catch(() => undefined)}
             style={({ pressed }) => [styles.settingsPressable, pressed && styles.buttonPressed]}
           >
-            <GlassSurface
-              variant="inset"
-              interactive
+            <ContentSurface
+              emphasis={permissionFlow || shortcutFlow ? "active" : "quiet"}
               style={[
                 styles.settingsButton,
                 (permissionFlow || shortcutFlow) && styles.settingsButtonPermission
@@ -134,7 +133,7 @@ export function GuidedSetupCard({
                 {settingsActionLabel(solution)}
               </Text>
               <Text style={[styles.settingsButtonArrow, (permissionFlow || shortcutFlow) && styles.settingsButtonArrowPermission]}>›</Text>
-            </GlassSurface>
+            </ContentSurface>
           </Pressable>
           {permissionFlow ? (
             <Text style={styles.permissionHint}>
@@ -193,7 +192,7 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 22,
     overflow: "hidden",
-     marginBottom: 20
+    marginBottom: 20
   },
   returnIcon: { width: 34, height: 34, borderRadius: 17, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(10,132,255,0.09)" },
   returnDot: { width: 9, height: 9, borderRadius: 99, backgroundColor: "#0A84FF", shadowColor: "#0A84FF", shadowOpacity: 0.45, shadowRadius: 7, shadowOffset: { width: 0, height: 0 } },
@@ -209,10 +208,10 @@ const styles = StyleSheet.create({
   progress: { fontSize: 12, fontWeight: "900", color: "#1E5B86" },
   progressDivider: { marginHorizontal: 2, fontSize: 12, fontWeight: "700", color: "#9AA7B3" },
   progressTotal: { fontSize: 12, fontWeight: "800", color: "#7C8996" },
-  pathWrap: { marginTop: 20, paddingHorizontal: 15, paddingVertical: 14, borderRadius: 22, overflow: "hidden", backgroundColor: "rgba(224,242,255,0.11)", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(255,255,255,0.78)" },
+  pathWrap: { marginTop: 20, paddingHorizontal: 15, paddingVertical: 14, borderRadius: 22, overflow: "hidden" },
   pathLabel: { fontSize: 9, fontWeight: "900", letterSpacing: 1.05, color: "#7392AA", marginBottom: 7 },
   path: { fontSize: 13, lineHeight: 19, fontWeight: "700", color: liquidIce.color.textSecondary },
-  stepBox: { marginTop: 16, minHeight: 150, justifyContent: "center", padding: 20, borderRadius: 29, overflow: "hidden", backgroundColor: "rgba(203,232,255,0.13)", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(255,255,255,0.84)", shadowColor: "#67A7D8", shadowOpacity: 0.12, shadowRadius: 28, shadowOffset: { width: 0, height: 12 } },
+  stepBox: { marginTop: 16, minHeight: 150, justifyContent: "center", padding: 20, borderRadius: 29, overflow: "hidden" },
   stepBoxBeginner: { minHeight: 176, padding: 23 },
   stepGlow: { position: "absolute", width: 180, height: 180, borderRadius: 90, right: -46, top: -66, backgroundColor: "rgba(139,207,255,0.14)" },
   stepTopRow: { flexDirection: "row", alignItems: "center", marginBottom: 14 },
