@@ -12,11 +12,15 @@ export const liquidIce = {
     success: "#27856E",
     automation: "#2C73B5",
     confirmation: "#6872A6",
-    glass: "rgba(255,255,255,0.36)",
-    glassStrong: "rgba(255,255,255,0.58)",
-    glassSubtle: "rgba(255,255,255,0.22)",
-    glassBorder: "rgba(255,255,255,0.78)",
-    glassBorderStrong: "rgba(255,255,255,0.88)",
+    glass: "rgba(255,255,255,0.19)",
+    glassStrong: "rgba(255,255,255,0.23)",
+    glassSubtle: "rgba(255,255,255,0.16)",
+    glassBorder: "rgba(255,255,255,0.50)",
+    glassBorderStrong: "rgba(255,255,255,0.62)",
+    content: "rgba(255,255,255,0.10)",
+    contentActive: "rgba(255,255,255,0.18)",
+    contentBorder: "rgba(255,255,255,0.28)",
+    contentBorderActive: "rgba(128,222,255,0.34)",
     iceTint: "rgba(201,229,255,0.10)",
     iceTintStrong: "rgba(184,222,255,0.16)",
     cyanGlow: "rgba(128,222,255,0.24)",
@@ -63,27 +67,27 @@ export const liquidIceShadow = {
   inset: Platform.select<ViewStyle>({
     ios: {
       shadowColor: "#1A3857",
-      shadowOpacity: 0.06,
-      shadowRadius: 18,
-      shadowOffset: { width: 0, height: 5 }
+      shadowOpacity: 0.045,
+      shadowRadius: 16,
+      shadowOffset: { width: 0, height: 4 }
     },
     default: {}
   }) ?? {},
   surface: Platform.select<ViewStyle>({
     ios: {
       shadowColor: "#1A3857",
-      shadowOpacity: 0.08,
-      shadowRadius: 26,
-      shadowOffset: { width: 0, height: 9 }
+      shadowOpacity: 0.07,
+      shadowRadius: 24,
+      shadowOffset: { width: 0, height: 8 }
     },
     default: {}
   }) ?? {},
   floating: Platform.select<ViewStyle>({
     ios: {
       shadowColor: "#143861",
-      shadowOpacity: 0.12,
-      shadowRadius: 40,
-      shadowOffset: { width: 0, height: 16 }
+      shadowOpacity: 0.11,
+      shadowRadius: 38,
+      shadowOffset: { width: 0, height: 14 }
     },
     default: {}
   }) ?? {},
