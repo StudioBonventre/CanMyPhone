@@ -8,6 +8,7 @@ import {
   type Top100CapabilityLevel
 } from "../lib/top100Capabilities";
 import { GlassSurface } from "./GlassSurface";
+import { ContentSurface } from "./ContentSurface";
 import { CapabilityStatusChip } from "./CapabilityStatusChip";
 
 type Props = {
@@ -176,7 +177,7 @@ export function Top100Section({ onSelect }: Props) {
                 tintColor={active ? "rgba(151,207,255,0.16)" : "rgba(215,238,255,0.05)"}
               >
                 <Text style={[styles.filterText, active && styles.filterTextActive]}>{filter.label}</Text>
-              </GlassSurface>
+              </ContentSurface>
             </Pressable>
           );
         })}
@@ -193,7 +194,7 @@ export function Top100Section({ onSelect }: Props) {
               onPress={() => onSelect(item.query)}
               style={({ pressed }) => [styles.rowPressable, pressed && styles.rowPressed]}
             >
-              <GlassSurface variant="inset" style={styles.row} interactive>
+              <ContentSurface style={styles.row}>
                 <View pointerEvents="none" style={styles.rowIceLight} />
                 <View style={styles.rankCircle}><Text style={styles.rankText}>{item.rank}</Text></View>
                 <View style={styles.rowTextWrap}>
@@ -324,11 +325,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
-    backgroundColor: "rgba(226,243,255,0.09)",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.76)"
-  },
-  filterChipActive: { borderColor: "rgba(128,222,255,0.58)" },
+   },
+  filterChipActive: { borderColor: liquidIce.color.contentBorderActive },
   filterText: { fontSize: 11, fontWeight: "700", color: "#758596" },
   filterTextActive: { color: liquidIce.color.accent, fontWeight: "800" },
   resultCount: { marginTop: 17, marginBottom: 8, fontSize: 11, fontWeight: "700", letterSpacing: 0.5, color: "#8793A0" },
