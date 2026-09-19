@@ -1,7 +1,7 @@
 import React from "react";
 import { ActivityIndicator, Pressable, StyleProp, StyleSheet, Text, ViewStyle } from "react-native";
 import { liquidIce, liquidIceShadow } from "../theme/liquidIce";
-import { GlassSurface } from "./GlassSurface";
+import { ContentSurface } from "./ContentSurface";
 
 type Props = {
   label: string;
@@ -16,9 +16,9 @@ export function LiquidButton({ label, onPress, variant = "primary", loading = fa
   if (variant === "glass") {
     return (
       <Pressable disabled={disabled || loading} onPress={onPress} style={({ pressed }) => [style, pressed && styles.pressed]}>
-        <GlassSurface variant="surface" interactive style={styles.glass}>
+        <ContentSurface emphasis="active" style={styles.glass}>
           {loading ? <ActivityIndicator color={liquidIce.color.accent} /> : <Text style={styles.glassText}>{label}</Text>}
-        </GlassSurface>
+        </ContentSurface>
       </Pressable>
     );
   }
