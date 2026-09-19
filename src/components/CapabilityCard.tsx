@@ -2,7 +2,7 @@ import React from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { liquidIce } from "../theme/liquidIce";
 import type { Top100CapabilityLevel } from "../lib/top100Capabilities";
-import { GlassSurface } from "./GlassSurface";
+import { ContentSurface } from "./ContentSurface";
 import { CapabilityStatusChip } from "./CapabilityStatusChip";
 
 type Props = {
@@ -20,7 +20,7 @@ export function CapabilityCard({ level, title, description }: Props) {
         : liquidIce.color.confirmation;
 
   return (
-    <GlassSurface variant="surface" style={styles.card}>
+    <ContentSurface emphasis="active" style={styles.card}>
       <View style={[styles.orb, { borderColor: accent }]}>
         <View style={[styles.orbCore, { backgroundColor: accent, shadowColor: accent }]} />
       </View>
@@ -29,7 +29,7 @@ export function CapabilityCard({ level, title, description }: Props) {
         <Text style={styles.title}>{title}</Text>
         <Text style={styles.description}>{description}</Text>
       </View>
-    </GlassSurface>
+    </ContentSurface>
   );
 }
 
