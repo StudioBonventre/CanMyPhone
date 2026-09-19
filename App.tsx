@@ -709,13 +709,13 @@ export default function App() {
                   <View style={styles.discoveryList}>
                     {hiddenFeatures.map((item) => (
                       <Pressable key={item.title} onPress={() => runAsk(item.query).catch(() => undefined)}>
-                        <GlassSurface variant="surface" style={styles.discoveryCard} interactive>
+                        <ContentSurface style={styles.discoveryCard}>
                           <View style={styles.discoveryTextWrap}>
                             <Text style={styles.discoveryBadge}>ENTDECKEN</Text>
                             <Text style={styles.discoveryTitle}>{item.title}</Text>
                             <Text style={styles.discoveryCTA}>Ansehen →</Text>
                           </View>
-                        </GlassSurface>
+                        </ContentSurface>
                       </Pressable>
                     ))}
                   </View>
