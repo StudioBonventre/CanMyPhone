@@ -17,7 +17,13 @@ import {
 import { ActionTransitionV2 } from "./src/components/ActionTransitionV2";
 import { AutomationPlanPreview } from "./src/components/AutomationPlanPreview";
 import { ShortcutDefinitionPreview } from "./src/components/ShortcutDefinitionPreview";
+import { AutomationInstallationCard } from "./src/components/AutomationInstallationCard";
+import { MyAutomationsCard } from "./src/components/MyAutomationsCard";
 import { compileShortcutGoal } from "./src/automation/shortcutCompiler";
+import { materializeShortcutDefinition, type StoredAutomation } from "./src/automation/materialization";
+import { automationRepository } from "./src/automation/automationRepository";
+import { CanMyPhoneNative } from "./modules/canmyphone-native";
+import { trackProductEvent } from "./src/lib/analytics";
 import { AuraV2 } from "./src/components/AuraV2";
 import { CapabilityCard } from "./src/components/CapabilityCard";
 import { ContentSurface } from "./src/components/ContentSurface";
@@ -154,6 +160,8 @@ export default function App() {
   const [purchasingProductId, setPurchasingProductId] = useState<string | null>(null);
   const [restoreRunning, setRestoreRunning] = useState(false);
   const [plannerResponse, setPlannerResponse] = useState<PlannerResponse | null>(null);
+  const [automations, setAutomations] = useState<StoredAutomation[]>([]);
+  const [installingAutomation, setInstallingAutomation] = useState<StoredAutomation | null>(null);
 
   const appState = useRef<AppStateStatus>(AppState.currentState);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -176,8 +184,8 @@ export default function App() {
 
   useEffect(() => {
     let alive = true;
-    Promise.all([loadNeedRadarProfile(), loadGuideSession(), loadUserPreferences()])
-      .then(([savedProfile, savedGuide, savedPreferences]) => {
+    Promise.all([loadNeedRadarProfile(), loadGuideSession(), loadUserPreferences(), automationRepository.list()])
+      .then(([savedProfile, savedGuide, savedPreferences, savedAutomations]) => {
         if (!alive) return;
         if (savedProfile) setProfile(savedProfile);
         if (savedGuide && savedGuide.status !== "completed") {
@@ -185,6 +193,7 @@ export default function App() {
           setMotionPhase("guiding");
         }
         setPreferences(savedPreferences);
+        setAutomations(savedAutomations);
         setProfileLoaded(true);
         setPreferencesLoaded(true);
       })
@@ -234,6 +243,17 @@ export default function App() {
 
       if (nextState === "active" && previous !== "active") {
         refreshProEntitlement().then(setEntitlements).catch(() => undefined);
+        const pendingId = await automationRepository.getPendingSetup();
+        if (pendingId) {
+          const pending = await automationRepository.get(pendingId);
+          if (pending?.personalSetup) {
+            const updated = { ...pending, personalSetup: { ...pending.personalSetup, setupState: "AWAITING_CONFIRMATION" as const } };
+            const saved = await automationRepository.save(updated);
+            setInstallingAutomation(saved);
+            setAutomations(await automationRepository.list());
+            setTab("ask");
+          }
+        }
       }
 
       if (guideSession && (nextState === "background" || nextState === "inactive")) {
@@ -295,8 +315,47 @@ export default function App() {
     setActionResult(null);
     setAnswerFeedback(null);
     setPlannerResponse(null);
+    setInstallingAutomation(null);
     setMotionPhase("idle");
   };
+
+  const createAutomation = async () => {
+    if (!shortcutDefinition) return;
+    trackProductEvent("automation_materialization_started", { strategy: shortcutDefinition.executionStrategy });
+    try {
+      const stored = await automationRepository.save(materializeShortcutDefinition(shortcutDefinition));
+      setInstallingAutomation(stored);
+      setAutomations(await automationRepository.list());
+    } catch {
+      setActionResult({ handled: true, succeeded: false, message: "Diese Automation kann ich noch nicht sicher erstellen." });
+    }
+  };
+
+  const handoffAutomation = async () => {
+    if (!installingAutomation?.personalSetup) return;
+    const opened = await CanMyPhoneNative?.openShortcuts("create");
+    if (!opened) { setActionResult({ handled:true,succeeded:false,message:"Kurzbefehle konnte nicht geöffnet werden." }); return; }
+    const updated: StoredAutomation = { ...installingAutomation, personalSetup: { ...installingAutomation.personalSetup, setupState:"HANDED_OFF", handedOffAt:new Date().toISOString() } };
+    await automationRepository.save(updated); await automationRepository.setPendingSetup(updated.id);
+    setInstallingAutomation(updated); setAutomations(await automationRepository.list());
+    trackProductEvent("automation_handoff_opened", { trigger: updated.definition.trigger.capabilityId });
+  };
+
+  const confirmAutomation = async () => {
+    if (!installingAutomation) return;
+    const updated: StoredAutomation = { ...installingAutomation, enabled:true, materializationState:"ACTIVE", personalSetup: installingAutomation.personalSetup ? { ...installingAutomation.personalSetup, setupState:"ACTIVE" } : undefined };
+    const saved=await automationRepository.save(updated); await automationRepository.setPendingSetup(null);
+    setInstallingAutomation(saved); setAutomations(await automationRepository.list());
+    trackProductEvent("automation_setup_confirmed", { strategy:saved.definition.executionStrategy });
+    if (!saved.personalSetup) {
+      const runResult = await CanMyPhoneNative?.runStoredAutomation(saved.id);
+      const succeeded = runResult?.status === "SUCCESS";
+      setActionResult({ handled:true, succeeded, message: typeof runResult?.humanMessage === "string" ? runResult.humanMessage : "Die Automation ist aktiviert." });
+      trackProductEvent(succeeded ? "automation_run_success" : "automation_run_failed", { status: String(runResult?.status ?? "UNAVAILABLE") });
+    }
+  };
+
+  const cancelSetup = async () => { if(!installingAutomation)return;await automationRepository.setPendingSetup(null);const updated={...installingAutomation,personalSetup:installingAutomation.personalSetup?{...installingAutomation.personalSetup,setupState:"NOT_STARTED" as const}:undefined};const saved=await automationRepository.save(updated);setInstallingAutomation(saved);setAutomations(await automationRepository.list());trackProductEvent("automation_setup_cancelled",{}); };
 
   const runAsk = async (value = draftQuery, fromClarification = false) => {
     const normalized = value.trim();
@@ -661,7 +720,11 @@ export default function App() {
                 ) : null}
 
                 {shortcutDefinition && shortcutDefinition.confidence >= 0.8 && !automationPlan ? (
-                  <View style={styles.answerArea}><ShortcutDefinitionPreview definition={shortcutDefinition} /><ContentSurface style={styles.resultBanner}><Text style={styles.resultTitle}>Vorschau</Text><Text style={styles.resultText}>Der Plan ist validiert. Die tatsächliche Materialisierung in Kurzbefehle folgt im nächsten Ausführungsblock; es wurde noch nichts erstellt.</Text></ContentSurface></View>
+                  <View style={styles.answerArea}>
+                    <ShortcutDefinitionPreview definition={shortcutDefinition} />
+                    {installingAutomation ? <AutomationInstallationCard automation={installingAutomation} onHandoff={()=>handoffAutomation().catch(()=>undefined)} onConfirm={()=>confirmAutomation().catch(()=>undefined)} onCancel={()=>cancelSetup().catch(()=>undefined)} /> : <LiquidButton style={styles.primaryAction} label="Automation erstellen" onPress={()=>createAutomation().catch(()=>undefined)} />}
+                    {actionResult ? <ContentSurface style={styles.resultBanner}><Text style={styles.resultTitle}>Status</Text><Text style={styles.resultText}>{actionResult.message}</Text></ContentSurface> : null}
+                  </View>
                 ) : plannerResponse && !plannerResponse.ok && plannerResponse.code === "needs-clarification" ? (
                   <GlassSurface variant="floating" style={styles.followUpCard}>
                     <Text style={styles.answerEyebrow}>ICH BRAUCHE NOCH EINE ANGABE</Text>
@@ -923,6 +986,8 @@ export default function App() {
                     style={styles.proAction}
                   />
                 </ContentSurface>
+
+                <MyAutomationsCard items={automations} onToggle={(item)=>{const updated={...item,enabled:!item.enabled,materializationState:(!item.enabled?"ACTIVE":"DISABLED") as StoredAutomation["materializationState"]};automationRepository.save(updated).then(async()=>{setAutomations(await automationRepository.list());trackProductEvent(updated.enabled?"automation_enabled":"automation_disabled",{});}).catch(()=>undefined);}} onDelete={(id)=>automationRepository.remove(id).then(async()=>setAutomations(await automationRepository.list())).catch(()=>undefined)} />
 
                 <ContentSurface emphasis="active" style={styles.youCard}>
                   <View style={styles.youRow}>

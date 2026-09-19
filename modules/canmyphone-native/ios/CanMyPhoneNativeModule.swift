@@ -95,6 +95,7 @@ public final class CanMyPhoneNativeModule: Module {
 
     AsyncFunction("setPremiumEntitlement") { (enabled: Bool) async -> Void in
       UserDefaults.standard.set(enabled, forKey: "CanMyPhoneProEnabled")
+      CanMyPhoneAutomationStore.defaults?.set(enabled, forKey: "CanMyPhoneProEnabled")
     }
 
     AsyncFunction("storeProducts") { (productIDs: [String]) async throws -> [[String: Any]] in
@@ -144,6 +145,7 @@ public final class CanMyPhoneNativeModule: Module {
           case .verified(let transaction):
             await transaction.finish()
             UserDefaults.standard.set(true, forKey: "CanMyPhoneProEnabled")
+            CanMyPhoneAutomationStore.defaults?.set(true, forKey: "CanMyPhoneProEnabled")
             return [
               "status": "purchased",
               "productId": productID,
@@ -192,6 +194,7 @@ public final class CanMyPhoneNativeModule: Module {
 
       let result = await self.storeEntitlementState(productIDs: productIDs)
       UserDefaults.standard.set(result.pro, forKey: "CanMyPhoneProEnabled")
+      CanMyPhoneAutomationStore.defaults?.set(result.pro, forKey: "CanMyPhoneProEnabled")
       return ["pro": result.pro, "activeProductIds": result.activeProductIDs]
     }
 
@@ -203,6 +206,7 @@ public final class CanMyPhoneNativeModule: Module {
       try await AppStore.sync()
       let result = await self.storeEntitlementState(productIDs: productIDs)
       UserDefaults.standard.set(result.pro, forKey: "CanMyPhoneProEnabled")
+      CanMyPhoneAutomationStore.defaults?.set(result.pro, forKey: "CanMyPhoneProEnabled")
       return ["pro": result.pro, "activeProductIds": result.activeProductIDs]
     }
 
@@ -224,6 +228,18 @@ public final class CanMyPhoneNativeModule: Module {
       let urlString = destination == "create" ? "shortcuts://create-shortcut" : "shortcuts://"
       guard let url = URL(string: urlString) else { return false }
       return await self.open(url: url)
+    }
+
+    AsyncFunction("syncAutomationDefinition") { (json: String) async -> Bool in
+      return CanMyPhoneAutomationStore.save(json: json)
+    }
+
+    AsyncFunction("deleteAutomationDefinition") { (automationID: String) async -> Void in
+      CanMyPhoneAutomationStore.delete(id: automationID)
+    }
+
+    AsyncFunction("runStoredAutomation") { (automationID: String) async -> [String: Any] in
+      return await CanMyPhoneAutomationRunner.run(id: automationID)
     }
   }
 

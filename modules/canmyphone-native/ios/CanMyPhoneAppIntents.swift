@@ -43,6 +43,32 @@ struct SetCanMyPhoneBrightnessIntent: AppIntent {
 }
 
 @available(iOS 16.0, *)
+struct RunCanMyPhoneAutomationIntent: AppIntent {
+  static var title: LocalizedStringResource = "CanMyPhone Automation ausführen"
+  static var description = IntentDescription("Führt eine gespeicherte und erneut geprüfte CanMyPhone-Automation aus.")
+
+  @Parameter(title: "Automation-ID", description: "Die in CanMyPhone angezeigte ID, zum Beispiel cmp_auto_abc123.")
+  var automationId: String
+
+  static var parameterSummary: some ParameterSummary { Summary("Automation \(.$automationId) ausführen") }
+
+  func perform() async throws -> some IntentResult & ProvidesDialog {
+    let value = await CanMyPhoneAutomationRunner.run(id: automationId)
+    let message = value["humanMessage"] as? String ?? "Die Automation konnte nicht ausgeführt werden."
+    return .result(dialog: IntentDialog("\(message)"))
+  }
+}
+
+@available(iOS 16.0, *)
+struct OpenCanMyPhoneAutomationIntent: AppIntent {
+  static var title: LocalizedStringResource = "CanMyPhone Automation öffnen"
+  static var description = IntentDescription("Öffnet CanMyPhone bei einer gespeicherten Automation.")
+  static var openAppWhenRun: Bool { true }
+  @Parameter(title: "Automation-ID") var automationId: String
+  func perform() async throws -> some IntentResult & ProvidesDialog { .result(dialog: "Automation \(automationId) wird in CanMyPhone geöffnet.") }
+}
+
+@available(iOS 16.0, *)
 struct CanMyPhoneAppShortcuts: AppShortcutsProvider {
   static var appShortcuts: [AppShortcut] {
     AppShortcut(
@@ -64,6 +90,13 @@ struct CanMyPhoneAppShortcuts: AppShortcutsProvider {
       ],
       shortTitle: "Helligkeit setzen",
       systemImageName: "sun.max"
+    )
+
+    AppShortcut(
+      intent: RunCanMyPhoneAutomationIntent(),
+      phrases: ["Führe eine Automation mit \(.applicationName) aus"],
+      shortTitle: "Automation ausführen",
+      systemImageName: "bolt.fill"
     )
   }
 

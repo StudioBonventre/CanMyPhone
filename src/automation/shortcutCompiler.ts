@@ -72,7 +72,9 @@ function assess(steps:ShortcutStep[],strategy:Strategy){const caps=steps.map(s=>
   if(strategy==="PERSONAL_AUTOMATION"||caps.some(c=>c.permissions.length)){reasons.push("Die persönliche Automation oder Berechtigung muss einmalig eingerichtet werden.");return {feasibility:"ONE_TIME_SETUP" as Feasibility,reasons};}
   return {feasibility:"FULLY_AUTOMATIC" as Feasibility,reasons:["Alle Schritte können nach Aktivierung ohne weitere Interaktion laufen."]};}
 
-export function compileShortcutGoal(goal:string):ShortcutDefinition {const q=normalize(goal),e=extractEntities(goal),t=extractTrigger(q,e),a=extractActions(q,e);let clarification:string|undefined;
+export function compileShortcutGoal(goal:string):ShortcutDefinition {const q=normalize(goal),e=extractEntities(goal);let t=extractTrigger(q,e);const a=extractActions(q,e);let clarification:string|undefined;
+  const asksForTrigger=/(wenn|sobald|falls|jed(en|e)|immer wenn|bei verbind|beim|akku|batter|um \d|werktag)/.test(q);
+  if(!t&&a.length&&!asksForTrigger)t={capabilityId:"trigger.manual",parameters:{}};
   if(!t)clarification=/einsteige|ins auto/.test(q)?"Woran soll ich erkennen, dass du im Auto bist: CarPlay, Bluetooth oder Standort?":/bluetooth|kopfhörer/.test(q)&&/musik|spotify|apple music/.test(q)?"Welches Bluetooth-Gerät soll die Automation auslösen – oder reicht jedes?":"Wann soll die Automation starten?";
   else if(!a.length)clarification="Was soll dann passieren?";
   const conditions:ShortcutStep[]=[];if(/nach\s+\d{1,2}/.test(q)&&e.time&&t?.capabilityId!=="trigger.time"&&t?.capabilityId!=="trigger.weekday")conditions.push({capabilityId:"condition.time-window",parameters:{after:e.time}});

@@ -57,6 +57,9 @@ export type NativeModuleShape = {
   openAppSettings(): Promise<boolean>;
   openNotificationSettings(): Promise<boolean>;
   openShortcuts(destination: ShortcutsDestination): Promise<boolean>;
+  syncAutomationDefinition(json: string): Promise<boolean>;
+  deleteAutomationDefinition(automationId: string): Promise<void>;
+  runStoredAutomation(automationId: string): Promise<Record<string, unknown>>;
   storeProducts(productIds: string[]): Promise<StoreProductInfo[]>;
   purchaseProduct(productId: string): Promise<StorePurchaseResult>;
   currentStoreEntitlements(productIds: string[]): Promise<StoreEntitlementResult>;

@@ -2,7 +2,11 @@ export type ProductEvent =
   | "request_submitted" | "plan_created" | "plan_failed" | "authorization_needed"
   | "automation_created" | "automation_run" | "automation_failed"
   | "suggestion_shown" | "suggestion_accepted" | "suggestion_dismissed"
-  | "paywall_opened" | "purchase_success" | "purchase_failed";
+  | "paywall_opened" | "purchase_success" | "purchase_failed"
+  | "automation_materialization_started" | "automation_handoff_opened"
+  | "automation_setup_confirmed" | "automation_setup_cancelled"
+  | "automation_enabled" | "automation_disabled"
+  | "automation_run_success" | "automation_run_failed";
 
 export type SafeEventProperties = Record<string, string | number | boolean | null>;
 
