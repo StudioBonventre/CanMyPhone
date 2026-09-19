@@ -16,6 +16,8 @@ import {
 } from "react-native";
 import { ActionTransitionV2 } from "./src/components/ActionTransitionV2";
 import { AutomationPlanPreview } from "./src/components/AutomationPlanPreview";
+import { ShortcutDefinitionPreview } from "./src/components/ShortcutDefinitionPreview";
+import { compileShortcutGoal } from "./src/automation/shortcutCompiler";
 import { AuraV2 } from "./src/components/AuraV2";
 import { CapabilityCard } from "./src/components/CapabilityCard";
 import { ContentSurface } from "./src/components/ContentSurface";
@@ -280,6 +282,7 @@ export default function App() {
     const result = compileVerifiedGoal(submittedQuery);
     return result.ok ? result.plan : null;
   }, [submittedQuery, plannerResponse]);
+  const shortcutDefinition = useMemo(() => submittedQuery ? compileShortcutGoal(submittedQuery) : null, [submittedQuery]);
   const isSearching = motionPhase === "diving" || motionPhase === "searching" || motionPhase === "emerging";
 
   const resetQuestion = () => {
@@ -316,19 +319,20 @@ export default function App() {
 
     searchTimer.current = setTimeout(async () => {
       const deterministic = resolveConversation(normalized, solutions, deviceContext);
+      const compiledShortcut = compileShortcutGoal(normalized);
       let selectedByAI: string | null = null;
 
       if (
         preferences.useOnDeviceAI &&
         !deterministic.followUp &&
-        deterministic.solutions.length === 0
+        deterministic.solutions.length === 0 && compiledShortcut.confidence < 0.8
       ) {
         const candidates = solutions.filter((item) => item.platform === platform || item.platform === "both");
         const resolved = await resolveWithOnDeviceAI(normalized, candidates);
         selectedByAI = resolved.solutionId;
       }
 
-      if (!deterministic.followUp && deterministic.solutions.length === 0 && !selectedByAI) {
+      if (!deterministic.followUp && deterministic.solutions.length === 0 && !selectedByAI && compiledShortcut.confidence < 0.8) {
         const server = getSupabasePlannerClient();
         if (server) {
           const planned = await planGoal(normalized, { locale: "de", connectedProviders: [], grantedSignals: [] }, server);
@@ -656,7 +660,9 @@ export default function App() {
                   />
                 ) : null}
 
-                {plannerResponse && !plannerResponse.ok && plannerResponse.code === "needs-clarification" ? (
+                {shortcutDefinition && shortcutDefinition.confidence >= 0.8 && !automationPlan ? (
+                  <View style={styles.answerArea}><ShortcutDefinitionPreview definition={shortcutDefinition} /><ContentSurface style={styles.resultBanner}><Text style={styles.resultTitle}>Vorschau</Text><Text style={styles.resultText}>Der Plan ist validiert. Die tatsächliche Materialisierung in Kurzbefehle folgt im nächsten Ausführungsblock; es wurde noch nichts erstellt.</Text></ContentSurface></View>
+                ) : plannerResponse && !plannerResponse.ok && plannerResponse.code === "needs-clarification" ? (
                   <GlassSurface variant="floating" style={styles.followUpCard}>
                     <Text style={styles.answerEyebrow}>ICH BRAUCHE NOCH EINE ANGABE</Text>
                     <Text style={styles.followUpText}>{plannerResponse.clarificationQuestion}</Text>

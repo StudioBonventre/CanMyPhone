@@ -7,11 +7,24 @@ export type PlannerEnvelope = {
 };
 
 export const capabilitySummary = [
+  "trigger.time|weekday|location-enter|location-exit|app-opened|app-closed|battery-level|charger-connected|charger-disconnected|bluetooth-connected|bluetooth-disconnected|nfc|focus-changed|app-intent: Apple Personal Automation triggers",
+  "system.brightness.set|volume.set|low-power.set|flashlight.set|focus.set|app.open|url.open|clipboard.set: public iOS/Shortcuts actions",
+  "media.play-pause|playlist.play|apple-music.play|spotify.open: media actions; Spotify requires installed integration",
+  "navigation.route.start: destination home|work|user-selected; location permission",
+  "communication.message.compose|mail.compose|call.start: recipient required; confirmation required",
+  "productivity.calendar.create|reminder.create|note.create|file.save|text.transform: value required",
+  "smart-home.scene.run: Home permission; Pro",
   "ios.core-location.geofence-exit: trigger; radiusMeters 100..1000; centerSource parked-vehicle-location|user-selected-place; risk medium; Pro",
   "shortcuts.app-intent.run-plan: action; planId non-empty; risk low; free",
   "tesla.fleet-api.vehicle-state: condition; scopes vehicle_device_data|vehicle_cmds OR field rt equals 1; risk medium; Pro",
   "tesla.fleet-api.actuate-rear-trunk: action; endpoint actuate_trunk; whichTrunk rear; expectedPriorState open; sensitive; risk high; Pro"
 ].join("\n");
+
+export function selectServerCandidates(goal:string):string {
+  const q=goal.toLowerCase(); const lines=capabilitySummary.split("\n");
+  const selected=lines.filter(line=>line.startsWith("trigger.") || (q.includes("spotify")&&line.includes("spotify")) || (q.includes("helligkeit")&&line.includes("brightness")) || (q.includes("fokus")&&line.includes("focus")) || (q.includes("navigation")&&line.includes("navigation")) || (q.includes("tesla")&&line.includes("tesla")) || (q.includes("stromspar")&&line.includes("low-power")) || (q.includes("nachricht")&&line.includes("communication")));
+  return selected.join("\n");
+}
 
 function object(value: unknown): value is Record<string, unknown> { return Boolean(value) && typeof value === "object" && !Array.isArray(value); }
 function exact(value: Record<string, unknown>, allowed: string[]) { return Object.keys(value).every((key) => allowed.includes(key)); }

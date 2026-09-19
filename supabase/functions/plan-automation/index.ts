@@ -1,4 +1,4 @@
-import { capabilitySummary, hasBearerAuthorization, safeLogFields, validatePlannerEnvelope } from "../_shared/planner-core.ts";
+import { hasBearerAuthorization, safeLogFields, selectServerCandidates, validatePlannerEnvelope } from "../_shared/planner-core.ts";
 
 const timeoutMs = 12_000;
 const schema = { type:"object", additionalProperties:false, required:["intent","clarificationNeeded","clarificationQuestion","confidence","plan"], properties:{ intent:{type:"string"}, clarificationNeeded:{type:"boolean"}, clarificationQuestion:{type:["string","null"]}, confidence:{type:"number",minimum:0,maximum:1}, plan:{type:["object","null"]} } };
@@ -7,7 +7,7 @@ function json(body: unknown, status = 200) { return Response.json(body, { status
 async function callModel(goal: string, locale: string, model: string, signal: AbortSignal) {
   const key = Deno.env.get("OPENAI_API_KEY");
   if (!key) throw new Error("missing_ai_secret");
-  const response = await fetch("https://api.openai.com/v1/responses", { method:"POST", signal, headers:{ Authorization:`Bearer ${key}`, "Content-Type":"application/json" }, body:JSON.stringify({ model, max_output_tokens:1800, store:false, input:[{role:"system",content:`You propose automation plans only. Never execute actions. If trigger, target, or desired outcome is ambiguous, ask one concrete clarification and set plan null. Use only this registry:\n${capabilitySummary}`},{role:"user",content:JSON.stringify({goal,locale})}], text:{format:{type:"json_schema",name:"automation_planner",strict:true,schema}} }) });
+  const response = await fetch("https://api.openai.com/v1/responses", { method:"POST", signal, headers:{ Authorization:`Bearer ${key}`, "Content-Type":"application/json" }, body:JSON.stringify({ model, max_output_tokens:1800, store:false, input:[{role:"system",content:`You propose automation plans only. Never execute actions. If trigger, target, or desired outcome is ambiguous, ask one concrete clarification and set plan null. Use only these prefiltered capabilities:\n${selectServerCandidates(goal)}`},{role:"user",content:JSON.stringify({goal,locale})}], text:{format:{type:"json_schema",name:"automation_planner",strict:true,schema}} }) });
   if (!response.ok) throw new Error(response.status === 429 ? "rate_limited" : response.status >= 500 ? "provider_unavailable" : "provider_rejected");
   const body = await response.json();
   const output = body?.output?.flatMap((item: any) => item.content ?? []).find((item: any) => item.type === "output_text")?.text;
