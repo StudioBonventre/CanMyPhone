@@ -4,10 +4,10 @@ import { directActionPlan, type DirectActionKind } from "./actionPlanning";
 import {
   automaticActionAccess,
   consumeAutomaticAction,
-  DEFAULT_ENTITLEMENTS,
-  developmentPremiumEnabled
+  DEFAULT_ENTITLEMENTS
 } from "./entitlements";
 import { openSupportedSettings } from "./settings";
+import { refreshProEntitlement } from "./purchases";
 import { loadEntitlementState, saveEntitlementState } from "./storage";
 
 export { directActionPlan } from "./actionPlanning";
@@ -38,13 +38,8 @@ async function entitlementGate(): Promise<{
   state: EntitlementState;
   message?: string;
 }> {
-  const stored = await loadEntitlementState() ?? DEFAULT_ENTITLEMENTS;
-
-  if (developmentPremiumEnabled()) {
-    const developmentState: EntitlementState = { ...stored, pro: true };
-    await syncPremiumEntitlement(true);
-    return { allowed: true, state: developmentState };
-  }
+  const cached = await loadEntitlementState() ?? DEFAULT_ENTITLEMENTS;
+  const stored = await refreshProEntitlement().catch(() => cached);
 
   await syncPremiumEntitlement(stored.pro);
   const access = automaticActionAccess(stored);
@@ -58,12 +53,6 @@ async function entitlementGate(): Promise<{
 }
 
 async function persistSuccessfulAutomaticAction(state: EntitlementState): Promise<void> {
-  // Never mutate the user's persisted purchase/credit state because of a development-only Pro override.
-  if (developmentPremiumEnabled()) {
-    await syncPremiumEntitlement(true);
-    return;
-  }
-
   const next = consumeAutomaticAction(state);
   await saveEntitlementState(next);
   await syncPremiumEntitlement(next.pro);

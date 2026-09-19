@@ -23,6 +23,30 @@ export type BrightnessResult = {
 
 export type ShortcutsDestination = "app" | "create";
 
+export type StoreProductInfo = {
+  id: string;
+  displayName: string;
+  description: string;
+  displayPrice: string;
+  price: number;
+  type: string;
+  subscriptionPeriodValue?: number;
+  subscriptionPeriodUnit?: string;
+};
+
+export type StorePurchaseStatus = "purchased" | "pending" | "cancelled" | "failed";
+
+export type StorePurchaseResult = {
+  status: StorePurchaseStatus;
+  productId: string;
+  message: string;
+};
+
+export type StoreEntitlementResult = {
+  pro: boolean;
+  activeProductIds: string[];
+};
+
 export type NativeModuleShape = {
   foundationModelStatus(): Promise<FoundationModelStatus>;
   askFoundationModel(prompt: string): Promise<string>;
@@ -33,4 +57,8 @@ export type NativeModuleShape = {
   openAppSettings(): Promise<boolean>;
   openNotificationSettings(): Promise<boolean>;
   openShortcuts(destination: ShortcutsDestination): Promise<boolean>;
+  storeProducts(productIds: string[]): Promise<StoreProductInfo[]>;
+  purchaseProduct(productId: string): Promise<StorePurchaseResult>;
+  currentStoreEntitlements(productIds: string[]): Promise<StoreEntitlementResult>;
+  restorePurchases(productIds: string[]): Promise<StoreEntitlementResult>;
 };

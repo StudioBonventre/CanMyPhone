@@ -22,6 +22,7 @@ import { FloatingTabBar, type AppTab } from "./src/components/FloatingTabBar";
 import { GlassSurface } from "./src/components/GlassSurface";
 import { LiquidButton } from "./src/components/LiquidButton";
 import { LiquidComposer } from "./src/components/LiquidComposer";
+import { ProPaywall } from "./src/components/ProPaywall";
 import { GuidedSetupCard } from "./src/components/GuidedSetupCard";
 import { Top100Section } from "./src/components/Top100Section";
 import { liquidIce } from "./src/theme/liquidIce";
@@ -29,6 +30,7 @@ import { solutions } from "./src/data/solutions";
 import { directActionPlan, runDirectAction, type DirectActionResult } from "./src/lib/actions";
 import { resolveWithOnDeviceAI } from "./src/lib/aiResolver";
 import { resolveConversation } from "./src/lib/conversation";
+import { DEFAULT_ENTITLEMENTS, proFeatureAccess } from "./src/lib/entitlements";
 import { hapticAnswer, hapticDive, hapticEmerge, hapticStep } from "./src/lib/haptics";
 import {
   endGuideLiveActivity,
@@ -49,6 +51,13 @@ import {
   saveUserPreferences,
   type UserPreferences
 } from "./src/lib/preferences";
+import {
+  fetchProProducts,
+  purchasePro,
+  refreshProEntitlement,
+  restoreProPurchases,
+  type ProStoreProduct
+} from "./src/lib/purchases";
 import { shortcutAssistantPlan } from "./src/lib/shortcutAssistant";
 import { openSupportedSettings } from "./src/lib/settings";
 import {
@@ -61,6 +70,7 @@ import {
 import {
   DeviceContext,
   DropPhase,
+  EntitlementState,
   GuideSession,
   NeedRadarProfile,
   Region,
@@ -131,6 +141,13 @@ export default function App() {
   const [actionResult, setActionResult] = useState<DirectActionResult | null>(null);
   const [actionRunning, setActionRunning] = useState(false);
   const [answerFeedback, setAnswerFeedback] = useState<SolutionFeedback | null>(null);
+  const [entitlements, setEntitlements] = useState<EntitlementState>(DEFAULT_ENTITLEMENTS);
+  const [proProducts, setProProducts] = useState<ProStoreProduct[]>([]);
+  const [storeLoading, setStoreLoading] = useState(true);
+  const [paywallVisible, setPaywallVisible] = useState(false);
+  const [paywallMessage, setPaywallMessage] = useState<string | null>(null);
+  const [purchasingProductId, setPurchasingProductId] = useState<string | null>(null);
+  const [restoreRunning, setRestoreRunning] = useState(false);
 
   const appState = useRef<AppStateStatus>(AppState.currentState);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -186,9 +203,32 @@ export default function App() {
   }, [preferences, preferencesLoaded]);
 
   useEffect(() => {
+    let alive = true;
+
+    Promise.all([refreshProEntitlement(), fetchProProducts()])
+      .then(([state, products]) => {
+        if (!alive) return;
+        setEntitlements(state);
+        setProProducts(products);
+        setStoreLoading(false);
+      })
+      .catch(() => {
+        if (alive) setStoreLoading(false);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
     const subscription = AppState.addEventListener("change", async (nextState) => {
       const previous = appState.current;
       appState.current = nextState;
+
+      if (nextState === "active" && previous !== "active") {
+        refreshProEntitlement().then(setEntitlements).catch(() => undefined);
+      }
 
       if (guideSession && (nextState === "background" || nextState === "inactive")) {
         const backgroundSession: GuideSession = { ...guideSession, status: "background", updatedAt: Date.now() };
@@ -384,10 +424,73 @@ export default function App() {
     const result = await runDirectAction(bestResult, submittedQuery);
     setActionResult(result);
     setActionRunning(false);
+
+    if (result.locked) {
+      setPaywallMessage(result.message);
+      setPaywallVisible(true);
+    }
+
+    refreshProEntitlement().then(setEntitlements).catch(() => undefined);
     setMotionPhase(result.succeeded ? "success" : "answer");
     if (result.succeeded) await hapticAnswer();
     else await hapticStep();
     if (result.succeeded) setTimeout(() => setMotionPhase("answer"), reduceMotion ? 100 : 650);
+  };
+
+  const showPaywall = (message?: string) => {
+    setPaywallMessage(message ?? null);
+    setPaywallVisible(true);
+  };
+
+  const handlePurchase = async (productId: string) => {
+    if (purchasingProductId || restoreRunning) return;
+    setPurchasingProductId(productId);
+    setPaywallMessage(null);
+
+    const result = await purchasePro(productId);
+    setEntitlements(result.state);
+    setPaywallMessage(result.message);
+    setPurchasingProductId(null);
+
+    if (result.status === "purchased" && result.state.pro) {
+      await hapticAnswer();
+      setTimeout(() => setPaywallVisible(false), 420);
+    } else if (result.status !== "cancelled") {
+      await hapticStep();
+    }
+  };
+
+  const handleRestore = async () => {
+    if (restoreRunning || purchasingProductId) return;
+    setRestoreRunning(true);
+    setPaywallMessage(null);
+
+    const result = await restoreProPurchases();
+    setEntitlements(result.state);
+    setPaywallMessage(result.message);
+    setRestoreRunning(false);
+
+    if (result.state.pro) {
+      await hapticAnswer();
+      setTimeout(() => setPaywallVisible(false), 420);
+    } else {
+      await hapticStep();
+    }
+  };
+
+  const startPremiumShortcutGuide = async () => {
+    if (!bestResult || !shortcutPlan.applicable) return;
+
+    const current = await refreshProEntitlement();
+    setEntitlements(current);
+
+    if (!proFeatureAccess(current)) {
+      showPaywall("Premium-Automationen und App-Kurzbefehle gehören zu CanMyPhone Pro.");
+      await hapticStep();
+      return;
+    }
+
+    await startGuide(bestResult, shortcutPlan.steps, shortcutPlan.title);
   };
 
   const applyFeedback = async (feedback: SolutionFeedback) => {
@@ -616,7 +719,7 @@ export default function App() {
                           variant="glass"
                           style={styles.secondaryAction}
                           label="Automation vorbereiten"
-                          onPress={() => startGuide(bestResult, shortcutPlan.steps, shortcutPlan.title)}
+                          onPress={() => startPremiumShortcutGuide().catch(() => undefined)}
                         />
                       </GlassSurface>
                     ) : null}
@@ -730,6 +833,32 @@ export default function App() {
                   <Text style={styles.heroSubtext}>Wenige Einstellungen, klar erklärt und jederzeit zurücksetzbar.</Text>
                 </View>
 
+                <ContentSurface emphasis={entitlements.pro ? "active" : "quiet"} style={styles.proCard}>
+                  <View style={styles.proHeader}>
+                    <View style={styles.proTitleWrap}>
+                      <Text style={styles.proEyebrow}>CANMYPHONE PRO</Text>
+                      <Text style={styles.proTitle}>{entitlements.pro ? "Pro ist aktiv." : "Mehr automatisch erledigen."}</Text>
+                      <Text style={styles.proText}>
+                        {entitlements.pro
+                          ? "Automationen, Premium-Kurzbefehle und unterstützte direkte Aktionen sind freigeschaltet."
+                          : entitlements.freeAutomaticActionUsed
+                            ? "Deine kostenlose automatische Aktion wurde genutzt. Mit Pro bleiben unterstützte Automationen freigeschaltet."
+                            : "Eine automatische Aktion ist kostenlos. Danach schaltet Pro unterstützte Automationen und Premium-Kurzbefehle frei."}
+                      </Text>
+                    </View>
+                    <View style={[styles.proStatus, entitlements.pro && styles.proStatusActive]}>
+                      <Text style={[styles.proStatusText, entitlements.pro && styles.proStatusTextActive]}>{entitlements.pro ? "AKTIV" : "FREE"}</Text>
+                    </View>
+                  </View>
+                  <LiquidButton
+                    variant={entitlements.pro ? "glass" : "primary"}
+                    label={entitlements.pro ? "Käufe wiederherstellen" : "CanMyPhone Pro ansehen"}
+                    onPress={() => entitlements.pro ? handleRestore().catch(() => undefined) : showPaywall()}
+                    loading={entitlements.pro && restoreRunning}
+                    style={styles.proAction}
+                  />
+                </ContentSurface>
+
                 <ContentSurface emphasis="active" style={styles.youCard}>
                   <View style={styles.youRow}>
                     <View style={styles.youTextWrap}>
@@ -792,6 +921,20 @@ export default function App() {
 
         {!guideSession ? <FloatingTabBar selected={tab} onSelect={switchTab} /> : null}
       </KeyboardAvoidingView>
+
+      <ProPaywall
+        visible={paywallVisible}
+        products={proProducts}
+        loadingProducts={storeLoading}
+        purchasingProductId={purchasingProductId}
+        restoring={restoreRunning}
+        message={paywallMessage}
+        onClose={() => {
+          if (!purchasingProductId && !restoreRunning) setPaywallVisible(false);
+        }}
+        onPurchase={(productId) => handlePurchase(productId).catch(() => undefined)}
+        onRestore={() => handleRestore().catch(() => undefined)}
+      />
 
       <ActionTransitionV2 visible={isSearching || actionRunning} reduceMotion={reduceMotion} label={transitionLabel} />
     </SafeAreaView>
@@ -899,6 +1042,17 @@ const styles = StyleSheet.create({
   discoveryTitle: { fontSize: 18, lineHeight: 23, fontWeight: "700", color: "#1F2A37" },
   discoverySummary: { marginTop: 5, fontSize: 13, lineHeight: 18, color: "#748090" },
   discoveryCTA: { marginTop: 10, fontSize: 13, fontWeight: "600", color: "#007AFF" },
+  proCard: { borderRadius: 30, padding: 20, overflow: "hidden", marginBottom: 14 },
+  proHeader: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  proTitleWrap: { flex: 1 },
+  proEyebrow: { ...liquidIce.type.eyebrow, color: liquidIce.color.automation },
+  proTitle: { marginTop: 7, fontSize: 20, lineHeight: 25, fontWeight: "800", color: liquidIce.color.textPrimary },
+  proText: { marginTop: 7, fontSize: 13, lineHeight: 19, color: liquidIce.color.textSecondary },
+  proStatus: { minWidth: 52, minHeight: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: liquidIce.color.content, borderWidth: StyleSheet.hairlineWidth, borderColor: liquidIce.color.contentBorder },
+  proStatusActive: { backgroundColor: "rgba(39,133,110,0.09)", borderColor: "rgba(39,133,110,0.30)" },
+  proStatusText: { fontSize: 9, fontWeight: "900", letterSpacing: 0.7, color: liquidIce.color.textTertiary },
+  proStatusTextActive: { color: liquidIce.color.success },
+  proAction: { marginTop: 16 },
   youCard: { borderRadius: 30, padding: 20, overflow: "hidden" },
   youRow: { flexDirection: "row", gap: 14, alignItems: "center" },
   youTextWrap: { flex: 1 },

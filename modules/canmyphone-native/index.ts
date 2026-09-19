@@ -8,7 +8,11 @@ export type {
   PermissionKind,
   PermissionResult,
   PermissionStatus,
-  ShortcutsDestination
+  ShortcutsDestination,
+  StoreEntitlementResult,
+  StoreProductInfo,
+  StorePurchaseResult,
+  StorePurchaseStatus
 } from "./src/CanMyPhoneNative.types";
 
 function loadNativeModule(): NativeModuleShape | null {

@@ -4,6 +4,7 @@ import UIKit
 import UserNotifications
 import AVFoundation
 import Photos
+import StoreKit
 
 #if canImport(FoundationModels)
 import FoundationModels
@@ -94,6 +95,115 @@ public final class CanMyPhoneNativeModule: Module {
 
     AsyncFunction("setPremiumEntitlement") { (enabled: Bool) async -> Void in
       UserDefaults.standard.set(enabled, forKey: "CanMyPhoneProEnabled")
+    }
+
+    AsyncFunction("storeProducts") { (productIDs: [String]) async throws -> [[String: Any]] in
+      guard #available(iOS 15.0, *) else { return [] }
+      let products = try await Product.products(for: productIDs)
+      return products.map { product in
+        var value: [String: Any] = [
+          "id": product.id,
+          "displayName": product.displayName,
+          "description": product.description,
+          "displayPrice": product.displayPrice,
+          "price": NSDecimalNumber(decimal: product.price).doubleValue,
+          "type": self.storeProductType(product.type)
+        ]
+
+        if let subscription = product.subscription {
+          value["subscriptionPeriodValue"] = subscription.subscriptionPeriod.value
+          value["subscriptionPeriodUnit"] = self.storeSubscriptionUnit(subscription.subscriptionPeriod.unit)
+        }
+
+        return value
+      }
+    }
+
+    AsyncFunction("purchaseProduct") { (productID: String) async -> [String: Any] in
+      guard #available(iOS 15.0, *) else {
+        return [
+          "status": "failed",
+          "productId": productID,
+          "message": "StoreKit 2 wird von diesem iOS-Build nicht unterstützt."
+        ]
+      }
+
+      do {
+        guard let product = try await Product.products(for: [productID]).first else {
+          return [
+            "status": "failed",
+            "productId": productID,
+            "message": "Dieses Produkt ist im App Store momentan nicht verfügbar."
+          ]
+        }
+
+        let purchaseResult = try await product.purchase()
+        switch purchaseResult {
+        case .success(let verification):
+          switch verification {
+          case .verified(let transaction):
+            await transaction.finish()
+            UserDefaults.standard.set(true, forKey: "CanMyPhoneProEnabled")
+            return [
+              "status": "purchased",
+              "productId": productID,
+              "message": "CanMyPhone Pro ist jetzt aktiv."
+            ]
+          case .unverified:
+            return [
+              "status": "failed",
+              "productId": productID,
+              "message": "Der Kauf konnte nicht sicher verifiziert werden."
+            ]
+          }
+        case .pending:
+          return [
+            "status": "pending",
+            "productId": productID,
+            "message": "Der Kauf wartet noch auf Bestätigung."
+          ]
+        case .userCancelled:
+          return [
+            "status": "cancelled",
+            "productId": productID,
+            "message": "Der Kauf wurde abgebrochen."
+          ]
+        @unknown default:
+          return [
+            "status": "failed",
+            "productId": productID,
+            "message": "Der App Store hat einen unbekannten Kaufstatus gemeldet."
+          ]
+        }
+      } catch {
+        return [
+          "status": "failed",
+          "productId": productID,
+          "message": "Der Kauf konnte gerade nicht abgeschlossen werden."
+        ]
+      }
+    }
+
+    AsyncFunction("currentStoreEntitlements") { (productIDs: [String]) async -> [String: Any] in
+      guard #available(iOS 15.0, *) else {
+        UserDefaults.standard.set(false, forKey: "CanMyPhoneProEnabled")
+        return ["pro": false, "activeProductIds": []]
+      }
+
+      let result = await self.storeEntitlementState(productIDs: productIDs)
+      UserDefaults.standard.set(result.pro, forKey: "CanMyPhoneProEnabled")
+      return ["pro": result.pro, "activeProductIds": result.activeProductIDs]
+    }
+
+    AsyncFunction("restorePurchases") { (productIDs: [String]) async throws -> [String: Any] in
+      guard #available(iOS 15.0, *) else {
+        return ["pro": false, "activeProductIds": []]
+      }
+
+      try await AppStore.sync()
+      let result = await self.storeEntitlementState(productIDs: productIDs)
+      UserDefaults.standard.set(result.pro, forKey: "CanMyPhoneProEnabled")
+      return ["pro": result.pro, "activeProductIds": result.activeProductIDs]
     }
 
     AsyncFunction("openAppSettings") { () async -> Bool in
@@ -238,6 +348,55 @@ public final class CanMyPhoneNativeModule: Module {
       return permissionResult(granted: false, status: "notDetermined", canOpenSettings: true, message: "CanMyPhone hat noch nicht nach Fotozugriff gefragt.")
     @unknown default:
       return permissionResult(granted: false, status: "restricted", canOpenSettings: true, message: "Der Fotozugriffsstatus ist unbekannt.")
+    }
+  }
+
+  @available(iOS 15.0, *)
+  private func storeEntitlementState(productIDs: [String]) async -> (pro: Bool, activeProductIDs: [String]) {
+    var active: [String] = []
+    let now = Date()
+
+    for await verification in Transaction.currentEntitlements {
+      guard case .verified(let transaction) = verification else { continue }
+      guard productIDs.contains(transaction.productID) else { continue }
+      guard transaction.revocationDate == nil else { continue }
+      guard transaction.isUpgraded == false else { continue }
+      if let expirationDate = transaction.expirationDate, expirationDate <= now { continue }
+      active.append(transaction.productID)
+    }
+
+    return (!active.isEmpty, Array(Set(active)).sorted())
+  }
+
+  @available(iOS 15.0, *)
+  private func storeProductType(_ type: Product.ProductType) -> String {
+    switch type {
+    case .consumable:
+      return "consumable"
+    case .nonConsumable:
+      return "non-consumable"
+    case .autoRenewable:
+      return "auto-renewable"
+    case .nonRenewable:
+      return "non-renewing"
+    default:
+      return "unknown"
+    }
+  }
+
+  @available(iOS 15.0, *)
+  private func storeSubscriptionUnit(_ unit: Product.SubscriptionPeriod.Unit) -> String {
+    switch unit {
+    case .day:
+      return "day"
+    case .week:
+      return "week"
+    case .month:
+      return "month"
+    case .year:
+      return "year"
+    @unknown default:
+      return "unknown"
     }
   }
 
