@@ -84,7 +84,7 @@ export function ProPaywall({
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <SafeAreaView style={styles.overlay}>
-        <Pressable style={StyleSheet.absoluteFillObject} onPress={onClose} accessibilityLabel="Pro-Fenster schließen" />
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Pro-Fenster schließen" />
         <Animated.View
           style={[
             styles.animatedWrap,
