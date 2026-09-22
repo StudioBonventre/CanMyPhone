@@ -110,7 +110,12 @@ export function ProPaywall({
           <GlassSurface variant="floating" style={styles.sheet}>
             <View pointerEvents="none" style={styles.ambientOrbA} />
             <View pointerEvents="none" style={styles.ambientOrbB} />
-
+            <ScrollView
+              style={styles.sheetScroll}
+              contentContainerStyle={styles.sheetContent}
+              showsVerticalScrollIndicator={false}
+              bounces={false}
+            >
             <View style={styles.topRow}>
               <View>
                 <Text style={styles.eyebrow}>CANMYPHONE PRO</Text>
@@ -139,7 +144,7 @@ export function ProPaywall({
               ))}
             </View>
 
-            <ScrollView style={styles.plans} contentContainerStyle={styles.planList} showsVerticalScrollIndicator={false}>
+            <View style={styles.plans}>
               {loadingProducts ? (
                 <ContentSurface emphasis="active" style={styles.loadingCard}>
                   <ActivityIndicator color={liquidIce.color.accent} />
@@ -179,7 +184,7 @@ export function ProPaywall({
                   </Text>
                 </ContentSurface>
               )}
-            </ScrollView>
+            </View>
 
             {message ? <Text style={styles.message}>{message}</Text> : null}
 
@@ -205,6 +210,7 @@ export function ProPaywall({
                 <Text style={styles.legalLink}>Nutzungsbedingungen</Text>
               </Pressable>
             </View>
+            </ScrollView>
           </GlassSurface>
         </Animated.View>
       </SafeAreaView>
@@ -216,7 +222,7 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     justifyContent: "flex-end",
-    backgroundColor: "rgba(9,17,28,0.18)"
+    backgroundColor: "rgba(9,17,28,0.58)"
   },
   animatedWrap: {
     paddingHorizontal: 10,
@@ -225,8 +231,16 @@ const styles = StyleSheet.create({
   sheet: {
     maxHeight: "94%",
     borderRadius: 36,
+    padding: 0,
+    overflow: "hidden",
+    backgroundColor: "rgba(247,250,255,0.96)"
+  },
+  sheetScroll: {
+    maxHeight: "100%"
+  },
+  sheetContent: {
     padding: 22,
-    overflow: "hidden"
+    paddingBottom: 24
   },
   ambientOrbA: {
     position: "absolute",
@@ -314,9 +328,6 @@ const styles = StyleSheet.create({
   },
   plans: {
     marginTop: 22,
-    maxHeight: 190
-  },
-  planList: {
     gap: 10
   },
   planPressable: {

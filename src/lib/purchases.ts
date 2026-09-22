@@ -40,6 +40,23 @@ async function cachedState(): Promise<EntitlementState> {
   return await loadEntitlementState() ?? DEFAULT_ENTITLEMENTS;
 }
 
+async function developmentProState(state: EntitlementState): Promise<EntitlementState> {
+  const next = mergeStoreProState(state, true);
+  await saveEntitlementState(next);
+
+  try {
+    const sync = CanMyPhoneNative?.setPremiumEntitlement;
+    if (typeof sync === "function") {
+      await sync.call(CanMyPhoneNative, true);
+    }
+  } catch {
+    // A development JS bundle may temporarily run inside an older native dev client.
+    // Pro should still stay unlocked for UI and JS-side testing.
+  }
+
+  return next;
+}
+
 export async function fetchProProducts(): Promise<ProStoreProduct[]> {
   const fn = CanMyPhoneNative?.storeProducts;
   if (typeof fn !== "function") return [];
@@ -60,6 +77,8 @@ export async function fetchProProducts(): Promise<ProStoreProduct[]> {
 
 export async function refreshProEntitlement(): Promise<EntitlementState> {
   const stored = await cachedState();
+  if (__DEV__) return developmentProState(stored);
+
   const fn = CanMyPhoneNative?.currentStoreEntitlements;
   if (typeof fn !== "function") return stored;
 
@@ -75,6 +94,11 @@ export async function refreshProEntitlement(): Promise<EntitlementState> {
 
 export async function purchasePro(productId: string): Promise<ProPurchaseResult> {
   const state = await cachedState();
+  if (__DEV__) {
+    const next = await developmentProState(state);
+    return { status: "purchased", message: "Development Build: CanMyPhone Pro ist aktiv.", state: next };
+  }
+
   if (!isProProductId(productId)) {
     return { status: "failed", message: "Dieses CanMyPhone-Pro-Produkt ist nicht bekannt.", state };
   }
@@ -102,6 +126,11 @@ export async function purchasePro(productId: string): Promise<ProPurchaseResult>
 
 export async function restoreProPurchases(): Promise<ProPurchaseResult> {
   const state = await cachedState();
+  if (__DEV__) {
+    const next = await developmentProState(state);
+    return { status: "purchased", message: "Development Build: CanMyPhone Pro ist aktiv.", state: next };
+  }
+
   const fn = CanMyPhoneNative?.restorePurchases;
   if (typeof fn !== "function") {
     return {

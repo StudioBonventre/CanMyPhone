@@ -152,7 +152,9 @@ export default function App() {
   const [actionResult, setActionResult] = useState<DirectActionResult | null>(null);
   const [actionRunning, setActionRunning] = useState(false);
   const [answerFeedback, setAnswerFeedback] = useState<SolutionFeedback | null>(null);
-  const [entitlements, setEntitlements] = useState<EntitlementState>(DEFAULT_ENTITLEMENTS);
+  const [entitlements, setEntitlements] = useState<EntitlementState>(() =>
+    __DEV__ ? { ...DEFAULT_ENTITLEMENTS, pro: true } : DEFAULT_ENTITLEMENTS
+  );
   const [proProducts, setProProducts] = useState<ProStoreProduct[]>([]);
   const [storeLoading, setStoreLoading] = useState(true);
   const [paywallVisible, setPaywallVisible] = useState(false);
