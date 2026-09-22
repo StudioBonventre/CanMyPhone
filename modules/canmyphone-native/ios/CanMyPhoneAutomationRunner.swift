@@ -61,11 +61,17 @@ enum CanMyPhoneAutomationRunner {
   }
 
   private static func hasActiveProEntitlement() async -> Bool {
+    #if DEBUG
+    CanMyPhoneAutomationStore.defaults?.set(true, forKey: "CanMyPhoneProEnabled")
+    UserDefaults.standard.set(true, forKey: "CanMyPhoneProEnabled")
+    return true
+    #else
     guard #available(iOS 15.0, *) else { return false }
     for await entitlement in Transaction.currentEntitlements {
       if case .verified(let transaction) = entitlement, proProductIDs.contains(transaction.productID), transaction.revocationDate == nil, transaction.expirationDate.map({ $0 > Date() }) ?? true { return true }
     }
     return false
+    #endif
   }
   private static func safetyFingerprint(item: [String: Any], definition: [String: Any]) -> String? {
     guard let id = item["id"], let version = item["version"], let risk = item["riskLevel"], let conditions = definition["conditions"] as? [[String: Any]], let actions = definition["actions"] as? [[String: Any]] else { return nil }
