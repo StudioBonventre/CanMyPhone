@@ -24,8 +24,7 @@ export function FloatingTabBar({ selected, onSelect }: { selected: AppTab; onSel
             onPress={() => onSelect(tab)}
             style={({ pressed }) => [styles.pressable, pressed && styles.pressed]}
           >
-            <View style={[styles.tabContent, active ? styles.active : styles.inactive]}>
-              {active ? <View pointerEvents="none" style={styles.activeRim} /> : null}
+            <View style={[styles.tabContent, active && styles.active]}>
               <Text style={active ? styles.activeText : styles.inactiveText}>{labels[tab]}</Text>
             </View>
           </Pressable>
@@ -37,54 +36,40 @@ export function FloatingTabBar({ selected, onSelect }: { selected: AppTab; onSel
 
 const styles = StyleSheet.create({
   bar: {
-    height: 64,
-    borderRadius: 32,
+    height: 58,
+    borderRadius: 29,
     flexDirection: "row",
     alignItems: "center",
-    padding: 7,
+    padding: 5,
     gap: 4,
     overflow: "hidden"
   },
   pressable: {
     flex: 1,
-    minHeight: 50,
-    borderRadius: 25
+    minHeight: 48,
+    borderRadius: 24
   },
   pressed: {
     transform: [{ scale: liquidIce.motion.pressScale }],
-    opacity: 0.88
+    opacity: 0.82
   },
   tabContent: {
     flex: 1,
-    minHeight: 50,
-    borderRadius: 25,
+    minHeight: 48,
+    borderRadius: 24,
     alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden"
+    justifyContent: "center"
   },
   active: {
-    backgroundColor: liquidIce.color.contentActive,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: liquidIce.color.contentBorderActive
-  },
-  inactive: {
-    opacity: 0.68
-  },
-  activeRim: {
-    position: "absolute",
-    top: 0,
-    left: 16,
-    right: 16,
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: "rgba(255,255,255,0.52)"
+    backgroundColor: liquidIce.color.textPrimary
   },
   activeText: {
     ...liquidIce.type.labelLarge,
-    color: liquidIce.color.textPrimary
+    color: "#FFFFFF"
   },
   inactiveText: {
     ...liquidIce.type.labelLarge,
-    color: liquidIce.color.textTertiary,
+    color: liquidIce.color.textSecondary,
     fontWeight: "500"
   }
 });

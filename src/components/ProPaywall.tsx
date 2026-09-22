@@ -14,7 +14,6 @@ import {
 import { PRO_MONTHLY_PRODUCT_ID, PRO_YEARLY_PRODUCT_ID, type ProStoreProduct } from "../lib/purchases";
 import { liquidIce } from "../theme/liquidIce";
 import { ContentSurface } from "./ContentSurface";
-import { GlassSurface } from "./GlassSurface";
 import { LiquidButton } from "./LiquidButton";
 
 const PRIVACY_URL = "https://studiobonventre.com/datenschutz";
@@ -39,8 +38,8 @@ function planLabel(product: ProStoreProduct): string {
 }
 
 function planDetail(product: ProStoreProduct): string {
-  if (product.id === PRO_YEARLY_PRODUCT_ID) return "12 Monate · beste Wahl";
-  if (product.id === PRO_MONTHLY_PRODUCT_ID) return "1 Monat · flexibel";
+  if (product.id === PRO_YEARLY_PRODUCT_ID) return "12 Monate";
+  if (product.id === PRO_MONTHLY_PRODUCT_ID) return "1 Monat";
   return product.description;
 }
 
@@ -65,8 +64,8 @@ export function ProPaywall({
 
     Animated.spring(reveal, {
       toValue: 1,
-      damping: 18,
-      stiffness: 180,
+      damping: 20,
+      stiffness: 190,
       mass: 0.9,
       useNativeDriver: true
     }).start();
@@ -90,128 +89,114 @@ export function ProPaywall({
             styles.animatedWrap,
             {
               opacity: reveal,
-              transform: [
-                {
-                  translateY: reveal.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [26, 0]
-                  })
-                },
-                {
-                  scale: reveal.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0.985, 1]
-                  })
-                }
-              ]
+              transform: [{
+                translateY: reveal.interpolate({ inputRange: [0, 1], outputRange: [22, 0] })
+              }]
             }
           ]}
         >
-          <GlassSurface variant="floating" style={styles.sheet}>
-            <View pointerEvents="none" style={styles.ambientOrbA} />
-            <View pointerEvents="none" style={styles.ambientOrbB} />
+          <View style={styles.sheet}>
             <ScrollView
               style={styles.sheetScroll}
               contentContainerStyle={styles.sheetContent}
               showsVerticalScrollIndicator={false}
               bounces={false}
             >
-            <View style={styles.topRow}>
-              <View>
-                <Text style={styles.eyebrow}>CANMYPHONE PRO</Text>
-                <Text style={styles.title}>Weniger tippen.{"\n"}Mehr erledigen.</Text>
-              </View>
-              <Pressable onPress={onClose} style={styles.closeButton} hitSlop={8} accessibilityLabel="Schließen">
-                <Text style={styles.closeText}>×</Text>
-              </Pressable>
-            </View>
-
-            <Text style={styles.subtitle}>
-              Pro schaltet unterstützte automatische Änderungen, Premium-Kurzbefehle und die schnellsten offiziellen iOS-Wege frei.
-            </Text>
-
-            <View style={styles.featureList}>
-              {[
-                "Unterstützte Einstellungen direkt ausführen",
-                "Premium-Automationen und App-Kurzbefehle",
-                "Offizielle Deep Links und System-Handoffs",
-                "Neue Pro-Automationen mit kommenden Updates"
-              ].map((feature) => (
-                <View key={feature} style={styles.featureRow}>
-                  <View style={styles.featureOrb}><Text style={styles.featureCheck}>✓</Text></View>
-                  <Text style={styles.featureText}>{feature}</Text>
+              <View style={styles.topRow}>
+                <View style={styles.titleWrap}>
+                  <Text style={styles.eyebrow}>CANMYPHONE PRO</Text>
+                  <Text style={styles.title}>Mehr automatisieren.</Text>
                 </View>
-              ))}
-            </View>
+                <Pressable onPress={onClose} style={styles.closeButton} hitSlop={8} accessibilityLabel="Schließen">
+                  <Text style={styles.closeText}>×</Text>
+                </Pressable>
+              </View>
 
-            <View style={styles.plans}>
-              {loadingProducts ? (
-                <ContentSurface emphasis="active" style={styles.loadingCard}>
-                  <ActivityIndicator color={liquidIce.color.accent} />
-                  <Text style={styles.loadingText}>Preise aus dem App Store werden geladen …</Text>
-                </ContentSurface>
-              ) : orderedProducts.length ? (
-                orderedProducts.map((product) => {
-                  const yearly = product.id === PRO_YEARLY_PRODUCT_ID;
-                  const buying = purchasingProductId === product.id;
-                  return (
-                    <Pressable
-                      key={product.id}
-                      onPress={() => onPurchase(product.id)}
-                      disabled={Boolean(purchasingProductId) || restoring}
-                      style={({ pressed }) => [styles.planPressable, pressed && styles.planPressed]}
-                    >
-                      <ContentSurface emphasis={yearly ? "active" : "quiet"} style={styles.planCard}>
-                        <View style={styles.planTextWrap}>
-                          <View style={styles.planTitleRow}>
-                            <Text style={styles.planTitle}>{planLabel(product)}</Text>
-                            {yearly ? <Text style={styles.bestBadge}>BESTE WAHL</Text> : null}
+              <Text style={styles.subtitle}>
+                Für komplexe Automationen, App-Kurzbefehle und unterstützte Integrationen.
+              </Text>
+
+              <View style={styles.featureList}>
+                {[
+                  "Komplexe Automationen",
+                  "App- und System-Kurzbefehle",
+                  "Unterstützte Drittanbieter-Integrationen"
+                ].map((feature) => (
+                  <View key={feature} style={styles.featureRow}>
+                    <View style={styles.featureDot}><Text style={styles.featureCheck}>✓</Text></View>
+                    <Text style={styles.featureText}>{feature}</Text>
+                  </View>
+                ))}
+              </View>
+
+              <View style={styles.plans}>
+                {loadingProducts ? (
+                  <ContentSurface emphasis="active" style={styles.loadingCard}>
+                    <ActivityIndicator color={liquidIce.color.textPrimary} />
+                    <Text style={styles.loadingText}>Preise werden geladen …</Text>
+                  </ContentSurface>
+                ) : orderedProducts.length ? (
+                  orderedProducts.map((product) => {
+                    const yearly = product.id === PRO_YEARLY_PRODUCT_ID;
+                    const buying = purchasingProductId === product.id;
+                    return (
+                      <Pressable
+                        key={product.id}
+                        onPress={() => onPurchase(product.id)}
+                        disabled={Boolean(purchasingProductId) || restoring}
+                        style={({ pressed }) => [styles.planPressable, pressed && styles.planPressed]}
+                      >
+                        <ContentSurface emphasis={yearly ? "active" : "quiet"} style={styles.planCard}>
+                          <View style={styles.planTextWrap}>
+                            <View style={styles.planTitleRow}>
+                              <Text style={styles.planTitle}>{planLabel(product)}</Text>
+                              {yearly ? <Text style={styles.bestBadge}>EMPFOHLEN</Text> : null}
+                            </View>
+                            <Text style={styles.planDetail}>{planDetail(product)}</Text>
                           </View>
-                          <Text style={styles.planDetail}>{planDetail(product)}</Text>
-                        </View>
-                        <View style={styles.priceWrap}>
-                          {buying ? <ActivityIndicator color={liquidIce.color.accent} /> : <Text style={styles.price}>{product.displayPrice}</Text>}
-                        </View>
-                      </ContentSurface>
-                    </Pressable>
-                  );
-                })
-              ) : (
-                <ContentSurface style={styles.configurationCard}>
-                  <Text style={styles.configurationTitle}>StoreKit-Produkte noch nicht verfügbar</Text>
-                  <Text style={styles.configurationText}>
-                    Lege die beiden CanMyPhone-Pro-Abos in App Store Connect an. Danach erscheinen die lokalisierten Preise hier automatisch.
-                  </Text>
-                </ContentSurface>
-              )}
-            </View>
+                          <View style={styles.priceWrap}>
+                            {buying ? <ActivityIndicator color={liquidIce.color.textPrimary} /> : <Text style={styles.price}>{product.displayPrice}</Text>}
+                          </View>
+                        </ContentSurface>
+                      </Pressable>
+                    );
+                  })
+                ) : (
+                  <ContentSurface style={styles.configurationCard}>
+                    <Text style={styles.configurationTitle}>Abos noch nicht verfügbar</Text>
+                    <Text style={styles.configurationText}>
+                      Die App-Store-Produkte sind für diesen Build noch nicht verfügbar.
+                    </Text>
+                  </ContentSurface>
+                )}
+              </View>
 
-            {message ? <Text style={styles.message}>{message}</Text> : null}
+              {message ? <Text style={styles.message}>{message}</Text> : null}
 
-            <LiquidButton
-              variant="glass"
-              label={restoring ? "Wiederherstellen …" : "Käufe wiederherstellen"}
-              loading={restoring}
-              disabled={Boolean(purchasingProductId)}
-              onPress={onRestore}
-              style={styles.restoreButton}
-            />
+              <LiquidButton
+                variant="glass"
+                label={restoring ? "Wiederherstellen …" : "Käufe wiederherstellen"}
+                loading={restoring}
+                disabled={Boolean(purchasingProductId)}
+                onPress={onRestore}
+                style={styles.restoreButton}
+              />
 
-            <Text style={styles.renewalText}>
-              Abonnements verlängern sich automatisch, bis du sie in deinen Apple-Account-Einstellungen kündigst. Der angezeigte Preis stammt direkt aus dem App Store.
-            </Text>
+              <Text style={styles.renewalText}>
+                Abonnements verlängern sich automatisch, bis du sie in deinen Apple-Account-Einstellungen kündigst.
+              </Text>
 
-            <View style={styles.legalRow}>
-              <Pressable onPress={() => Linking.openURL(PRIVACY_URL).catch(() => undefined)}>
-                <Text style={styles.legalLink}>Datenschutz</Text>
-              </Pressable>
-              <Text style={styles.legalDot}>·</Text>
-              <Pressable onPress={() => Linking.openURL(TERMS_URL).catch(() => undefined)}>
-                <Text style={styles.legalLink}>Nutzungsbedingungen</Text>
-              </Pressable>
-            </View>
+              <View style={styles.legalRow}>
+                <Pressable onPress={() => Linking.openURL(PRIVACY_URL).catch(() => undefined)}>
+                  <Text style={styles.legalLink}>Datenschutz</Text>
+                </Pressable>
+                <Text style={styles.legalDot}>·</Text>
+                <Pressable onPress={() => Linking.openURL(TERMS_URL).catch(() => undefined)}>
+                  <Text style={styles.legalLink}>Nutzungsbedingungen</Text>
+                </Pressable>
+              </View>
             </ScrollView>
-          </GlassSurface>
+          </View>
         </Animated.View>
       </SafeAreaView>
     </Modal>
@@ -222,18 +207,17 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     justifyContent: "flex-end",
-    backgroundColor: "rgba(9,17,28,0.58)"
+    backgroundColor: "rgba(0,0,0,0.38)"
   },
   animatedWrap: {
     paddingHorizontal: 10,
     paddingBottom: 6
   },
   sheet: {
-    maxHeight: "94%",
-    borderRadius: 36,
-    padding: 0,
+    maxHeight: "92%",
+    borderRadius: 30,
     overflow: "hidden",
-    backgroundColor: "rgba(247,250,255,0.96)"
+    backgroundColor: "#FFFFFF"
   },
   sheetScroll: {
     maxHeight: "100%"
@@ -242,33 +226,18 @@ const styles = StyleSheet.create({
     padding: 22,
     paddingBottom: 24
   },
-  ambientOrbA: {
-    position: "absolute",
-    width: 250,
-    height: 250,
-    borderRadius: 125,
-    right: -90,
-    top: -90,
-    backgroundColor: "rgba(128,222,255,0.10)"
-  },
-  ambientOrbB: {
-    position: "absolute",
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    left: -110,
-    bottom: 70,
-    backgroundColor: "rgba(151,137,255,0.055)"
-  },
   topRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 12
   },
+  titleWrap: {
+    flex: 1
+  },
   eyebrow: {
     ...liquidIce.type.eyebrow,
-    color: liquidIce.color.automation
+    color: liquidIce.color.textTertiary
   },
   title: {
     marginTop: 8,
@@ -276,53 +245,51 @@ const styles = StyleSheet.create({
     color: liquidIce.color.textPrimary
   },
   closeButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: liquidIce.color.content
+    backgroundColor: "#F0F0F0"
   },
   closeText: {
-    fontSize: 27,
-    lineHeight: 29,
+    fontSize: 26,
+    lineHeight: 28,
     fontWeight: "300",
     color: liquidIce.color.textSecondary
   },
   subtitle: {
-    marginTop: 13,
+    marginTop: 11,
     maxWidth: 340,
     ...liquidIce.type.bodyMedium,
     color: liquidIce.color.textSecondary
   },
   featureList: {
     marginTop: 20,
-    gap: 10
+    gap: 12
   },
   featureRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 10
   },
-  featureOrb: {
-    width: 25,
-    height: 25,
-    borderRadius: 13,
+  featureDot: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(8,123,255,0.09)",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(128,222,255,0.38)"
+    backgroundColor: "#EEEEEE"
   },
   featureCheck: {
     fontSize: 12,
-    fontWeight: "900",
-    color: liquidIce.color.accent
+    fontWeight: "800",
+    color: liquidIce.color.textPrimary
   },
   featureText: {
     flex: 1,
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 19,
     fontWeight: "600",
     color: liquidIce.color.textPrimary
   },
@@ -331,17 +298,17 @@ const styles = StyleSheet.create({
     gap: 10
   },
   planPressable: {
-    borderRadius: 25
+    borderRadius: 20
   },
   planPressed: {
     transform: [{ scale: liquidIce.motion.pressScale }],
-    opacity: 0.9
+    opacity: 0.84
   },
   planCard: {
-    minHeight: 76,
-    borderRadius: 25,
+    minHeight: 72,
+    borderRadius: 20,
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 13,
     flexDirection: "row",
     alignItems: "center"
   },
@@ -355,18 +322,18 @@ const styles = StyleSheet.create({
   },
   planTitle: {
     fontSize: 16,
-    fontWeight: "800",
+    fontWeight: "700",
     color: liquidIce.color.textPrimary
   },
   bestBadge: {
     fontSize: 8,
     lineHeight: 11,
-    fontWeight: "900",
-    letterSpacing: 0.7,
-    color: liquidIce.color.accent
+    fontWeight: "800",
+    letterSpacing: 0.6,
+    color: liquidIce.color.textSecondary
   },
   planDetail: {
-    marginTop: 4,
+    marginTop: 3,
     ...liquidIce.type.caption,
     color: liquidIce.color.textTertiary
   },
@@ -376,28 +343,28 @@ const styles = StyleSheet.create({
   },
   price: {
     fontSize: 17,
-    fontWeight: "800",
+    fontWeight: "700",
     color: liquidIce.color.textPrimary
   },
   loadingCard: {
-    minHeight: 82,
-    borderRadius: 25,
+    minHeight: 76,
+    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
-    gap: 9
+    gap: 8
   },
   loadingText: {
     ...liquidIce.type.caption,
     color: liquidIce.color.textSecondary
   },
   configurationCard: {
-    minHeight: 96,
-    borderRadius: 25,
-    padding: 16
+    minHeight: 88,
+    borderRadius: 20,
+    padding: 15
   },
   configurationTitle: {
     fontSize: 14,
-    fontWeight: "800",
+    fontWeight: "700",
     color: liquidIce.color.textPrimary
   },
   configurationText: {
@@ -407,7 +374,6 @@ const styles = StyleSheet.create({
   },
   message: {
     marginTop: 12,
-    paddingHorizontal: 4,
     fontSize: 12,
     lineHeight: 17,
     textAlign: "center",
@@ -418,7 +384,6 @@ const styles = StyleSheet.create({
   },
   renewalText: {
     marginTop: 14,
-    paddingHorizontal: 4,
     fontSize: 10,
     lineHeight: 14,
     textAlign: "center",
@@ -433,7 +398,7 @@ const styles = StyleSheet.create({
   },
   legalLink: {
     fontSize: 10,
-    fontWeight: "700",
+    fontWeight: "600",
     color: liquidIce.color.textSecondary
   },
   legalDot: {

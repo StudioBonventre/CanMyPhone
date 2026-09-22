@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, TextInputProps } from "react-native";
-import { liquidIce, liquidIceShadow } from "../theme/liquidIce";
+import { liquidIce } from "../theme/liquidIce";
 import { GlassSurface } from "./GlassSurface";
 
 type Props = Pick<TextInputProps, "value" | "onChangeText" | "onSubmitEditing" | "onFocus" | "onBlur" | "accessibilityLabel"> & {
@@ -15,13 +15,13 @@ export function LiquidComposer({
   onFocus,
   onBlur,
   accessibilityLabel,
-  placeholder = "Was soll ich dir einstellen?",
+  placeholder = "Was soll für dich passieren?",
   onSend
 }: Props) {
   const [focused, setFocused] = useState(false);
 
   return (
-    <GlassSurface variant="floating" interactive style={[styles.shell, focused && styles.shellFocused]}>
+    <GlassSurface variant="floating" style={[styles.shell, focused && styles.shellFocused]}>
       <TextInput
         value={value}
         onChangeText={onChangeText}
@@ -55,22 +55,20 @@ export function LiquidComposer({
 
 const styles = StyleSheet.create({
   shell: {
-    height: 64,
-    borderRadius: 32,
+    height: 60,
+    borderRadius: 30,
     flexDirection: "row",
     alignItems: "center",
-    paddingLeft: 20,
-    paddingRight: 8,
+    paddingLeft: 18,
+    paddingRight: 6,
     overflow: "hidden"
   },
   shellFocused: {
-    borderWidth: 1,
-    borderColor: "rgba(128,222,255,0.66)",
-    ...liquidIceShadow.accent
+    borderColor: "#B8B8B8"
   },
   input: {
     flex: 1,
-    height: 56,
+    height: 54,
     paddingRight: 12,
     ...liquidIce.type.bodyLarge,
     color: liquidIce.color.textPrimary
@@ -81,17 +79,16 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: liquidIce.color.accent,
-    ...liquidIceShadow.accent
+    backgroundColor: liquidIce.color.textPrimary
   },
   sendPressed: {
     transform: [{ scale: liquidIce.motion.pressScale }],
-    backgroundColor: liquidIce.color.accentPressed
+    backgroundColor: "#2A2D32"
   },
   sendText: {
-    color: liquidIce.color.textOnAccent,
-    fontSize: 23,
-    lineHeight: 26,
+    color: "#FFFFFF",
+    fontSize: 22,
+    lineHeight: 25,
     fontWeight: "700"
   }
 });

@@ -2,29 +2,29 @@ import { Platform, ViewStyle } from "react-native";
 
 export const liquidIce = {
   color: {
-    bgApp: "#F8FCFF",
-    textPrimary: "#0B1320",
-    textSecondary: "#667788",
-    textTertiary: "#8795A5",
+    bgApp: "#F4F4F4",
+    textPrimary: "#171A20",
+    textSecondary: "#5C5E62",
+    textTertiary: "#8E8E93",
     textOnAccent: "#FFFFFF",
-    accent: "#087BFF",
-    accentPressed: "#006DE6",
-    success: "#27856E",
-    automation: "#2C73B5",
-    confirmation: "#6872A6",
-    glass: "rgba(255,255,255,0.19)",
-    glassStrong: "rgba(255,255,255,0.23)",
-    glassSubtle: "rgba(255,255,255,0.16)",
-    glassBorder: "rgba(255,255,255,0.50)",
-    glassBorderStrong: "rgba(255,255,255,0.62)",
-    content: "rgba(255,255,255,0.10)",
-    contentActive: "rgba(255,255,255,0.18)",
-    contentBorder: "rgba(255,255,255,0.28)",
-    contentBorderActive: "rgba(128,222,255,0.34)",
-    iceTint: "rgba(201,229,255,0.10)",
-    iceTintStrong: "rgba(184,222,255,0.16)",
-    cyanGlow: "rgba(128,222,255,0.24)",
-    divider: "rgba(70,86,104,0.13)"
+    accent: "#3E6AE1",
+    accentPressed: "#3457B2",
+    success: "#2E7D32",
+    automation: "#3E6AE1",
+    confirmation: "#7A5C27",
+    glass: "#FFFFFF",
+    glassStrong: "#FFFFFF",
+    glassSubtle: "#F7F7F7",
+    glassBorder: "#E5E5E5",
+    glassBorderStrong: "#DDDDDD",
+    content: "#FFFFFF",
+    contentActive: "#EEEEEE",
+    contentBorder: "#E5E5E5",
+    contentBorderActive: "#D7D7D7",
+    iceTint: "rgba(62,106,225,0.04)",
+    iceTintStrong: "rgba(62,106,225,0.07)",
+    cyanGlow: "rgba(62,106,225,0.12)",
+    divider: "#E2E2E2"
   },
   spacing: {
     xxs: 4,
@@ -36,29 +36,29 @@ export const liquidIce = {
     xxl: 32
   },
   radius: {
-    sm: 16,
-    md: 21,
-    lg: 24,
-    xl: 32,
+    sm: 14,
+    md: 18,
+    lg: 20,
+    xl: 28,
     full: 999
   },
   type: {
-    display: { fontSize: 36, lineHeight: 40, fontWeight: "700" as const, letterSpacing: -1.15 },
-    titleLarge: { fontSize: 31, lineHeight: 36, fontWeight: "700" as const, letterSpacing: -0.85 },
-    titleMedium: { fontSize: 23, lineHeight: 28, fontWeight: "600" as const, letterSpacing: -0.4 },
+    display: { fontSize: 34, lineHeight: 38, fontWeight: "700" as const, letterSpacing: -1.0 },
+    titleLarge: { fontSize: 28, lineHeight: 32, fontWeight: "700" as const, letterSpacing: -0.7 },
+    titleMedium: { fontSize: 22, lineHeight: 27, fontWeight: "600" as const, letterSpacing: -0.35 },
     bodyLarge: { fontSize: 16, lineHeight: 22, fontWeight: "400" as const },
     bodyMedium: { fontSize: 14, lineHeight: 20, fontWeight: "400" as const },
     labelLarge: { fontSize: 13, lineHeight: 17, fontWeight: "600" as const },
     caption: { fontSize: 11, lineHeight: 16, fontWeight: "400" as const },
-    eyebrow: { fontSize: 10, lineHeight: 13, fontWeight: "700" as const, letterSpacing: 0.9 }
+    eyebrow: { fontSize: 10, lineHeight: 13, fontWeight: "700" as const, letterSpacing: 0.7 }
   },
   motion: {
     press: 120,
-    focus: 220,
-    reveal: 360,
-    handoff: 520,
-    success: 650,
-    ambient: 11000,
+    focus: 180,
+    reveal: 260,
+    handoff: 360,
+    success: 500,
+    ambient: 9000,
     pressScale: 0.985
   }
 } as const;
@@ -66,37 +66,37 @@ export const liquidIce = {
 export const liquidIceShadow = {
   inset: Platform.select<ViewStyle>({
     ios: {
-      shadowColor: "#1A3857",
-      shadowOpacity: 0.045,
-      shadowRadius: 16,
-      shadowOffset: { width: 0, height: 4 }
+      shadowColor: "#000000",
+      shadowOpacity: 0.025,
+      shadowRadius: 5,
+      shadowOffset: { width: 0, height: 1 }
     },
     default: {}
   }) ?? {},
   surface: Platform.select<ViewStyle>({
     ios: {
-      shadowColor: "#1A3857",
-      shadowOpacity: 0.07,
-      shadowRadius: 24,
-      shadowOffset: { width: 0, height: 8 }
+      shadowColor: "#000000",
+      shadowOpacity: 0.04,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 3 }
     },
     default: {}
   }) ?? {},
   floating: Platform.select<ViewStyle>({
     ios: {
-      shadowColor: "#143861",
-      shadowOpacity: 0.11,
-      shadowRadius: 38,
-      shadowOffset: { width: 0, height: 14 }
+      shadowColor: "#000000",
+      shadowOpacity: 0.10,
+      shadowRadius: 22,
+      shadowOffset: { width: 0, height: 8 }
     },
     default: {}
   }) ?? {},
   accent: Platform.select<ViewStyle>({
     ios: {
-      shadowColor: "#087BFF",
-      shadowOpacity: 0.20,
-      shadowRadius: 32,
-      shadowOffset: { width: 0, height: 8 }
+      shadowColor: "#000000",
+      shadowOpacity: 0.08,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 4 }
     },
     default: {}
   }) ?? {}

@@ -1,35 +1,248 @@
-import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import React, { useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { AutomationPlan } from "../automation/types";
 import { liquidIce } from "../theme/liquidIce";
 import { ContentSurface } from "./ContentSurface";
-import { GlassSurface } from "./GlassSurface";
 import { LiquidButton } from "./LiquidButton";
 
 type Props = { plan: AutomationPlan; pro: boolean; onConnect: () => void };
-const execution = { "on-device": "Auf deinem iPhone", server: "Sicherer CanMyPhone-Server", "shortcut-handoff": "Apple Kurzbefehle", guided: "Mit deiner Bestätigung" } as const;
-const risk = { low: "Niedrig", medium: "Mittel", high: "Hoch · Bestätigung nötig" } as const;
-const auth = { "location-always": "Standort – Immer", oauth: "Tesla verbinden", "virtual-key": "Tesla Virtual Key", "explicit-confirmation": "Automation bestätigen" } as const;
 
-function Section({ title, items }: { title: string; items: string[] }) {
-  return <View style={styles.section}><Text style={styles.eyebrow}>{title}</Text>{items.map((item, index) => <ContentSurface key={`${title}-${index}`} style={styles.row}><Text style={styles.number}>{index + 1}</Text><Text style={styles.rowText}>{item}</Text></ContentSurface>)}</View>;
+const execution = {
+  "on-device": "Auf deinem iPhone",
+  server: "CanMyPhone Server",
+  "shortcut-handoff": "Apple Kurzbefehle",
+  guided: "Mit deiner Bestätigung"
+} as const;
+
+function triggerText(plan: AutomationPlan): string {
+  const trigger = plan.triggers[0];
+  if (!trigger) return "Wenn du sie startest";
+  if (trigger.kind === "geofence-exit") return "Wenn du einen festgelegten Bereich verlässt";
+  if (trigger.kind === "shortcut") return "Wenn Apple Kurzbefehle sie auslöst";
+  return "Wenn du sie startest";
+}
+
+function actionText(plan: AutomationPlan): string {
+  const action = plan.actions[0];
+  if (!action) return "Die gewünschte Aktion ausführen";
+  const id = action.capabilityId.toLowerCase();
+  if (id.includes("trunk") || id.includes("liftgate")) return "Heckkofferraum schließen";
+  if (id.includes("brightness")) return "Displayhelligkeit ändern";
+  return "Die gewünschte Aktion ausführen";
 }
 
 export function AutomationPlanPreview({ plan, pro, onConnect }: Props) {
-  return <GlassSurface variant="floating" style={styles.card}>
-    <View style={styles.header}><View style={styles.headerText}><Text style={styles.badge}>GEPRÜFTER AUTOMATIONSPLAN</Text><Text style={styles.title}>{plan.title}</Text></View><Text style={styles.risk}>{risk[plan.riskLevel]}</Text></View>
-    <Text style={styles.summary}>{plan.explanation[0]}</Text>
-    <View style={styles.metaRow}><ContentSurface style={styles.meta}><Text style={styles.metaLabel}>AUSFÜHRUNG</Text><Text style={styles.metaValue}>{execution[plan.executionMode]}</Text></ContentSurface><ContentSurface style={styles.meta}><Text style={styles.metaLabel}>PRO</Text><Text style={styles.metaValue}>{plan.requiresPro ? (pro ? "Enthalten" : "Erforderlich") : "Nicht nötig"}</Text></ContentSurface></View>
-    <Section title="WENN" items={["Du den Bereich um deinen geparkten Tesla verlässt"]} />
-    <Section title="CANMYPHONE PRÜFT" items={["Tesla ist verbunden und erreichbar", "Der hintere Kofferraum ist eindeutig offen", "Dein Pro-Zugang ist aktiv"]} />
-    <Section title="DANN" items={["Heckkofferraum über die offizielle Tesla Fleet API schließen", "Erfolg erst nach bestätigter Provider-Antwort anzeigen"]} />
-    <View style={styles.section}><Text style={styles.eyebrow}>EINMALIG NÖTIG</Text>{plan.authorizations.map((item) => <ContentSurface key={item.id} style={styles.authorization}><View style={styles.authorizationText}><Text style={styles.authorizationTitle}>{auth[item.kind]}</Text><Text style={styles.authorizationReason}>{item.reason}</Text></View><Text style={styles.once}>EINMAL</Text></ContentSurface>)}</View>
-    <View style={styles.section}><Text style={styles.eyebrow}>WENN ETWAS NICHT KLAPPT</Text>{plan.fallbacks.map((item) => <Text key={item.id} style={styles.fallback}>• {item.message}</Text>)}</View>
-    <ContentSurface emphasis="active" style={styles.truth}><Text style={styles.truthTitle}>Noch nicht erstellt</Text><Text style={styles.truthText}>CanMyPhone richtet zuerst die erforderlichen Verbindungen und Freigaben ein. Bis Tesla und iOS bestätigt sind, wird nichts als aktiv angezeigt.</Text></ContentSurface>
-    <LiquidButton style={styles.button} label="Verbindungen einrichten" onPress={onConnect} />
-  </GlassSurface>;
+  const [detailsVisible, setDetailsVisible] = useState(false);
+  const setupNeeded = plan.authorizations.length > 0;
+
+  return (
+    <ContentSurface style={styles.card}>
+      <View style={styles.header}>
+        <View style={styles.titleWrap}>
+          <Text style={styles.eyebrow}>AUTOMATION</Text>
+          <Text style={styles.title}>{plan.title}</Text>
+        </View>
+        {plan.requiresPro ? (
+          <View style={styles.proBadge}>
+            <Text style={styles.proBadgeText}>{pro ? "PRO" : "PRO NÖTIG"}</Text>
+          </View>
+        ) : null}
+      </View>
+
+      {plan.explanation[0] ? <Text style={styles.summary}>{plan.explanation[0]}</Text> : null}
+
+      <View style={styles.flow}>
+        <View style={styles.flowRow}>
+          <Text style={styles.flowLabel}>Wenn</Text>
+          <Text style={styles.flowValue}>{triggerText(plan)}</Text>
+        </View>
+        <View style={styles.divider} />
+        <View style={styles.flowRow}>
+          <Text style={styles.flowLabel}>Dann</Text>
+          <Text style={styles.flowValue}>{actionText(plan)}</Text>
+        </View>
+      </View>
+
+      <View style={styles.metaRow}>
+        <Text style={styles.metaText}>{execution[plan.executionMode]}</Text>
+        <Text style={styles.metaDot}>·</Text>
+        <Text style={styles.metaText}>
+          {plan.confirmationRequired ? "Bestätigung nötig" : setupNeeded ? "Einmal einrichten" : "Bereit"}
+        </Text>
+      </View>
+
+      {detailsVisible ? (
+        <View style={styles.details}>
+          {plan.authorizations.length ? (
+            <>
+              <Text style={styles.detailHeading}>Einmalig nötig</Text>
+              {plan.authorizations.map((item) => (
+                <View key={item.id} style={styles.detailRow}>
+                  <Text style={styles.detailBullet}>•</Text>
+                  <Text style={styles.detailText}>{item.reason}</Text>
+                </View>
+              ))}
+            </>
+          ) : null}
+
+          {plan.fallbacks.length ? (
+            <>
+              <Text style={[styles.detailHeading, styles.detailHeadingSpaced]}>Falls etwas nicht klappt</Text>
+              {plan.fallbacks.map((item) => (
+                <View key={item.id} style={styles.detailRow}>
+                  <Text style={styles.detailBullet}>•</Text>
+                  <Text style={styles.detailText}>{item.message}</Text>
+                </View>
+              ))}
+            </>
+          ) : null}
+
+          <Text style={styles.truth}>
+            Noch nicht aktiv. CanMyPhone zeigt die Automation erst als aktiv an, wenn alle nötigen Verbindungen und Freigaben bestätigt sind.
+          </Text>
+        </View>
+      ) : null}
+
+      <Pressable onPress={() => setDetailsVisible((current) => !current)} style={styles.detailsButton}>
+        <Text style={styles.detailsButtonText}>{detailsVisible ? "Details ausblenden" : "Details anzeigen"}</Text>
+      </Pressable>
+
+      <LiquidButton
+        style={styles.button}
+        label={setupNeeded ? "Einrichtung starten" : "Automation erstellen"}
+        onPress={onConnect}
+      />
+    </ContentSurface>
+  );
 }
 
 const styles = StyleSheet.create({
-  card:{padding:20,gap:16},header:{flexDirection:"row",gap:12,alignItems:"flex-start"},headerText:{flex:1},badge:{...liquidIce.type.eyebrow,color:liquidIce.color.accent,marginBottom:8},title:{...liquidIce.type.titleMedium,color:liquidIce.color.textPrimary},risk:{...liquidIce.type.caption,color:liquidIce.color.confirmation,backgroundColor:"rgba(104,114,166,0.10)",paddingHorizontal:10,paddingVertical:6,borderRadius:99,overflow:"hidden"},summary:{...liquidIce.type.bodyMedium,color:liquidIce.color.textSecondary},metaRow:{flexDirection:"row",gap:10},meta:{flex:1,padding:12},metaLabel:{...liquidIce.type.eyebrow,color:liquidIce.color.textTertiary},metaValue:{...liquidIce.type.labelLarge,color:liquidIce.color.textPrimary,marginTop:4},section:{gap:8},eyebrow:{...liquidIce.type.eyebrow,color:liquidIce.color.textTertiary},row:{padding:12,flexDirection:"row",alignItems:"center",gap:10},number:{...liquidIce.type.labelLarge,color:liquidIce.color.accent,width:18},rowText:{...liquidIce.type.bodyMedium,color:liquidIce.color.textPrimary,flex:1},authorization:{padding:12,flexDirection:"row",alignItems:"center",gap:10},authorizationText:{flex:1},authorizationTitle:{...liquidIce.type.labelLarge,color:liquidIce.color.textPrimary},authorizationReason:{...liquidIce.type.caption,color:liquidIce.color.textSecondary,marginTop:2},once:{...liquidIce.type.eyebrow,color:liquidIce.color.automation},fallback:{...liquidIce.type.bodyMedium,color:liquidIce.color.textSecondary},truth:{padding:14},truthTitle:{...liquidIce.type.labelLarge,color:liquidIce.color.confirmation},truthText:{...liquidIce.type.bodyMedium,color:liquidIce.color.textSecondary,marginTop:4},button:{marginTop:4}
+  card: {
+    padding: 20,
+    gap: 0
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12
+  },
+  titleWrap: {
+    flex: 1
+  },
+  eyebrow: {
+    ...liquidIce.type.eyebrow,
+    color: liquidIce.color.textTertiary,
+    marginBottom: 7
+  },
+  title: {
+    ...liquidIce.type.titleMedium,
+    color: liquidIce.color.textPrimary
+  },
+  proBadge: {
+    borderRadius: 999,
+    backgroundColor: "#EEEEEE",
+    paddingHorizontal: 9,
+    paddingVertical: 5
+  },
+  proBadgeText: {
+    fontSize: 9,
+    lineHeight: 12,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+    color: liquidIce.color.textSecondary
+  },
+  summary: {
+    marginTop: 10,
+    ...liquidIce.type.bodyMedium,
+    color: liquidIce.color.textSecondary
+  },
+  flow: {
+    marginTop: 20,
+    borderRadius: 16,
+    backgroundColor: "#F4F4F4",
+    paddingHorizontal: 16
+  },
+  flowRow: {
+    minHeight: 58,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14
+  },
+  flowLabel: {
+    width: 44,
+    fontSize: 12,
+    fontWeight: "700",
+    color: liquidIce.color.textTertiary
+  },
+  flowValue: {
+    flex: 1,
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: "600",
+    color: liquidIce.color.textPrimary
+  },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: liquidIce.color.divider,
+    marginLeft: 58
+  },
+  metaRow: {
+    marginTop: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap"
+  },
+  metaText: {
+    ...liquidIce.type.caption,
+    color: liquidIce.color.textSecondary
+  },
+  metaDot: {
+    marginHorizontal: 7,
+    color: liquidIce.color.textTertiary
+  },
+  details: {
+    marginTop: 18,
+    paddingTop: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: liquidIce.color.divider
+  },
+  detailHeading: {
+    ...liquidIce.type.labelLarge,
+    color: liquidIce.color.textPrimary,
+    marginBottom: 8
+  },
+  detailHeadingSpaced: {
+    marginTop: 16
+  },
+  detailRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 7
+  },
+  detailBullet: {
+    color: liquidIce.color.textTertiary
+  },
+  detailText: {
+    flex: 1,
+    ...liquidIce.type.bodyMedium,
+    color: liquidIce.color.textSecondary
+  },
+  truth: {
+    marginTop: 14,
+    ...liquidIce.type.caption,
+    color: liquidIce.color.textTertiary
+  },
+  detailsButton: {
+    alignSelf: "flex-start",
+    marginTop: 14,
+    paddingVertical: 6
+  },
+  detailsButtonText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: liquidIce.color.textSecondary
+  },
+  button: {
+    marginTop: 14
+  }
 });
