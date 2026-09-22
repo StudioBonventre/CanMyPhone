@@ -60,6 +60,7 @@ export type NativeModuleShape = {
   syncAutomationDefinition(json: string): Promise<boolean>;
   deleteAutomationDefinition(automationId: string): Promise<void>;
   runStoredAutomation(automationId: string): Promise<Record<string, unknown>>;
+  automationRunnerSnapshots(): Promise<string>;
   storeProducts(productIds: string[]): Promise<StoreProductInfo[]>;
   purchaseProduct(productId: string): Promise<StorePurchaseResult>;
   currentStoreEntitlements(productIds: string[]): Promise<StoreEntitlementResult>;

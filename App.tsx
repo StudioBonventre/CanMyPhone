@@ -20,8 +20,8 @@ import { ShortcutDefinitionPreview } from "./src/components/ShortcutDefinitionPr
 import { AutomationInstallationCard } from "./src/components/AutomationInstallationCard";
 import { MyAutomationsCard } from "./src/components/MyAutomationsCard";
 import { compileShortcutGoal } from "./src/automation/shortcutCompiler";
-import { materializeShortcutDefinition, type StoredAutomation } from "./src/automation/materialization";
-import { automationRepository } from "./src/automation/automationRepository";
+import { approveSensitiveAutomation, materializeShortcutDefinition, type StoredAutomation } from "./src/automation/materialization";
+import { automationRepository, syncNativeRunnerResults } from "./src/automation/automationRepository";
 import { CanMyPhoneNative } from "./modules/canmyphone-native";
 import { trackProductEvent } from "./src/lib/analytics";
 import { AuraV2 } from "./src/components/AuraV2";
@@ -184,7 +184,7 @@ export default function App() {
 
   useEffect(() => {
     let alive = true;
-    Promise.all([loadNeedRadarProfile(), loadGuideSession(), loadUserPreferences(), automationRepository.list()])
+    Promise.all([loadNeedRadarProfile(), loadGuideSession(), loadUserPreferences(), syncNativeRunnerResults()])
       .then(([savedProfile, savedGuide, savedPreferences, savedAutomations]) => {
         if (!alive) return;
         if (savedProfile) setProfile(savedProfile);
@@ -243,6 +243,7 @@ export default function App() {
 
       if (nextState === "active" && previous !== "active") {
         refreshProEntitlement().then(setEntitlements).catch(() => undefined);
+        syncNativeRunnerResults().then(setAutomations).catch(() => undefined);
         const pendingId = await automationRepository.getPendingSetup();
         if (pendingId) {
           const pending = await automationRepository.get(pendingId);
@@ -339,6 +340,12 @@ export default function App() {
     await automationRepository.save(updated); await automationRepository.setPendingSetup(updated.id);
     setInstallingAutomation(updated); setAutomations(await automationRepository.list());
     trackProductEvent("automation_handoff_opened", { trigger: updated.definition.trigger.capabilityId });
+  };
+
+  const approveAutomation = async () => {
+    if(!installingAutomation)return;
+    const saved=await automationRepository.save(approveSensitiveAutomation(installingAutomation));
+    setInstallingAutomation(saved);setAutomations(await automationRepository.list());
   };
 
   const confirmAutomation = async () => {
@@ -722,7 +729,7 @@ export default function App() {
                 {shortcutDefinition && shortcutDefinition.confidence >= 0.8 && !automationPlan ? (
                   <View style={styles.answerArea}>
                     <ShortcutDefinitionPreview definition={shortcutDefinition} />
-                    {installingAutomation ? <AutomationInstallationCard automation={installingAutomation} onHandoff={()=>handoffAutomation().catch(()=>undefined)} onConfirm={()=>confirmAutomation().catch(()=>undefined)} onCancel={()=>cancelSetup().catch(()=>undefined)} /> : <LiquidButton style={styles.primaryAction} label="Automation erstellen" onPress={()=>createAutomation().catch(()=>undefined)} />}
+                    {installingAutomation ? <AutomationInstallationCard automation={installingAutomation} onApprove={()=>approveAutomation().catch(()=>undefined)} onHandoff={()=>handoffAutomation().catch(()=>undefined)} onConfirm={()=>confirmAutomation().catch(()=>undefined)} onCancel={()=>cancelSetup().catch(()=>undefined)} /> : <LiquidButton style={styles.primaryAction} label="Automation erstellen" onPress={()=>createAutomation().catch(()=>undefined)} />}
                     {actionResult ? <ContentSurface style={styles.resultBanner}><Text style={styles.resultTitle}>Status</Text><Text style={styles.resultText}>{actionResult.message}</Text></ContentSurface> : null}
                   </View>
                 ) : plannerResponse && !plannerResponse.ok && plannerResponse.code === "needs-clarification" ? (

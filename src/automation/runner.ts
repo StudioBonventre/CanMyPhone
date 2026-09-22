@@ -1,8 +1,8 @@
 import { capabilityV2 } from "./capabilityCatalogV2";
-import { actionExecutionMode, validateStoredAutomation, type AutomationExecutionResult, type StoredAutomation } from "./materialization";
+import { actionExecutionMode, hasValidSafetyApproval, validateStoredAutomation, type AutomationExecutionResult, type StoredAutomation } from "./materialization";
 import { validateShortcutDefinition } from "./shortcutValidation";
 
-export type RunnerContext = { pro: boolean; grantedPermissions: Set<string>; connectedIntegrations: Set<string>; confirmedSensitive: boolean };
+export type RunnerContext = { pro: boolean; grantedPermissions: Set<string>; connectedIntegrations: Set<string> };
 export type ActionExecutor = (capabilityId: string, parameters: Record<string, string | number | boolean>) => Promise<boolean>;
 
 const result = (automationId: string, status: AutomationExecutionResult["status"], humanMessage: string, extra: Partial<AutomationExecutionResult> = {}): AutomationExecutionResult => ({ automationId, status, humanMessage, executedSteps: [], timestamp: new Date().toISOString(), ...extra });
@@ -11,7 +11,7 @@ export async function runStoredAutomation(item: StoredAutomation, context: Runne
   if (!validateStoredAutomation(item) || !validateShortcutDefinition(item.definition).ok) return result(item?.id ?? "unknown", "INVALID_DEFINITION", "Diese Automation ist ungültig oder veraltet.", { errorCode: "INVALID_DEFINITION" });
   if (!item.enabled) return result(item.id, "FAILED", "Diese Automation ist deaktiviert.", { errorCode: "AUTOMATION_DISABLED" });
   if (item.requiresPro && !context.pro) return result(item.id, "BLOCKED_ENTITLEMENT", "CanMyPhone Pro ist für diese Automation erforderlich.", { errorCode: "PRO_REQUIRED" });
-  if (item.confirmationRequired && !context.confirmedSensitive) return result(item.id, "FAILED", "Diese sensible Automation muss zuerst bestätigt werden.", { errorCode: "CONFIRMATION_REQUIRED" });
+  if (!hasValidSafetyApproval(item)) return result(item.id, "FAILED", "Diese konkrete Version der sensiblen Automation muss zuerst bestätigt werden.", { errorCode: "CONFIRMATION_REQUIRED" });
   const missingPermission = item.requiredSetup.find(x => !item.integrations.includes(x) && !context.grantedPermissions.has(x));
   if (missingPermission) return result(item.id, "BLOCKED_PERMISSION", "Eine benötigte Berechtigung fehlt.", { errorCode: "PERMISSION_REQUIRED" });
   const missingIntegration = item.integrations.find(x => !context.connectedIntegrations.has(x));

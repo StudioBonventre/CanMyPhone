@@ -2,13 +2,14 @@ import { capabilityV2 } from "./capabilityCatalogV2";
 import type { ShortcutDefinition, ShortcutStep } from "./shortcutCompiler";
 import { validateShortcutDefinition } from "./shortcutValidation";
 
-export const STORED_AUTOMATION_SCHEMA_VERSION = 1 as const;
+export const STORED_AUTOMATION_SCHEMA_VERSION = 2 as const;
 
 export type MaterializationState = "DRAFT" | "READY_TO_INSTALL" | "APPLE_SETUP_REQUIRED" | "INSTALLED" | "ACTIVE" | "DISABLED" | "BROKEN" | "PERMISSION_REQUIRED" | "INTEGRATION_REQUIRED";
 export type SetupState = "NOT_STARTED" | "HANDED_OFF" | "AWAITING_CONFIRMATION" | "USER_CONFIRMED" | "ACTIVE" | "UNKNOWN";
 export type ActionExecutionMode = "EXECUTABLE_DIRECT" | "EXECUTABLE_APP_INTENT" | "REQUIRES_SHORTCUT_ACTION" | "REQUIRES_APPLE_AUTOMATION" | "REQUIRES_PROVIDER" | "GUIDED_ONLY" | "UNSUPPORTED";
 export type FailurePolicy = "STOP" | "CONTINUE" | "BEST_EFFORT";
 export type ExecutionStatus = "SUCCESS" | "PARTIAL_SUCCESS" | "FAILED" | "BLOCKED_PERMISSION" | "BLOCKED_ENTITLEMENT" | "BLOCKED_INTEGRATION" | "INVALID_DEFINITION" | "UNSUPPORTED_ACTION";
+export type SafetyApproval = { required:boolean; confirmed:boolean; confirmedAt?:string; definitionFingerprint?:string };
 
 export type PersonalAutomationSetup = {
   appleTriggerType: string;
@@ -38,6 +39,7 @@ export type StoredAutomation = {
   requiresPro: boolean;
   riskLevel: "low" | "medium" | "high";
   confirmationRequired: boolean;
+  safetyApproval: SafetyApproval;
   requiredSetup: string[];
   integrations: string[];
   materializationState: MaterializationState;
@@ -70,6 +72,28 @@ const triggerNames: Record<string, string> = {
   "trigger.focus-changed": "Fokus geändert"
 };
 
+function stableValue(value:unknown):unknown {
+  if(Array.isArray(value)) return value.map(stableValue);
+  if(value&&typeof value==="object") return Object.fromEntries(Object.entries(value as Record<string,unknown>).sort(([a],[b])=>a.localeCompare(b)).map(([key,item])=>[key,stableValue(item)]));
+  return value;
+}
+
+export function safetyDefinitionFingerprint(item:Pick<StoredAutomation,"id"|"version"|"definition"|"riskLevel"|"integrations">):string {
+  const payload=stableValue({id:item.id,schemaVersion:item.version,riskLevel:item.riskLevel,integrations:[...item.integrations].sort(),conditions:item.definition.conditions.map(({capabilityId,parameters})=>({capabilityId,parameters})),actions:item.definition.actions.map(({capabilityId,parameters})=>({capabilityId,parameters}))});
+  const bytes=new TextEncoder().encode(JSON.stringify(payload));let hash=0x811c9dc5;
+  for(const byte of bytes){hash^=byte;hash=Math.imul(hash,0x01000193)>>>0;}
+  return `fnv1a32:${hash.toString(16).padStart(8,"0")}`;
+}
+
+export function approveSensitiveAutomation(item:StoredAutomation,at=new Date()):StoredAutomation {
+  if(!item.safetyApproval.required)return item;
+  return {...item,safetyApproval:{required:true,confirmed:true,confirmedAt:at.toISOString(),definitionFingerprint:safetyDefinitionFingerprint(item)}};
+}
+
+export function hasValidSafetyApproval(item:StoredAutomation):boolean {
+  return !item.safetyApproval.required || Boolean(item.safetyApproval.confirmed&&item.safetyApproval.definitionFingerprint===safetyDefinitionFingerprint(item));
+}
+
 export function actionExecutionMode(step: ShortcutStep): ActionExecutionMode {
   const cap = capabilityV2(step.capabilityId);
   if (!cap || cap.role !== "action") return "UNSUPPORTED";
@@ -101,6 +125,7 @@ export function materializeShortcutDefinition(definition: ShortcutDefinition, no
     originalIntentSummary: definition.name.slice(0, 120), definition, enabled: false,
     createdAt: stamp, updatedAt: stamp, executionCount: 0, requiresPro,
     riskLevel: definition.risk, confirmationRequired: definition.confirmationRequired,
+    safetyApproval:{required:definition.confirmationRequired,confirmed:false},
     requiredSetup: [...definition.requiredSetup], integrations: [...definition.integrations],
     materializationState, personalSetup,
     failurePolicy: definition.risk === "high" ? "STOP" : (modes.length > 1 ? "BEST_EFFORT" : "STOP")
@@ -136,6 +161,7 @@ export function createPersonalAutomationSetup(automationId: string, trigger: Sho
 export function validateStoredAutomation(value: unknown): value is StoredAutomation {
   if (!value || typeof value !== "object") return false;
   const item = value as Partial<StoredAutomation>;
-  return item.version === STORED_AUTOMATION_SCHEMA_VERSION && typeof item.id === "string" && item.id.startsWith("cmp_auto_") &&
-    typeof item.enabled === "boolean" && Boolean(item.definition) && validateShortcutDefinition(item.definition).ok;
+  return item.version === STORED_AUTOMATION_SCHEMA_VERSION && typeof item.id === "string" && /^cmp_auto_[a-z0-9]{4,32}$/.test(item.id) &&
+    typeof item.enabled === "boolean" && Boolean(item.definition) && Boolean(item.safetyApproval) &&
+    item.safetyApproval?.required===item.confirmationRequired && validateShortcutDefinition(item.definition).ok;
 }

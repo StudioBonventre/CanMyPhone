@@ -241,6 +241,10 @@ public final class CanMyPhoneNativeModule: Module {
     AsyncFunction("runStoredAutomation") { (automationID: String) async -> [String: Any] in
       return await CanMyPhoneAutomationRunner.run(id: automationID)
     }
+
+    AsyncFunction("automationRunnerSnapshots") { () async -> String in
+      return CanMyPhoneAutomationStore.snapshotsJSON()
+    }
   }
 
   private func permissionStatus(kind: String) async -> [String: Any] {

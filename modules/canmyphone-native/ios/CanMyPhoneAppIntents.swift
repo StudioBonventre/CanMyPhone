@@ -1,6 +1,13 @@
 import AppIntents
 import UIKit
 
+// Expo local modules compile as a reusable native module. Declaring the package
+// lets Xcode export these intent definitions into the host app's metadata.
+@available(iOS 17.0, *)
+public struct CanMyPhoneIntentsPackage: AppIntentsPackage {
+  public init() {}
+}
+
 @available(iOS 16.0, *)
 struct OpenCanMyPhoneIntent: AppIntent {
   static var title: LocalizedStringResource = "CanMyPhone öffnen"
@@ -25,10 +32,6 @@ struct SetCanMyPhoneBrightnessIntent: AppIntent {
   var percent: Int
 
   func perform() async throws -> some IntentResult & ProvidesDialog {
-    guard UserDefaults.standard.bool(forKey: "CanMyPhoneProEnabled") else {
-      return .result(dialog: "Diese Schnellaktion gehört zu CanMyPhone Pro. Öffne CanMyPhone, um Pro zu aktivieren.")
-    }
-
     guard (0...100).contains(percent) else {
       return .result(dialog: "Bitte wähle eine Helligkeit zwischen 0 und 100 Prozent.")
     }
@@ -50,7 +53,9 @@ struct RunCanMyPhoneAutomationIntent: AppIntent {
   @Parameter(title: "Automation-ID", description: "Die in CanMyPhone angezeigte ID, zum Beispiel cmp_auto_abc123.")
   var automationId: String
 
-  static var parameterSummary: some ParameterSummary { Summary("Automation \(.$automationId) ausführen") }
+  static var parameterSummary: some ParameterSummary {
+    Summary("Automation \(\.$automationId) ausführen")
+  }
 
   func perform() async throws -> some IntentResult & ProvidesDialog {
     let value = await CanMyPhoneAutomationRunner.run(id: automationId)

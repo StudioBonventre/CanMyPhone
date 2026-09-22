@@ -13,4 +13,10 @@ export class AutomationPersistence {
   async remove(id:string){const next=(await this.list()).filter(x=>x.id!==id);await this.storage.setItem(AUTOMATIONS_KEY,JSON.stringify(next));await this.mirror?.remove(id);}
   async setPendingSetup(id:string|null){if(id)await this.storage.setItem(PENDING_SETUP_KEY,id);else await this.storage.removeItem(PENDING_SETUP_KEY);}
   async getPendingSetup(){return this.storage.getItem(PENDING_SETUP_KEY);}
+  async mergeRunnerSnapshots(snapshots:unknown):Promise<StoredAutomation[]> {
+    if(!Array.isArray(snapshots))return this.list();
+    const byId=new Map(snapshots.filter(validateStoredAutomation).map(item=>[item.id,item]));
+    const next=(await this.list()).map(local=>{const native=byId.get(local.id);if(!native)return local;return {...local,lastRunAt:native.lastRunAt,lastRunStatus:native.lastRunStatus,lastErrorCode:native.lastErrorCode,lastErrorMessage:native.lastErrorMessage,executionCount:Math.max(local.executionCount,native.executionCount)};});
+    await this.storage.setItem(AUTOMATIONS_KEY,JSON.stringify(next));return next;
+  }
 }
