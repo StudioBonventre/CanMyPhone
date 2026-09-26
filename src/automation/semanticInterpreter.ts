@@ -1,4 +1,3 @@
-import { CanMyPhoneNative } from "../../modules/canmyphone-native";
 import { CAPABILITY_CATALOG_V2, capabilityV2 } from "./capabilityCatalogV2";
 import { resolveStrategy, type ShortcutDefinition, type ShortcutStep } from "./shortcutCompiler";
 import { validateShortcutDefinition } from "./shortcutValidation";
@@ -209,9 +208,15 @@ export function acceptSemanticAutomationOutput(goal: string, raw: string): Seman
 }
 
 export async function interpretAutomationWithOnDeviceAI(goal: string): Promise<SemanticAutomationResult> {
-  if (!CanMyPhoneNative || !goal.trim()) return { kind: "unavailable" };
+  if (!goal.trim()) return { kind: "unavailable" };
 
   try {
+    // Keep the native Expo/React Native bridge out of the pure parser module
+    // until the on-device interpreter is actually invoked. This keeps the
+    // validation helpers runnable in Node-based unit tests.
+    const { CanMyPhoneNative } = await import("../../modules/canmyphone-native");
+    if (!CanMyPhoneNative) return { kind: "unavailable" };
+
     const status = await CanMyPhoneNative.foundationModelStatus();
     if (!status.available) return { kind: "unavailable" };
 
