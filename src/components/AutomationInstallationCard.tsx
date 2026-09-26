@@ -15,6 +15,10 @@ export function AutomationInstallationCard({
   onCancel,
   onApprove,
   onLaunchWithCanMyPhone,
+  onRequestLocationPermission,
+  onSaveNamedLocation,
+  locationAlways = false,
+  namedLocationNames = [],
   connectedProviderIds = []
 }:{
   automation:StoredAutomation;
@@ -23,6 +27,10 @@ export function AutomationInstallationCard({
   onCancel:()=>void;
   onApprove:()=>void;
   onLaunchWithCanMyPhone?:()=>void;
+  onRequestLocationPermission?:()=>void;
+  onSaveNamedLocation?:(name:string)=>void;
+  locationAlways?:boolean;
+  namedLocationNames?:string[];
   connectedProviderIds?:string[];
 }) {
   const setup=automation.personalSetup;
@@ -30,19 +38,29 @@ export function AutomationInstallationCard({
   const runtime=compileAutomationRuntime(automation.definition);
   const connectorPlan=connectorPlanForDefinition(automation.definition,new Set(connectedProviderIds));
   const launcherPlan=launcherPlanForDefinition(automation.definition);
+  const locationTrigger=["trigger.location-enter","trigger.location-exit"].includes(automation.definition.trigger.capabilityId);
+  const locationValue=typeof automation.definition.trigger.parameters.value==="string"?automation.definition.trigger.parameters.value:"";
+  const locationConfigured=locationValue
+    ?namedLocationNames.some((name)=>name.localeCompare(locationValue,undefined,{sensitivity:"accent"})===0)
+    :false;
+  const waitingForLocation=locationTrigger&&(!locationAlways||!locationConfigured);
   const waitingForConnector=automation.materializationState==="INTEGRATION_REQUIRED"||connectorPlan.requirements.length>0;
   const heading=automation.materializationState==="ACTIVE"
     ?"AKTIV"
     :waitingForConnector
       ?"VERBINDUNGEN NÖTIG"
-      :runtime.appleBridgeRequired
+      :waitingForLocation
+        ?"STANDORT EINRICHTEN"
+        :runtime.appleBridgeRequired
         ?"SYSTEM-TRIGGER NÖTIG"
         :"BEREIT";
   const status=automation.materializationState==="ACTIVE"
     ?"CanMyPhone überwacht diese Automation."
     :waitingForConnector
       ?"CanMyPhone hat die Logik verstanden. Vor der Ausführung müssen die benötigten Hersteller oder Smart-Home-Systeme verbunden werden."
-      :runtime.appleBridgePurpose==="TRIGGER_ONLY"
+      :waitingForLocation
+        ?"CanMyPhone kann diesen Ortsauslöser selbst überwachen. Dafür fehlen nur noch deine Standortfreigabe oder der benannte Ort."
+        :runtime.appleBridgePurpose==="TRIGGER_ONLY"
         ?"Die Logik liegt in CanMyPhone. iOS stellt diesen Trigger Drittanbieter-Apps derzeit nicht direkt bereit."
         :runtime.summary;
 
@@ -90,6 +108,20 @@ export function AutomationInstallationCard({
       </View>
       :null}
 
+    {locationTrigger&&waitingForLocation
+      ?<View style={styles.locationBox}>
+        <Text style={styles.launcherEyebrow}>NATIVER ORTSAUSLÖSER</Text>
+        {!locationAlways
+          ?<LiquidButton label="Standort für Automationen erlauben" onPress={()=>onRequestLocationPermission?.()}/>
+          :<Text style={styles.locationReady}>Standortzugriff „Immer“ ist aktiv.</Text>}
+        {!locationConfigured&&locationValue
+          ?<LiquidButton variant="glass" label={`„${locationValue}“ hier speichern`} onPress={()=>onSaveNamedLocation?.(locationValue)}/>
+          :locationConfigured
+            ?<Text style={styles.locationReady}>Ort „{locationValue}“ ist gespeichert.</Text>
+            :null}
+      </View>
+      :null}
+
     {automation.requiredSetup.length
       ?<Text style={styles.requirements}>Benötigt: {automation.requiredSetup.join(" · ")}</Text>
       :null}
@@ -127,7 +159,7 @@ export function AutomationInstallationCard({
             <LiquidButton label="Ja, fertig" onPress={onConfirm}/>
             <Pressable onPress={onCancel} style={styles.cancel}><Text style={styles.cancelText}>Noch nicht</Text></Pressable>
           </>
-          :waitingForConnector
+          :waitingForConnector||waitingForLocation
             ?null
             :launcherPlan.available&&runtime.appleBridgePurpose==="TRIGGER_ONLY"
               ?<Pressable onPress={onHandoff} style={styles.secondaryAction}><Text style={styles.secondaryActionText}>Original-App-Icon verwenden → Apple-Trigger verbinden</Text></Pressable>
@@ -151,6 +183,8 @@ const styles=StyleSheet.create({
   launcherText:{fontSize:12,lineHeight:18,color:liquidIce.color.textSecondary},
   secondaryAction:{alignItems:"center",paddingTop:14,paddingHorizontal:8},
   secondaryActionText:{fontSize:12,lineHeight:18,fontWeight:"700",textAlign:"center",color:liquidIce.color.textSecondary},
+  locationBox:{marginTop:14,padding:14,borderRadius:16,backgroundColor:"rgba(255,255,255,0.62)",borderWidth:StyleSheet.hairlineWidth,borderColor:"rgba(79,94,110,0.14)",gap:10},
+  locationReady:{fontSize:12,fontWeight:"700",color:liquidIce.color.textSecondary},
   connectorList:{marginTop:14,gap:8},
   connectorRow:{padding:12,borderRadius:14,backgroundColor:"rgba(255,255,255,0.58)",borderWidth:StyleSheet.hairlineWidth,borderColor:"rgba(79,94,110,0.14)"},
   connectorName:{fontSize:13,fontWeight:"700",color:liquidIce.color.textPrimary},
