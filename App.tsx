@@ -92,8 +92,8 @@ import {
 type Tab = AppTab;
 
 const quickIdeas = [
-  { title: "Wenn ich meinen Tesla verlasse, schließe den Kofferraum", query: "Wenn ich mich von meinem Tesla entferne, schließe automatisch den Heckkofferraum" },
-  { title: "Wenn ich das Büro verlasse, starte meine Heimfahrt", query: "automation shortcut leave work navigation" },
+  { title: "Helligkeit auf 35 % stellen", query: "Stelle meine Helligkeit auf 35 %" },
+  { title: "Instagram öffnen → Helligkeit 35 %", query: "Wenn Instagram geöffnet wird, stelle die Helligkeit auf 35 %" },
   { title: "Wenn mein Akku unter 20 % fällt, aktiviere Stromsparmodus", query: "Akku unter 20 Prozent Stromsparmodus Automation" }
 ];
 
