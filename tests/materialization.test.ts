@@ -97,7 +97,8 @@ test("runner executes provider-neutral Tesla actions through the connector runti
   let calls=0;
   const adapter=createTeslaConnectorAdapter({
     lockVehicle:async()=>{calls+=1;return {ok:true as const};},
-    unlockVehicle:async()=>({ok:true as const})
+    unlockVehicle:async()=>({ok:true as const}),
+    closeRearTrunk:async()=>({ok:true as const})
   });
   const runtime=new ConnectorRuntime([adapter]);
   const materialized=materializeShortcutDefinition(semantic.definition);
@@ -142,7 +143,8 @@ test("connector failures are reported as real automation failures",async()=>{
   if(semantic.kind!=="understood")return;
   const runtime=new ConnectorRuntime([createTeslaConnectorAdapter({
     lockVehicle:async()=>({ok:false as const,code:"vehicle_offline",message:"Fahrzeug nicht erreichbar."}),
-    unlockVehicle:async()=>({ok:true as const})
+    unlockVehicle:async()=>({ok:true as const}),
+    closeRearTrunk:async()=>({ok:true as const})
   })]);
   const item=approveSensitiveAutomation({...materializeShortcutDefinition(semantic.definition),enabled:true,materializationState:"ACTIVE" as const});
   const result=await runStoredAutomation(item,{...context,connectedIntegrations:new Set(["tesla"]),connectorRuntime:runtime},async()=>true);
