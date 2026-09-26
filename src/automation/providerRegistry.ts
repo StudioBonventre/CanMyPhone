@@ -50,7 +50,7 @@ export const PROVIDER_REGISTRY: readonly ProviderDescriptor[] = [
     aliases: ["homekit","apple home","home"],
     transport: "homekit",
     operations: ["smart-home.cover.open","smart-home.cover.close","smart-home.light.set","smart-home.climate.set"],
-    implementation: "PLANNED",
+    implementation: "READY",
     authKind: "system-permission",
     requiresUserConnection: true,
     executionLocation: "device"
