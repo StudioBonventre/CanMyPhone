@@ -86,6 +86,47 @@ final class CanMyPhoneHomeKitBridge: NSObject, HMHomeManagerDelegate {
     ]
   }
 
+  func runScene(scene: String, homeName: String?) async -> [String: Any] {
+    await waitUntilReady()
+    guard manager.authorizationStatus.contains(.authorized) else {
+      return failure("HOMEKIT_NOT_AUTHORIZED", "Apple Home-Zugriff ist nicht erlaubt.")
+    }
+
+    let cleanScene = scene.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !cleanScene.isEmpty else {
+      return failure("HOMEKIT_SCENE_REQUIRED", "Der Szenenname fehlt.")
+    }
+
+    let homes: [HMHome]
+    if let homeName, !homeName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      let query = homeName.trimmingCharacters(in: .whitespacesAndNewlines)
+      homes = manager.homes.filter {
+        $0.name.compare(query, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+      }
+    } else if let primary = manager.primaryHome {
+      homes = [primary]
+    } else {
+      homes = manager.homes
+    }
+
+    for home in homes {
+      if let actionSet = home.actionSets.first(where: {
+        $0.name.compare(cleanScene, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+      }) {
+        let success = await withCheckedContinuation { continuation in
+          home.executeActionSet(actionSet) { error in
+            continuation.resume(returning: error == nil)
+          }
+        }
+        return success
+          ? ["success": true, "message": "Szene „\(cleanScene)“ wurde ausgeführt."]
+          : failure("HOMEKIT_SCENE_FAILED", "Die Szene konnte nicht ausgeführt werden.")
+      }
+    }
+
+    return failure("HOMEKIT_SCENE_NOT_FOUND", "Die Apple-Home-Szene „\(cleanScene)“ wurde nicht gefunden.")
+  }
+
   func setCover(room: String, device: String?, position: Int) async -> [String: Any] {
     await waitUntilReady()
     guard manager.authorizationStatus.contains(.authorized) else {
