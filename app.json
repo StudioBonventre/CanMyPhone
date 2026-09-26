@@ -2,11 +2,12 @@
   "expo": {
     "name": "CanMyPhone",
     "slug": "canmyphone",
-    "version": "0.11.0",
+    "version": "0.12.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "scheme": "canmyphone",
     "plugins": [
+      "./plugins/withCanMyPhoneAppIntents",
       [
         "expo-dev-client",
         {
@@ -25,15 +26,52 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.studiobonventre.canmyphone",
+      "entitlements": {
+        "com.apple.security.application-groups": [
+          "group.com.studiobonventre.canmyphone"
+        ],
+        "com.apple.developer.homekit": true
+      },
       "infoPlist": {
         "NSSupportsLiveActivities": true,
         "NSCameraUsageDescription": "CanMyPhone nutzt die Kamera nur, wenn du eine Funktion ausdrücklich startest, die Kamerazugriff benötigt.",
         "NSMicrophoneUsageDescription": "CanMyPhone nutzt das Mikrofon nur, wenn du eine Funktion ausdrücklich startest, die Mikrofonzugriff benötigt.",
-        "NSPhotoLibraryUsageDescription": "CanMyPhone greift nur auf deine Fotomediathek zu, wenn du eine Funktion ausdrücklich startest, die Fotos benötigt."
+        "NSPhotoLibraryUsageDescription": "CanMyPhone greift nur auf deine Fotomediathek zu, wenn du eine Funktion ausdrücklich startest, die Fotos benötigt.",
+        "NSHomeKitUsageDescription": "CanMyPhone nutzt Apple Home nur, um von dir gewählte Räume und Geräte in Automationen zu erkennen und zu steuern.",
+        "NSLocalNetworkUsageDescription": "CanMyPhone nutzt dein lokales Netzwerk nur, um von dir verbundene Smart-Home-Systeme und Geräte zu erreichen.",
+        "NSLocationWhenInUseUsageDescription": "CanMyPhone nutzt deinen Standort nur für von dir erstellte ortsbasierte Automationen und zum Speichern benannter Orte wie Zuhause.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "CanMyPhone benötigt Standortzugriff im Hintergrund nur für von dir aktivierte ortsbasierte Automationen, damit sie auch ohne geöffnete App reagieren können.",
+        "NSCalendarsUsageDescription": "CanMyPhone nutzt deinen Kalender nur, wenn eine von dir erstellte Automation einen Termin anlegen soll.",
+        "NSCalendarsFullAccessUsageDescription": "CanMyPhone benötigt Kalenderzugriff nur, um von dir angeforderte Termine über Automationen anzulegen.",
+        "NSRemindersUsageDescription": "CanMyPhone nutzt Erinnerungen nur, wenn eine von dir erstellte Automation eine Erinnerung anlegen soll.",
+        "NSRemindersFullAccessUsageDescription": "CanMyPhone benötigt Erinnerungszugriff nur, um von dir angeforderte Erinnerungen über Automationen anzulegen."
       }
     },
     "android": {
       "package": "com.studiobonventre.canmyphone"
-    }
+    },
+    "extra": {
+      "eas": {
+        "build": {
+          "experimental": {
+            "ios": {
+              "appExtensions": [
+                {
+                  "targetName": "ExpoWidgetsTarget",
+                  "bundleIdentifier": "com.studiobonventre.canmyphone.widgets",
+                  "entitlements": {
+                    "com.apple.security.application-groups": [
+                      "group.com.studiobonventre.canmyphone"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "projectId": "be352517-4c42-444d-830e-e68dd8f5bacd"
+      }
+    },
+    "owner": "studiobonventre"
   }
 }

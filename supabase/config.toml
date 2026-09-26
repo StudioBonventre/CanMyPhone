@@ -1,0 +1,12 @@
+[functions.plan-automation]
+verify_jwt = true
+
+
+[functions.interpret-automation]
+verify_jwt = true
+
+
+[functions.tesla-connector]
+# OAuth callback and native execution grants use custom authentication inside
+# the function. Built-in JWT verification would reject both before the handler.
+verify_jwt = false

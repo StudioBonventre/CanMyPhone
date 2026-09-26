@@ -1,28 +1,58 @@
 import React, { PropsWithChildren } from "react";
-import { Platform, StyleProp, StyleSheet, View, ViewStyle } from "react-native";
-import { GlassView, isGlassEffectAPIAvailable } from "expo-glass-effect";
+import { StyleProp, StyleSheet, View, ViewStyle } from "react-native";
+import { liquidIce, liquidIceShadow } from "../theme/liquidIce";
+
+export type GlassVariant = "inset" | "surface" | "floating";
 
 type Props = PropsWithChildren<{
   style?: StyleProp<ViewStyle>;
   interactive?: boolean;
   tintColor?: string;
+  variant?: GlassVariant;
 }>;
 
-export function GlassSurface({ children, style, interactive = false, tintColor }: Props) {
-  if (Platform.OS === "ios" && isGlassEffectAPIAvailable()) {
-    return (
-      <GlassView style={style} glassEffectStyle="regular" isInteractive={interactive} tintColor={tintColor}>
-        {children}
-      </GlassView>
-    );
-  }
-  return <View style={[styles.fallback, style]}>{children}</View>;
+/**
+ * Functional surface used for controls such as the composer, tab bar and modal sheets.
+ * The old highly transparent glass treatment made layered content hard to read on-device.
+ * This version intentionally favors calm, high-contrast surfaces.
+ */
+export function GlassSurface({
+  children,
+  style,
+  variant = "surface"
+}: Props) {
+  return (
+    <View
+      style={[
+        styles.base,
+        variant === "inset" && styles.inset,
+        variant === "surface" && styles.surface,
+        variant === "floating" && styles.floating,
+        variant === "inset" && liquidIceShadow.inset,
+        variant === "surface" && liquidIceShadow.surface,
+        variant === "floating" && liquidIceShadow.floating,
+        style
+      ]}
+    >
+      {children}
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
-  fallback: {
-    backgroundColor: "rgba(255,255,255,0.78)",
+  base: {
+    overflow: "hidden",
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "rgba(255,255,255,0.92)"
+    borderColor: liquidIce.color.glassBorder
+  },
+  inset: {
+    backgroundColor: liquidIce.color.glassSubtle
+  },
+  surface: {
+    backgroundColor: liquidIce.color.glass
+  },
+  floating: {
+    backgroundColor: liquidIce.color.glassStrong,
+    borderColor: liquidIce.color.glassBorderStrong
   }
 });

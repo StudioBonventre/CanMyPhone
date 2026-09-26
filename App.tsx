@@ -1,30 +1,56 @@
-import React, { PropsWithChildren, useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   AccessibilityInfo,
-  ActivityIndicator,
-  Animated,
   AppState,
   AppStateStatus,
-  Easing,
   Keyboard,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
-  StyleProp,
   StyleSheet,
   Text,
   TextInput,
-  View,
-  ViewStyle
+  View
 } from "react-native";
-import { GlassView, isGlassEffectAPIAvailable } from "expo-glass-effect";
+import { ActionTransitionV2 } from "./src/components/ActionTransitionV2";
+import { AutomationPlanPreview } from "./src/components/AutomationPlanPreview";
+import { ShortcutDefinitionPreview } from "./src/components/ShortcutDefinitionPreview";
+import { AutomationInstallationCard } from "./src/components/AutomationInstallationCard";
+import { MyAutomationsCard } from "./src/components/MyAutomationsCard";
+import { ConnectorSettingsCard, type ConnectorConnectInput } from "./src/components/ConnectorSettingsCard";
+import { compileShortcutGoal } from "./src/automation/shortcutCompiler";
+import { interpretAutomationWithOnDeviceAI, type AutomationSuggestion } from "./src/automation/semanticInterpreter";
+import { buildAppleIntelligenceAutomationDescription } from "./src/automation/appleShortcutsHandoff";
+import { compileAutomationRuntime } from "./src/automation/engine";
+import { launcherPlanForDefinition } from "./src/automation/appLauncher";
+import { approveSensitiveAutomation, materializeShortcutDefinition, type StoredAutomation } from "./src/automation/materialization";
+import { automationRepository, syncNativeRunnerResults } from "./src/automation/automationRepository";
+import { loadConnectorConnections, saveConnectorConnection } from "./src/automation/connectorConnectionRepository";
+import { connectedProviderIds, EMPTY_CONNECTOR_CONNECTION_PROFILE, type ConnectorConnectionProfile } from "./src/automation/connectorConnectionState";
+import { resolveConnectedProviders } from "./src/automation/providerResolution";
+import { CanMyPhoneNative, type LocationAuthorizationResult, type NamedLocation } from "./modules/canmyphone-native";
+import { trackProductEvent } from "./src/lib/analytics";
+import { AuraV2 } from "./src/components/AuraV2";
+import { CapabilityCard } from "./src/components/CapabilityCard";
+import { ContentSurface } from "./src/components/ContentSurface";
+import { FloatingTabBar, type AppTab } from "./src/components/FloatingTabBar";
+import { GlassSurface } from "./src/components/GlassSurface";
+import { LiquidButton } from "./src/components/LiquidButton";
+import { LiquidComposer } from "./src/components/LiquidComposer";
+import { ProPaywall } from "./src/components/ProPaywall";
 import { GuidedSetupCard } from "./src/components/GuidedSetupCard";
+import { Top100Section } from "./src/components/Top100Section";
+import { liquidIce } from "./src/theme/liquidIce";
 import { solutions } from "./src/data/solutions";
 import { directActionPlan, runDirectAction, type DirectActionResult } from "./src/lib/actions";
+import { compileVerifiedGoal, planGoal, type PlannerResponse } from "./src/automation/planner";
+import { getSupabasePlannerClient, getSupabaseSemanticClient, getTeslaConnectorService } from "./src/lib/supabasePlanner";
 import { resolveWithOnDeviceAI } from "./src/lib/aiResolver";
 import { resolveConversation } from "./src/lib/conversation";
+import { DEFAULT_ENTITLEMENTS, proFeatureAccess } from "./src/lib/entitlements";
 import { hapticAnswer, hapticDive, hapticEmerge, hapticStep } from "./src/lib/haptics";
 import {
   endGuideLiveActivity,
@@ -45,6 +71,13 @@ import {
   saveUserPreferences,
   type UserPreferences
 } from "./src/lib/preferences";
+import {
+  fetchProProducts,
+  purchasePro,
+  refreshProEntitlement,
+  restoreProPurchases,
+  type ProStoreProduct
+} from "./src/lib/purchases";
 import { shortcutAssistantPlan } from "./src/lib/shortcutAssistant";
 import { openSupportedSettings } from "./src/lib/settings";
 import {
@@ -57,6 +90,7 @@ import {
 import {
   DeviceContext,
   DropPhase,
+  EntitlementState,
   GuideSession,
   NeedRadarProfile,
   Region,
@@ -64,18 +98,12 @@ import {
   SolutionFeedback
 } from "./src/types";
 
-type Tab = "ask" | "discover" | "you";
-
-type GlassSurfaceProps = PropsWithChildren<{
-  style?: StyleProp<ViewStyle>;
-  interactive?: boolean;
-  tintColor?: string;
-}>;
+type Tab = AppTab;
 
 const quickIdeas = [
-  { title: "Benachrichtigungen erlauben", query: "benachrichtigungen erlauben" },
-  { title: "Beim Losfahren Navigation starten", query: "automation shortcut leave work navigation" },
-  { title: "Was kann mein iPhone noch?", query: "discover hidden iphone features" }
+  { title: "Helligkeit auf 35 % stellen", query: "Stelle meine Helligkeit auf 35 %" },
+  { title: "Instagram öffnen → Helligkeit 35 %", query: "Wenn Instagram geöffnet wird, stelle die Helligkeit auf 35 %" },
+  { title: "Wenn mein Akku unter 20 % fällt, aktiviere Stromsparmodus", query: "Akku unter 20 Prozent Stromsparmodus Automation" }
 ];
 
 const hiddenFeatures = [
@@ -90,23 +118,6 @@ const feedbackOptions: { value: SolutionFeedback; label: string }[] = [
   { value: "already_knew", label: "Kannte ich" },
   { value: "not_relevant", label: "Nicht relevant" }
 ];
-
-function GlassSurface({ children, style, interactive = false, tintColor }: GlassSurfaceProps) {
-  const available = Platform.OS === "ios" && isGlassEffectAPIAvailable();
-  if (available) {
-    return (
-      <GlassView
-        style={style}
-        glassEffectStyle="regular"
-        isInteractive={interactive}
-        tintColor={tintColor}
-      >
-        {children}
-      </GlassView>
-    );
-  }
-  return <View style={[styles.glassFallback, style]}>{children}</View>;
-}
 
 function makeGuideSession(solution: Solution, steps = solution.steps, title = solution.title): GuideSession {
   const now = Date.now();
@@ -127,138 +138,6 @@ function osMajor(): number | undefined {
   const value = String(Platform.Version);
   const major = Number.parseInt(value.split(".")[0] ?? "", 10);
   return Number.isFinite(major) ? major : undefined;
-}
-
-function phaseIntensity(phase: DropPhase): number {
-  switch (phase) {
-    case "diving": return 0.62;
-    case "searching": return 1;
-    case "emerging": return 0.72;
-    case "submerged": return 0.45;
-    case "guiding": return 0.18;
-    case "listening": return 0.28;
-    case "success": return 0.42;
-    case "answer": return 0.12;
-    default: return 0.08;
-  }
-}
-
-function AuraLayer({ phase, reduceMotion }: { phase: DropPhase; reduceMotion: boolean }) {
-  const activity = useRef(new Animated.Value(phaseIntensity(phase))).current;
-  const breathe = useRef(new Animated.Value(0)).current;
-  const travel = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.timing(activity, {
-      toValue: phaseIntensity(phase),
-      duration: reduceMotion ? 120 : phase === "searching" ? 280 : 500,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true
-    }).start();
-  }, [activity, phase, reduceMotion]);
-
-  useEffect(() => {
-    if (reduceMotion) {
-      breathe.stopAnimation();
-      travel.stopAnimation();
-      breathe.setValue(0.35);
-      travel.setValue(0.28);
-      return;
-    }
-
-    const breathing = Animated.loop(
-      Animated.sequence([
-        Animated.timing(breathe, { toValue: 1, duration: 5600, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(breathe, { toValue: 0, duration: 5600, easing: Easing.inOut(Easing.sin), useNativeDriver: true })
-      ])
-    );
-    const travelling = Animated.loop(
-      Animated.sequence([
-        Animated.timing(travel, { toValue: 1, duration: 6200, easing: Easing.inOut(Easing.cubic), useNativeDriver: true }),
-        Animated.timing(travel, { toValue: 0, duration: 6200, easing: Easing.inOut(Easing.cubic), useNativeDriver: true })
-      ])
-    );
-
-    breathing.start();
-    travelling.start();
-    return () => {
-      breathing.stop();
-      travelling.stop();
-    };
-  }, [breathe, reduceMotion, travel]);
-
-  const ambientScale = breathe.interpolate({ inputRange: [0, 1], outputRange: [0.97, 1.07] });
-  const segmentOpacity = activity.interpolate({ inputRange: [0, 1], outputRange: [0, 0.62] });
-  const haloOpacity = activity.interpolate({ inputRange: [0, 1], outputRange: [0.05, 0.28] });
-  const haloScale = breathe.interpolate({ inputRange: [0, 1], outputRange: [0.92, 1.08] });
-
-  const topX = travel.interpolate({ inputRange: [0, 1], outputRange: [-110, 380] });
-  const rightY = travel.interpolate({ inputRange: [0, 1], outputRange: [-130, 760] });
-  const bottomX = travel.interpolate({ inputRange: [0, 1], outputRange: [300, -150] });
-  const leftY = travel.interpolate({ inputRange: [0, 1], outputRange: [720, -150] });
-
-  return (
-    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-      <Animated.View style={[styles.ambientBlue, { transform: [{ scale: ambientScale }] }]} />
-      <Animated.View style={[styles.ambientViolet, { transform: [{ scale: ambientScale }] }]} />
-      <Animated.View style={[styles.ambientCyan, { transform: [{ scale: ambientScale }] }]} />
-      <Animated.View style={[styles.actionHalo, { opacity: haloOpacity, transform: [{ scale: haloScale }] }]} />
-      <Animated.View style={[styles.edgeTopSegment, { opacity: segmentOpacity, transform: [{ translateX: topX }] }]} />
-      <Animated.View style={[styles.edgeRightSegment, { opacity: segmentOpacity, transform: [{ translateY: rightY }] }]} />
-      <Animated.View style={[styles.edgeBottomSegment, { opacity: segmentOpacity, transform: [{ translateX: bottomX }] }]} />
-      <Animated.View style={[styles.edgeLeftSegment, { opacity: segmentOpacity, transform: [{ translateY: leftY }] }]} />
-    </View>
-  );
-}
-
-function ActionTransition({
-  visible,
-  reduceMotion,
-  label
-}: {
-  visible: boolean;
-  reduceMotion: boolean;
-  label: string;
-}) {
-  const opacity = useRef(new Animated.Value(0)).current;
-  const pulse = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.timing(opacity, {
-      toValue: visible ? 1 : 0,
-      duration: reduceMotion ? 100 : 220,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true
-    }).start();
-
-    if (!visible || reduceMotion) {
-      pulse.stopAnimation();
-      pulse.setValue(0.4);
-      return;
-    }
-
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 1100, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0, duration: 1100, easing: Easing.inOut(Easing.sin), useNativeDriver: true })
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [opacity, pulse, reduceMotion, visible]);
-
-  const ringScale = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.86, 1.14] });
-  const coreOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.22, 0.62] });
-
-  return (
-    <Animated.View pointerEvents="none" style={[styles.actionTransition, { opacity }]}>
-      <Animated.View style={[styles.transitionGlow, { transform: [{ scale: ringScale }] }]} />
-      <Animated.View style={[styles.transitionRing, { transform: [{ scale: ringScale }] }]} />
-      <Animated.View style={[styles.transitionCore, { opacity: coreOpacity }]} />
-      <Text style={styles.transitionTitle}>{label}</Text>
-      <Text style={styles.transitionSubtitle}>Ich prüfe nur verifizierte iPhone-Wege und öffentliche APIs.</Text>
-    </Animated.View>
-  );
 }
 
 export default function App() {
@@ -282,6 +161,24 @@ export default function App() {
   const [actionResult, setActionResult] = useState<DirectActionResult | null>(null);
   const [actionRunning, setActionRunning] = useState(false);
   const [answerFeedback, setAnswerFeedback] = useState<SolutionFeedback | null>(null);
+  const [entitlements, setEntitlements] = useState<EntitlementState>(() =>
+    __DEV__ ? { ...DEFAULT_ENTITLEMENTS, pro: true } : DEFAULT_ENTITLEMENTS
+  );
+  const [proProducts, setProProducts] = useState<ProStoreProduct[]>([]);
+  const [storeLoading, setStoreLoading] = useState(true);
+  const [paywallVisible, setPaywallVisible] = useState(false);
+  const [paywallMessage, setPaywallMessage] = useState<string | null>(null);
+  const [purchasingProductId, setPurchasingProductId] = useState<string | null>(null);
+  const [restoreRunning, setRestoreRunning] = useState(false);
+  const [plannerResponse, setPlannerResponse] = useState<PlannerResponse | null>(null);
+  const [semanticDefinition, setSemanticDefinition] = useState<ReturnType<typeof compileShortcutGoal> | null>(null);
+  const [semanticSuggestion, setSemanticSuggestion] = useState<AutomationSuggestion | null>(null);
+  const [semanticClarification, setSemanticClarification] = useState<string | null>(null);
+  const [connectorConnections, setConnectorConnections] = useState<ConnectorConnectionProfile>(EMPTY_CONNECTOR_CONNECTION_PROFILE);
+  const [locationAuthorization, setLocationAuthorization] = useState<LocationAuthorizationResult | null>(null);
+  const [namedLocations, setNamedLocations] = useState<NamedLocation[]>([]);
+  const [automations, setAutomations] = useState<StoredAutomation[]>([]);
+  const [installingAutomation, setInstallingAutomation] = useState<StoredAutomation | null>(null);
 
   const appState = useRef<AppStateStatus>(AppState.currentState);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -304,8 +201,19 @@ export default function App() {
 
   useEffect(() => {
     let alive = true;
-    Promise.all([loadNeedRadarProfile(), loadGuideSession(), loadUserPreferences()])
-      .then(([savedProfile, savedGuide, savedPreferences]) => {
+    loadConnectorConnections().then((profile) => {
+      if (alive) setConnectorConnections(profile);
+    }).catch(() => undefined);
+    Promise.all([
+      CanMyPhoneNative?.locationAuthorizationStatus?.().catch(() => null) ?? Promise.resolve(null),
+      CanMyPhoneNative?.namedLocationsSnapshot?.().catch(() => []) ?? Promise.resolve([])
+    ]).then(([authorization, locations]) => {
+      if (!alive) return;
+      if (authorization) setLocationAuthorization(authorization);
+      setNamedLocations(locations);
+    }).catch(() => undefined);
+    Promise.all([loadNeedRadarProfile(), loadGuideSession(), loadUserPreferences(), syncNativeRunnerResults()])
+      .then(([savedProfile, savedGuide, savedPreferences, savedAutomations]) => {
         if (!alive) return;
         if (savedProfile) setProfile(savedProfile);
         if (savedGuide && savedGuide.status !== "completed") {
@@ -313,6 +221,7 @@ export default function App() {
           setMotionPhase("guiding");
         }
         setPreferences(savedPreferences);
+        setAutomations(savedAutomations);
         setProfileLoaded(true);
         setPreferencesLoaded(true);
       })
@@ -337,9 +246,46 @@ export default function App() {
   }, [preferences, preferencesLoaded]);
 
   useEffect(() => {
+    let alive = true;
+
+    Promise.all([refreshProEntitlement(), fetchProProducts()])
+      .then(([state, products]) => {
+        if (!alive) return;
+        setEntitlements(state);
+        setProProducts(products);
+        setStoreLoading(false);
+      })
+      .catch(() => {
+        if (alive) setStoreLoading(false);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
     const subscription = AppState.addEventListener("change", async (nextState) => {
       const previous = appState.current;
       appState.current = nextState;
+
+      if (nextState === "active" && previous !== "active") {
+        refreshProEntitlement().then(setEntitlements).catch(() => undefined);
+        syncNativeRunnerResults().then(setAutomations).catch(() => undefined);
+        CanMyPhoneNative?.locationAuthorizationStatus?.().then(setLocationAuthorization).catch(() => undefined);
+        CanMyPhoneNative?.namedLocationsSnapshot?.().then(setNamedLocations).catch(() => undefined);
+        const pendingId = await automationRepository.getPendingSetup();
+        if (pendingId) {
+          const pending = await automationRepository.get(pendingId);
+          if (pending?.personalSetup) {
+            const updated = { ...pending, personalSetup: { ...pending.personalSetup, setupState: "AWAITING_CONFIRMATION" as const } };
+            const saved = await automationRepository.save(updated);
+            setInstallingAutomation(saved);
+            setAutomations(await automationRepository.list());
+            setTab("ask");
+          }
+        }
+      }
 
       if (guideSession && (nextState === "background" || nextState === "inactive")) {
         const backgroundSession: GuideSession = { ...guideSession, status: "background", updatedAt: Date.now() };
@@ -381,6 +327,13 @@ export default function App() {
     () => shortcutAssistantPlan(submittedQuery, bestResult),
     [bestResult, submittedQuery]
   );
+  const automationPlan = useMemo(() => {
+    if (plannerResponse?.ok) return plannerResponse.plan;
+    if (!submittedQuery) return null;
+    const result = compileVerifiedGoal(submittedQuery);
+    return result.ok ? result.plan : null;
+  }, [submittedQuery, plannerResponse]);
+  const shortcutDefinition = useMemo(() => semanticDefinition ?? (submittedQuery ? compileShortcutGoal(submittedQuery) : null), [submittedQuery, semanticDefinition]);
   const isSearching = motionPhase === "diving" || motionPhase === "searching" || motionPhase === "emerging";
 
   const resetQuestion = () => {
@@ -392,8 +345,184 @@ export default function App() {
     setAiSelectedId(null);
     setActionResult(null);
     setAnswerFeedback(null);
+    setPlannerResponse(null);
+    setSemanticDefinition(null);
+    setSemanticSuggestion(null);
+    setSemanticClarification(null);
+    setInstallingAutomation(null);
     setMotionPhase("idle");
   };
+
+  const openPersonalAutomationInShortcuts = async (stored: StoredAutomation): Promise<StoredAutomation | null> => {
+    if (!stored.personalSetup) return stored;
+
+    let opened = false;
+    let handoffMode: "GUIDED" | "APPLE_INTELLIGENCE" = "GUIDED";
+    const major = osMajor();
+    const runtime = compileAutomationRuntime(stored.definition);
+
+    // If Apple only owns the trigger, don't make the person paste an AI prompt.
+    // The CanMyPhone App Shortcut already exists in Shortcuts with the saved
+    // automation as a selectable entity. We only need the Apple trigger setup.
+    if (runtime.appleBridgePurpose === "TRIGGER_ONLY") {
+      opened = Boolean(await CanMyPhoneNative?.openShortcuts("app"));
+    } else if (
+      major !== undefined &&
+      major >= 27 &&
+      typeof CanMyPhoneNative?.prepareShortcutDescription === "function"
+    ) {
+      const description = buildAppleIntelligenceAutomationDescription(stored.definition);
+      const prepared = await CanMyPhoneNative.prepareShortcutDescription(description).catch(() => null);
+      opened = Boolean(prepared?.opened);
+      if (opened && prepared?.copied) handoffMode = "APPLE_INTELLIGENCE";
+    }
+
+    if (!opened) {
+      opened = Boolean(await CanMyPhoneNative?.openShortcuts("app"));
+    }
+
+    if (!opened) {
+      setActionResult({
+        handled: true,
+        succeeded: false,
+        message: "Kurzbefehle konnte nicht geöffnet werden."
+      });
+      return null;
+    }
+
+    const updated: StoredAutomation = {
+      ...stored,
+      personalSetup: {
+        ...stored.personalSetup,
+        setupState: "HANDED_OFF",
+        handedOffAt: new Date().toISOString(),
+        handoffMode
+      }
+    };
+
+    const saved = await automationRepository.save(updated);
+    await automationRepository.setPendingSetup(saved.id);
+    setInstallingAutomation(saved);
+    setAutomations(await automationRepository.list());
+    trackProductEvent("automation_handoff_opened", {
+      trigger: saved.definition.trigger.capabilityId,
+      handoff_mode: handoffMode
+    });
+    return saved;
+  };
+
+  const createAutomation = async () => {
+    if (!shortcutDefinition) return;
+    trackProductEvent("automation_materialization_started", { strategy: shortcutDefinition.executionStrategy });
+    try {
+      const resolvedDefinition = resolveConnectedProviders(shortcutDefinition, connectedProviderIds(connectorConnections));
+      const stored = await automationRepository.save(materializeShortcutDefinition(resolvedDefinition));
+      setInstallingAutomation(stored);
+      setAutomations(await automationRepository.list());
+
+      // Do not throw the person out of CanMyPhone immediately. First show what
+      // CanMyPhone already created and which Apple-owned trigger still needs a
+      // one-time connection. Shortcuts opens only after an explicit tap.
+      if (stored.personalSetup) {
+        const runtime = compileAutomationRuntime(stored.definition);
+        setActionResult({
+          handled: true,
+          succeeded: true,
+          message: runtime.appleBridgePurpose === "TRIGGER_ONLY"
+            ? "Die Logik ist in CanMyPhone gespeichert. Für diesen Auslöser fehlt noch ein iOS-System-Trigger oder ein direkter CanMyPhone-Triggerweg."
+            : "Die Automation ist vorbereitet. Mindestens ein Apple-Systemschritt muss noch verbunden werden."
+        });
+        trackProductEvent("automation_saved_waiting_for_apple_setup", {
+          bridge_purpose: runtime.appleBridgePurpose,
+          trigger: stored.definition.trigger.capabilityId
+        });
+      }
+    } catch {
+      setActionResult({ handled: true, succeeded: false, message: "Diese Automation kann ich noch nicht sicher erstellen." });
+    }
+  };
+
+  const handoffAutomation = async () => {
+    if (!installingAutomation?.personalSetup) return;
+    await openPersonalAutomationInShortcuts(installingAutomation);
+  };
+
+  const approveAutomation = async () => {
+    if(!installingAutomation)return;
+    const saved=await automationRepository.save(approveSensitiveAutomation(installingAutomation));
+    setInstallingAutomation(saved);setAutomations(await automationRepository.list());
+  };
+
+  const launchAutomationThroughCanMyPhone = async () => {
+    if (!installingAutomation) return;
+    const launcher = launcherPlanForDefinition(installingAutomation.definition);
+    if (!launcher.available) {
+      setActionResult({ handled:true, succeeded:false, message:"Für diese App gibt es noch keinen direkten CanMyPhone-Launcher." });
+      return;
+    }
+
+    try {
+      const runnable: StoredAutomation = {
+        ...installingAutomation,
+        enabled:true,
+        materializationState:"ACTIVE",
+        personalSetup: installingAutomation.personalSetup
+          ? { ...installingAutomation.personalSetup, setupState:"NOT_STARTED" }
+          : undefined
+      };
+      const saved=await automationRepository.save(runnable);
+      setInstallingAutomation(saved);
+      setAutomations(await automationRepository.list());
+
+      const runResult=await CanMyPhoneNative?.runStoredAutomation(saved.id);
+      if(runResult?.status!=="SUCCESS"){
+        setActionResult({
+          handled:true,
+          succeeded:false,
+          message:typeof runResult?.humanMessage==="string"
+            ?runResult.humanMessage
+            :"Die gespeicherten Aktionen konnten nicht sicher ausgeführt werden."
+        });
+        return;
+      }
+
+      const opened=await Linking.openURL(launcher.target.universalUrl).then(()=>true).catch(()=>false);
+      if(!opened){
+        setActionResult({
+          handled:true,
+          succeeded:false,
+          message:`Die Automation wurde ausgeführt, aber ${launcher.target.displayName} konnte nicht geöffnet werden.`
+        });
+        return;
+      }
+
+      setActionResult({
+        handled:true,
+        succeeded:true,
+        message:`Automation ausgeführt · ${launcher.target.displayName} wurde geöffnet.`
+      });
+      trackProductEvent("automation_run_success",{status:"LAUNCHER"});
+    } catch {
+      setActionResult({ handled:true, succeeded:false, message:"Der CanMyPhone-Launcher konnte die Automation gerade nicht ausführen." });
+      trackProductEvent("automation_run_failed",{status:"LAUNCHER_ERROR"});
+    }
+  };
+
+  const confirmAutomation = async () => {
+    if (!installingAutomation) return;
+    const updated: StoredAutomation = { ...installingAutomation, enabled:true, materializationState:"ACTIVE", personalSetup: installingAutomation.personalSetup ? { ...installingAutomation.personalSetup, setupState:"ACTIVE" } : undefined };
+    const saved=await automationRepository.save(updated); await automationRepository.setPendingSetup(null);
+    setInstallingAutomation(saved); setAutomations(await automationRepository.list());
+    trackProductEvent("automation_setup_confirmed", { strategy:saved.definition.executionStrategy });
+    if (!saved.personalSetup) {
+      const runResult = await CanMyPhoneNative?.runStoredAutomation(saved.id);
+      const succeeded = runResult?.status === "SUCCESS";
+      setActionResult({ handled:true, succeeded, message: typeof runResult?.humanMessage === "string" ? runResult.humanMessage : "Die Automation ist aktiviert." });
+      trackProductEvent(succeeded ? "automation_run_success" : "automation_run_failed", { status: String(runResult?.status ?? "UNAVAILABLE") });
+    }
+  };
+
+  const cancelSetup = async () => { if(!installingAutomation)return;await automationRepository.setPendingSetup(null);const updated={...installingAutomation,personalSetup:installingAutomation.personalSetup?{...installingAutomation.personalSetup,setupState:"NOT_STARTED" as const}:undefined};const saved=await automationRepository.save(updated);setInstallingAutomation(saved);setAutomations(await automationRepository.list());trackProductEvent("automation_setup_cancelled",{}); };
 
   const runAsk = async (value = draftQuery, fromClarification = false) => {
     const normalized = value.trim();
@@ -408,6 +537,9 @@ export default function App() {
     setAiSelectedId(null);
     setActionResult(null);
     setAnswerFeedback(null);
+    setSemanticDefinition(null);
+    setSemanticSuggestion(null);
+    setSemanticClarification(null);
     if (!fromClarification) setClarificationUsed(false);
     setProfile((current) => learnFromProblem(current, normalized, solutions, platform));
     setMotionPhase("diving");
@@ -416,16 +548,64 @@ export default function App() {
 
     searchTimer.current = setTimeout(async () => {
       const deterministic = resolveConversation(normalized, solutions, deviceContext);
+      const compiledShortcut = compileShortcutGoal(normalized);
       let selectedByAI: string | null = null;
+      let semanticHandled = false;
+
+      if (preferences.useOnDeviceAI) {
+        const semantic = await interpretAutomationWithOnDeviceAI(normalized, {
+          connectedProviderIds: [...connectedProviderIds(connectorConnections)],
+          localNow: new Date().toISOString(),
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+        });
+        if (semantic.kind === "understood") {
+          setSemanticDefinition(semantic.definition);
+          setSemanticSuggestion(semantic.suggestion ?? null);
+          semanticHandled = true;
+        } else if (semantic.kind === "clarification") {
+          setSemanticClarification(semantic.question);
+          semanticHandled = true;
+        }
+      }
+
+      if (!semanticHandled && preferences.useOnDeviceAI) {
+        const serverSemantic = getSupabaseSemanticClient();
+        if (serverSemantic) {
+          const semantic = await serverSemantic.interpret(normalized, {
+            locale: "de",
+            connectedProviderIds: [...connectedProviderIds(connectorConnections)],
+            localNow: new Date().toISOString(),
+            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+          });
+          if (semantic.kind === "understood") {
+            setSemanticDefinition(semantic.definition);
+            setSemanticSuggestion(semantic.suggestion ?? null);
+            semanticHandled = true;
+          } else if (semantic.kind === "clarification") {
+            setSemanticClarification(semantic.question);
+            semanticHandled = true;
+          }
+        }
+      }
 
       if (
+        !semanticHandled &&
         preferences.useOnDeviceAI &&
         !deterministic.followUp &&
-        deterministic.solutions.length === 0
+        deterministic.solutions.length === 0 &&
+        compiledShortcut.confidence < 0.8
       ) {
         const candidates = solutions.filter((item) => item.platform === platform || item.platform === "both");
         const resolved = await resolveWithOnDeviceAI(normalized, candidates);
         selectedByAI = resolved.solutionId;
+      }
+
+      if (!semanticHandled && !deterministic.followUp && deterministic.solutions.length === 0 && !selectedByAI && compiledShortcut.confidence < 0.8) {
+        const server = getSupabasePlannerClient();
+        if (server) {
+          const planned = await planGoal(normalized, { locale: "de", connectedProviders: [], grantedSignals: [] }, server);
+          setPlannerResponse(planned);
+        }
       }
 
       setAiSelectedId(selectedByAI);
@@ -492,6 +672,19 @@ export default function App() {
     }
   };
 
+  const exitGuide = async () => {
+    if (guideSession) {
+      await endGuideLiveActivity("Einrichtung beendet");
+      await saveGuideSession(null);
+    }
+    setGuideSession(null);
+    setLiveActivityActive(false);
+    setReturnedFromBackground(false);
+    setSettingsHint(null);
+    setMotionPhase(submittedQuery ? "answer" : "idle");
+    await hapticStep();
+  };
+
   const finishGuide = async () => {
     if (guideSession) {
       await endGuideLiveActivity("Einrichtung abgeschlossen");
@@ -522,10 +715,73 @@ export default function App() {
     const result = await runDirectAction(bestResult, submittedQuery);
     setActionResult(result);
     setActionRunning(false);
+
+    if (result.locked) {
+      setPaywallMessage(result.message);
+      setPaywallVisible(true);
+    }
+
+    refreshProEntitlement().then(setEntitlements).catch(() => undefined);
     setMotionPhase(result.succeeded ? "success" : "answer");
     if (result.succeeded) await hapticAnswer();
     else await hapticStep();
     if (result.succeeded) setTimeout(() => setMotionPhase("answer"), reduceMotion ? 100 : 650);
+  };
+
+  const showPaywall = (message?: string) => {
+    setPaywallMessage(message ?? null);
+    setPaywallVisible(true);
+  };
+
+  const handlePurchase = async (productId: string) => {
+    if (purchasingProductId || restoreRunning) return;
+    setPurchasingProductId(productId);
+    setPaywallMessage(null);
+
+    const result = await purchasePro(productId);
+    setEntitlements(result.state);
+    setPaywallMessage(result.message);
+    setPurchasingProductId(null);
+
+    if (result.status === "purchased" && result.state.pro) {
+      await hapticAnswer();
+      setTimeout(() => setPaywallVisible(false), 420);
+    } else if (result.status !== "cancelled") {
+      await hapticStep();
+    }
+  };
+
+  const handleRestore = async () => {
+    if (restoreRunning || purchasingProductId) return;
+    setRestoreRunning(true);
+    setPaywallMessage(null);
+
+    const result = await restoreProPurchases();
+    setEntitlements(result.state);
+    setPaywallMessage(result.message);
+    setRestoreRunning(false);
+
+    if (result.state.pro) {
+      await hapticAnswer();
+      setTimeout(() => setPaywallVisible(false), 420);
+    } else {
+      await hapticStep();
+    }
+  };
+
+  const startPremiumShortcutGuide = async () => {
+    if (!bestResult || !shortcutPlan.applicable) return;
+
+    const current = await refreshProEntitlement();
+    setEntitlements(current);
+
+    if (!proFeatureAccess(current)) {
+      showPaywall("Premium-Automationen und App-Kurzbefehle gehören zu CanMyPhone Pro.");
+      await hapticStep();
+      return;
+    }
+
+    await startGuide(bestResult, shortcutPlan.steps, shortcutPlan.title);
   };
 
   const applyFeedback = async (feedback: SolutionFeedback) => {
@@ -540,6 +796,225 @@ export default function App() {
     setProfile(fresh);
     await clearNeedRadarProfile();
   };
+
+  const refreshLocationAutomationState = async () => {
+    const [authorization, locations] = await Promise.all([
+      CanMyPhoneNative?.locationAuthorizationStatus?.().catch(() => null) ?? Promise.resolve(null),
+      CanMyPhoneNative?.namedLocationsSnapshot?.().catch(() => []) ?? Promise.resolve([])
+    ]);
+    if (authorization) setLocationAuthorization(authorization);
+    setNamedLocations(locations);
+  };
+
+  const requestLocationAutomationPermission = async () => {
+    const result = await CanMyPhoneNative?.requestLocationAutomationPermission?.().catch(() => null);
+    if (!result) {
+      setActionResult({ handled:true, succeeded:false, message:"Der installierte Development Build enthält die neue Standort-Automation noch nicht." });
+      return;
+    }
+    setLocationAuthorization(result);
+    setTimeout(() => refreshLocationAutomationState().catch(() => undefined), 1200);
+  };
+
+  const saveNamedLocationHere = async (name: string) => {
+    const result = await CanMyPhoneNative?.saveCurrentLocationAs?.(name, 150).catch(() => null);
+    if (!result?.success) {
+      setActionResult({ handled:true, succeeded:false, message:result?.message ?? "Der Ort konnte noch nicht gespeichert werden." });
+      return;
+    }
+    await refreshLocationAutomationState();
+    setActionResult({ handled:true, succeeded:true, message:result.message });
+  };
+
+  const provisionTeslaNativeExecution = async () => {
+    const service = getTeslaConnectorService();
+    if (!service) {
+      return { ok:false as const, message:"Der sichere Tesla-Backend-Connector ist in diesem Build noch nicht konfiguriert." };
+    }
+    const grant = await service.nativeExecutionGrant();
+    if (!grant.ok) return { ok:false as const, message:grant.message };
+    const configured = await CanMyPhoneNative?.configureTeslaExecutionGrant?.(grant.endpoint, grant.token).catch(() => null);
+    if (!configured?.success) {
+      return {
+        ok:false as const,
+        message:configured?.message ?? "Der sichere Tesla-Hintergrundzugang ist in diesem Development Build noch nicht verfügbar."
+      };
+    }
+    return { ok:true as const, message:"Tesla ist auch für sichere Hintergrund-Automationen bereit." };
+  };
+
+  const refreshTeslaConnection = async () => {
+    const service = getTeslaConnectorService();
+    if (!service) return null;
+    const status = await service.status();
+    if (!status.ok) return status;
+    if (status.ready) {
+      const provisioned = await provisionTeslaNativeExecution();
+      if (!provisioned.ok) {
+        const profile = await saveConnectorConnection({
+          providerId: "tesla",
+          status: "ERROR",
+          updatedAt: new Date().toISOString(),
+          errorCode: "TESLA_NATIVE_GRANT_FAILED"
+        });
+        setConnectorConnections(profile);
+        return { ok:false as const, code:"TESLA_NATIVE_GRANT_FAILED", message:provisioned.message };
+      }
+      const profile = await saveConnectorConnection({
+        providerId: "tesla",
+        status: "CONNECTED",
+        updatedAt: new Date().toISOString(),
+        connectedAt: new Date().toISOString()
+      });
+      setConnectorConnections(profile);
+    } else if (status.connected) {
+      const profile = await saveConnectorConnection({
+        providerId: "tesla",
+        status: "CONNECTING",
+        updatedAt: new Date().toISOString()
+      });
+      setConnectorConnections(profile);
+    }
+    return status;
+  };
+
+  const connectProvider = async (providerId: string, input?: ConnectorConnectInput) => {
+    const startedAt = new Date().toISOString();
+    let profile = await saveConnectorConnection({
+      providerId,
+      status: "CONNECTING",
+      updatedAt: startedAt
+    });
+    setConnectorConnections(profile);
+
+    if (providerId === "apple-home") {
+      const snapshot = await CanMyPhoneNative?.homeKitSnapshot?.().catch(() => null);
+      if (snapshot?.authorized) {
+        profile = await saveConnectorConnection({
+          providerId,
+          status: "CONNECTED",
+          updatedAt: new Date().toISOString(),
+          connectedAt: new Date().toISOString()
+        });
+        setConnectorConnections(profile);
+        return;
+      }
+
+      profile = await saveConnectorConnection({
+        providerId,
+        status: "ERROR",
+        updatedAt: new Date().toISOString(),
+        errorCode: snapshot?.restricted ? "HOMEKIT_RESTRICTED" : "HOMEKIT_NOT_AUTHORIZED"
+      });
+      setConnectorConnections(profile);
+      return;
+    }
+
+    if (providerId === "tesla") {
+      const service = getTeslaConnectorService();
+      if (!service) {
+        profile = await saveConnectorConnection({
+          providerId,
+          status: "ERROR",
+          updatedAt: new Date().toISOString(),
+          errorCode: "TESLA_BACKEND_NOT_CONFIGURED"
+        });
+        setConnectorConnections(profile);
+        setActionResult({ handled:true, succeeded:false, message:"Der sichere Tesla-Backend-Connector ist in diesem Build noch nicht konfiguriert." });
+        return;
+      }
+
+      const current = await service.status();
+      if (current.ok && current.ready) {
+        const refreshed = await refreshTeslaConnection();
+        if (refreshed?.ok === false) {
+          setActionResult({ handled:true, succeeded:false, message:refreshed.message });
+          return;
+        }
+        setActionResult({ handled:true, succeeded:true, message:"Tesla ist verbunden und für sichere Hintergrund-Automationen bereit." });
+        return;
+      }
+
+      if (current.ok && current.connected && current.pairingUrl) {
+        const opened = await Linking.openURL(current.pairingUrl).then(()=>true).catch(()=>false);
+        if (!opened) {
+          profile = await saveConnectorConnection({providerId,status:"ERROR",updatedAt:new Date().toISOString(),errorCode:"TESLA_PAIRING_LINK_FAILED"});
+          setConnectorConnections(profile);
+          setActionResult({handled:true,succeeded:false,message:"Die Tesla-Schlüsselpaarung konnte nicht geöffnet werden."});
+          return;
+        }
+        setActionResult({ handled:true, succeeded:false, message:"Tesla ist angemeldet. Bestätige jetzt den virtuellen Schlüssel in der Tesla-App und tippe danach erneut auf „Kopplung fortsetzen“." });
+        return;
+      }
+
+      const authorization = await service.authorizationUrl();
+      if (!authorization.ok) {
+        profile = await saveConnectorConnection({providerId,status:"ERROR",updatedAt:new Date().toISOString(),errorCode:authorization.code});
+        setConnectorConnections(profile);
+        setActionResult({handled:true,succeeded:false,message:authorization.message});
+        return;
+      }
+      const opened = await Linking.openURL(authorization.url).then(()=>true).catch(()=>false);
+      if (!opened) {
+        profile = await saveConnectorConnection({providerId,status:"ERROR",updatedAt:new Date().toISOString(),errorCode:"TESLA_AUTH_LINK_FAILED"});
+        setConnectorConnections(profile);
+        setActionResult({handled:true,succeeded:false,message:"Die Tesla-Anmeldung konnte nicht geöffnet werden."});
+        return;
+      }
+      setActionResult({handled:true,succeeded:false,message:"Tesla-Anmeldung geöffnet. Nach der Freigabe kehrst du zu CanMyPhone zurück und schließt die Schlüsselpaarung ab."});
+      return;
+    }
+
+    if (providerId === "homematic-ip") {
+      const suffix=input?.hcuSuffix?.trim()??"";
+      const activationKey=input?.activationKey?.trim()??"";
+      if(suffix.length!==4||!activationKey){
+        profile=await saveConnectorConnection({providerId,status:"ERROR",updatedAt:new Date().toISOString(),errorCode:"HOMEMATIC_SETUP_REQUIRED"});
+        setConnectorConnections(profile);
+        setActionResult({handled:true,succeeded:false,message:"Für Homematic IP fehlen die letzten vier HCU-SGTIN-Stellen oder der Aktivierungsschlüssel."});
+        return;
+      }
+      const pairing=await CanMyPhoneNative?.homematicPair?.(suffix,activationKey).catch(()=>null);
+      if(pairing?.success){
+        profile=await saveConnectorConnection({
+          providerId,
+          status:"CONNECTED",
+          updatedAt:new Date().toISOString(),
+          connectedAt:new Date().toISOString()
+        });
+        setConnectorConnections(profile);
+        setActionResult({handled:true,succeeded:true,message:pairing.message});
+        return;
+      }
+      profile=await saveConnectorConnection({
+        providerId,
+        status:"ERROR",
+        updatedAt:new Date().toISOString(),
+        errorCode:pairing?.code??"HOMEMATIC_PAIRING_FAILED"
+      });
+      setConnectorConnections(profile);
+      setActionResult({handled:true,succeeded:false,message:pairing?.message??"Dieser Development Build enthält die neue Homematic-HCU-Verbindung noch nicht."});
+      return;
+    }
+
+    profile = await saveConnectorConnection({
+      providerId,
+      status: "ERROR",
+      updatedAt: new Date().toISOString(),
+      errorCode: "CONNECTOR_NOT_LIVE_YET"
+    });
+    setConnectorConnections(profile);
+  };
+
+  useEffect(() => {
+    refreshTeslaConnection().catch(() => undefined);
+    const subscription = Linking.addEventListener("url", ({ url }) => {
+      if (url.startsWith("canmyphone://connector/tesla")) {
+        refreshTeslaConnection().catch(() => undefined);
+      }
+    });
+    return () => subscription.remove();
+  }, []);
 
   const updatePreferences = (patch: Partial<UserPreferences>) => {
     setPreferences((current) => ({ ...current, ...patch }));
@@ -559,19 +1034,35 @@ export default function App() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <AuraLayer phase={motionPhase} reduceMotion={reduceMotion} />
+      <AuraV2 phase={motionPhase} reduceMotion={reduceMotion} />
 
       <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <View style={styles.header}>
-          <Text style={styles.brand}>CanMyPhone</Text>
-          <View style={styles.headerActions}>
-            {preferences.beginnerMode ? <Text style={styles.modePill}>EINFACH</Text> : null}
-            <Pressable accessibilityLabel="Bereich Du öffnen" onPress={() => switchTab("you")}>
-              <GlassSurface style={styles.moreButton} interactive>
-                <Text style={styles.moreButtonText}>•••</Text>
-              </GlassSurface>
+          {guideSession ? (
+            <Pressable
+              style={styles.guideBackButton}
+              onPress={() => exitGuide().catch(() => undefined)}
+              hitSlop={10}
+              accessibilityLabel="Guide verlassen und zurück"
+            >
+              <Text style={styles.guideBackIcon}>‹</Text>
+              <Text style={styles.guideBackText}>Zurück</Text>
             </Pressable>
-          </View>
+          ) : (
+            <Text style={styles.brand}>CanMyPhone</Text>
+          )}
+          {guideSession ? (
+            <Text style={styles.guideHeaderTitle}>Anleitung</Text>
+          ) : (
+            <View style={styles.headerActions}>
+              {preferences.beginnerMode ? <Text style={styles.modePill}>EINFACH</Text> : null}
+              <Pressable accessibilityLabel="Bereich Du öffnen" onPress={() => switchTab("you")}>
+                <GlassSurface variant="inset" style={styles.moreButton} interactive>
+                  <Text style={styles.moreButtonText}>•••</Text>
+                </GlassSurface>
+              </Pressable>
+            </View>
+          )}
         </View>
 
         {guideSession && guideSolution ? (
@@ -602,7 +1093,7 @@ export default function App() {
           >
             {tab === "ask" ? (
               <>
-                {submittedQuery && (bestResult || needsFollowUp) ? (
+                {submittedQuery && (plannerResponse || automationPlan || bestResult || needsFollowUp) ? (
                   <View style={styles.answerTopBar}>
                     <Pressable onPress={resetQuestion} hitSlop={12} accessibilityLabel="Zurück zur Frage">
                       <Text style={styles.backButton}>‹</Text>
@@ -613,7 +1104,11 @@ export default function App() {
 
                 <View style={[styles.heroBlock, submittedQuery && styles.heroBlockAnswer]}>
                   <Text style={styles.hero}>
-                    {needsFollowUp
+                    {plannerResponse && !plannerResponse.ok && plannerResponse.code === "needs-clarification"
+                      ? "Ich brauche noch eine Angabe."
+                      : automationPlan
+                      ? "So würde deine Automation funktionieren."
+                      : needsFollowUp
                       ? "Eine Sache muss ich noch wissen."
                       : bestResult
                         ? preferences.beginnerMode
@@ -621,46 +1116,104 @@ export default function App() {
                           : "Ja — ich habe einen Weg gefunden."
                         : submittedQuery
                           ? "Dafür habe ich noch keinen sicheren Treffer."
-                          : "Was soll dein iPhone für dich tun?"}
+                          : "Was soll für dich passieren?"}
                   </Text>
                   <Text style={styles.heroSubtext}>
-                    {needsFollowUp
+                    {plannerResponse && !plannerResponse.ok && plannerResponse.code === "needs-clarification"
+                      ? "Ich frage lieber nach, statt eine Automation zu erraten."
+                      : automationPlan
+                      ? "Prüfe den Ablauf und richte anschließend nur die wirklich benötigten Verbindungen und Freigaben ein."
+                      : needsFollowUp
                       ? "Nur eine kurze Rückfrage, damit ich dir nichts Falsches zeige."
                       : bestResult
                         ? "CanMyPhone bevorzugt native, sichere und möglichst einfache Lösungen."
                         : submittedQuery
                           ? "Formuliere dein Ziel etwas konkreter. Ich erfinde keine Funktionen oder Menüpfade."
                           : preferences.beginnerMode
-                            ? "Sag einfach, was du möchtest. Ich erkläre dir immer nur den nächsten Schritt."
-                            : "Sag einfach, was du erreichen möchtest. CanMyPhone findet den einfachsten Weg."}
+                            ? "Sag einfach, was ich einstellen soll. Ich zeige dir immer nur den nächsten sinnvollen Schritt."
+                            : "Beschreibe dein Ziel. CanMyPhone plant Trigger, Prüfungen und Aktionen und zeigt dir ehrlich, was automatisch möglich ist."}
                   </Text>
                 </View>
 
                 {!submittedQuery && !isSearching ? (
-                  <GlassSurface style={styles.askBox} interactive tintColor="rgba(255,255,255,0.20)">
-                    <TextInput
-                      value={draftQuery}
-                      onChangeText={setDraftQuery}
-                      placeholder="Was möchtest du erreichen?"
-                      placeholderTextColor="#7D8793"
-                      returnKeyType="send"
-                      onSubmitEditing={() => runAsk().catch(() => undefined)}
-                      onFocus={() => setMotionPhase("listening")}
-                      onBlur={() => !submittedQuery && setMotionPhase("idle")}
-                      style={styles.input}
-                      accessibilityLabel="Frage an CanMyPhone"
-                    />
-                    <Pressable style={styles.askButton} onPress={() => runAsk().catch(() => undefined)} hitSlop={6} accessibilityLabel="Frage senden">
-                      <Text style={styles.askButtonText}>↑</Text>
-                    </Pressable>
-                  </GlassSurface>
+                  <LiquidComposer
+                    value={draftQuery}
+                    onChangeText={setDraftQuery}
+                    onSubmitEditing={() => runAsk().catch(() => undefined)}
+                    onFocus={() => setMotionPhase("listening")}
+                    onBlur={() => !submittedQuery && setMotionPhase("idle")}
+                    onSend={() => runAsk().catch(() => undefined)}
+                    accessibilityLabel="Frage an CanMyPhone"
+                  />
                 ) : null}
 
-                {needsFollowUp ? (
-                  <GlassSurface style={styles.followUpCard} tintColor="rgba(255,255,255,0.18)">
+                {shortcutDefinition && shortcutDefinition.confidence >= 0.8 && !automationPlan ? (
+                  <View style={styles.answerArea}>
+                    <ShortcutDefinitionPreview definition={shortcutDefinition} />
+                    {semanticSuggestion ? <ContentSurface style={styles.resultBanner}><Text style={styles.resultTitle}>{semanticSuggestion.title}</Text><Text style={styles.resultText}>{semanticSuggestion.message}</Text>{semanticSuggestion.proposedGoal ? <Pressable onPress={()=>runAsk(semanticSuggestion.proposedGoal!).catch(()=>undefined)} style={styles.textAction}><Text style={styles.textActionText}>Vorschlag verwenden</Text></Pressable> : null}</ContentSurface> : null}
+                    {installingAutomation ? <AutomationInstallationCard automation={installingAutomation} connectedProviderIds={[...connectedProviderIds(connectorConnections)]} locationAlways={locationAuthorization?.always===true} namedLocationNames={namedLocations.map((item)=>item.name)} onRequestLocationPermission={()=>requestLocationAutomationPermission().catch(()=>undefined)} onSaveNamedLocation={(name)=>saveNamedLocationHere(name).catch(()=>undefined)} onApprove={()=>approveAutomation().catch(()=>undefined)} onLaunchWithCanMyPhone={()=>launchAutomationThroughCanMyPhone().catch(()=>undefined)} onHandoff={()=>handoffAutomation().catch(()=>undefined)} onConfirm={()=>confirmAutomation().catch(()=>undefined)} onCancel={()=>cancelSetup().catch(()=>undefined)} /> : <LiquidButton style={styles.primaryAction} label="Automation einrichten" onPress={()=>createAutomation().catch(()=>undefined)} />}
+                    {actionResult ? <ContentSurface style={styles.resultBanner}><Text style={styles.resultTitle}>Status</Text><Text style={styles.resultText}>{actionResult.message}</Text></ContentSurface> : null}
+                  </View>
+                ) : semanticClarification ? (
+                  <GlassSurface variant="floating" style={styles.followUpCard}>
+                    <Text style={styles.answerEyebrow}>ICH WILL ES RICHTIG VERSTEHEN</Text>
+                    <Text style={styles.followUpText}>{semanticClarification}</Text>
+                    <GlassSurface variant="inset" style={styles.followUpInputRow}>
+                      <TextInput value={followUpDraft} onChangeText={setFollowUpDraft} placeholder="Deine Antwort" placeholderTextColor="#87919D" returnKeyType="send" onSubmitEditing={submitClarification} style={styles.followUpInput} />
+                      <Pressable style={styles.smallSendButton} onPress={submitClarification} accessibilityLabel="Antwort senden"><Text style={styles.smallSendText}>↑</Text></Pressable>
+                    </GlassSurface>
+                  </GlassSurface>
+                ) : plannerResponse && !plannerResponse.ok && plannerResponse.code === "needs-clarification" ? (
+                  <GlassSurface variant="floating" style={styles.followUpCard}>
+                    <Text style={styles.answerEyebrow}>ICH BRAUCHE NOCH EINE ANGABE</Text>
+                    <Text style={styles.followUpText}>{plannerResponse.clarificationQuestion}</Text>
+                    <GlassSurface variant="inset" style={styles.followUpInputRow}>
+                      <TextInput value={followUpDraft} onChangeText={setFollowUpDraft} placeholder="Deine Antwort" placeholderTextColor="#87919D" returnKeyType="send" onSubmitEditing={submitClarification} style={styles.followUpInput} />
+                      <Pressable style={styles.smallSendButton} onPress={submitClarification} accessibilityLabel="Antwort senden"><Text style={styles.smallSendText}>↑</Text></Pressable>
+                    </GlassSurface>
+                  </GlassSurface>
+                ) : plannerResponse && !plannerResponse.ok && plannerResponse.code !== "unsupported" ? (
+                  <View style={styles.noResultArea}><ContentSurface style={styles.noResultCard}><Text style={styles.noResultTitle}>Sichere Planung nicht möglich.</Text><Text style={styles.noResultText}>{plannerResponse.message}</Text></ContentSurface><LiquidButton style={styles.primaryAction} label="Erneut versuchen" onPress={() => runAsk(submittedQuery).catch(() => undefined)} /></View>
+                ) : automationPlan ? (
+                  <View style={styles.answerArea}>
+                    {installingAutomation ? (
+                      <AutomationInstallationCard
+                        automation={installingAutomation}
+                        connectedProviderIds={[...connectedProviderIds(connectorConnections)]}
+                        locationAlways={locationAuthorization?.always===true}
+                        namedLocationNames={namedLocations.map((item)=>item.name)}
+                        onRequestLocationPermission={()=>requestLocationAutomationPermission().catch(()=>undefined)}
+                        onSaveNamedLocation={(name)=>saveNamedLocationHere(name).catch(()=>undefined)}
+                        onApprove={()=>approveAutomation().catch(()=>undefined)}
+                        onLaunchWithCanMyPhone={()=>launchAutomationThroughCanMyPhone().catch(()=>undefined)}
+                        onHandoff={()=>handoffAutomation().catch(()=>undefined)}
+                        onConfirm={()=>confirmAutomation().catch(()=>undefined)}
+                        onCancel={()=>cancelSetup().catch(()=>undefined)}
+                      />
+                    ) : (
+                      <AutomationPlanPreview
+                        plan={automationPlan}
+                        pro={entitlements.pro}
+                        providerConnected={connectedProviderIds(connectorConnections).has("tesla")}
+                        onCreate={() => createAutomation().catch(() => undefined)}
+                        onConnect={() => {
+                          if (!entitlements.pro) {
+                            setPaywallMessage("Tesla-Integrationen gehören zu CanMyPhone Pro. Die Planvorschau bleibt kostenlos.");
+                            setPaywallVisible(true);
+                            return;
+                          }
+                          connectProvider("tesla").catch(() => undefined);
+                        }}
+                      />
+                    )}
+                    {actionResult ? <ContentSurface emphasis="active" style={styles.resultBanner}><Text style={styles.resultTitle}>Status</Text><Text style={styles.resultText}>{actionResult.message}</Text></ContentSurface> : null}
+                    <Pressable onPress={resetQuestion} style={styles.textAction}><Text style={styles.textActionText}>Neue Automation</Text></Pressable>
+                  </View>
+                ) : needsFollowUp ? (
+                  <GlassSurface variant="floating" style={styles.followUpCard}>
                     <Text style={styles.answerEyebrow}>EINE KURZE RÜCKFRAGE</Text>
                     <Text style={styles.followUpText}>{conversation.followUp}</Text>
-                    <View style={styles.followUpInputRow}>
+                    <GlassSurface variant="inset" style={styles.followUpInputRow}>
                       <TextInput
                         value={followUpDraft}
                         onChangeText={setFollowUpDraft}
@@ -673,7 +1226,7 @@ export default function App() {
                       <Pressable style={styles.smallSendButton} onPress={submitClarification} accessibilityLabel="Antwort senden">
                         <Text style={styles.smallSendText}>↑</Text>
                       </Pressable>
-                    </View>
+                    </GlassSurface>
                   </GlassSurface>
                 ) : bestResult ? (
                   <View style={styles.answerArea}>
@@ -684,44 +1237,49 @@ export default function App() {
                     <Text style={styles.answerSummary}>{bestResult.summary}</Text>
                     {conversation.notice ? <Text style={styles.noticeText}>{conversation.notice}</Text> : null}
 
-                    <GlassSurface style={styles.capabilityCard} tintColor="rgba(255,255,255,0.16)">
-                      <View style={styles.capabilityIcon}><Text style={styles.capabilityIconText}>✓</Text></View>
-                      <View style={styles.capabilityTextWrap}>
-                        <Text style={styles.capabilityTitle}>{actionPlan?.supported ? "Kann direkt helfen" : "Sicherer Weg verfügbar"}</Text>
-                        <Text style={styles.capabilityText}>
-                          {actionPlan?.supported
-                            ? "Wenn iOS eine öffentliche Aktion erlaubt, führt CanMyPhone sie direkt aus."
-                            : "Keine privaten Einstellungslinks und keine erfundenen Schritte."}
-                        </Text>
-                      </View>
-                    </GlassSurface>
+                    <CapabilityCard
+                      level={actionPlan?.supported ? "direct" : shortcutPlan.applicable ? "shortcut" : "confirm"}
+                      title={actionPlan?.supported ? "CanMyPhone erledigt es" : shortcutPlan.applicable ? "CanMyPhone automatisiert es" : "Deine Bestätigung in iOS nötig"}
+                      description={
+                        actionPlan?.supported
+                          ? "Die Änderung läuft über eine öffentliche iOS-Aktion und kann direkt ausgeführt werden."
+                          : shortcutPlan.applicable
+                            ? "CanMyPhone bereitet den offiziellen Kurzbefehls-Weg vor und führt dich bis zum letzten geschützten Schritt."
+                            : "iOS schützt diese Einstellung. CanMyPhone zeigt dir deshalb den kürzesten öffentlichen Weg und merkt sich deinen Fortschritt."
+                      }
+                    />
 
                     {actionPlan?.needsInput === "brightness-percent" ? (
                       <View style={styles.choiceSection}>
                         <Text style={styles.choiceTitle}>Welche Helligkeit?</Text>
                         <View style={styles.choiceRow}>
                           {[25, 50, 75, 100].map((percent) => (
-                            <Pressable key={percent} style={styles.choiceChip} onPress={() => runAsk(`${submittedQuery} auf ${percent} %`).catch(() => undefined)}>
-                              <Text style={styles.choiceChipText}>{percent} %</Text>
+                            <Pressable key={percent} onPress={() => runAsk(`${submittedQuery} auf ${percent} %`).catch(() => undefined)}>
+                              <GlassSurface variant="inset" interactive style={styles.choiceChip}>
+                                <Text style={styles.choiceChipText}>{percent} %</Text>
+                              </GlassSurface>
                             </Pressable>
                           ))}
                         </View>
                       </View>
                     ) : (
-                      <Pressable style={styles.primaryAction} onPress={() => runPrimaryAction().catch(() => undefined)} disabled={actionRunning}>
-                        {actionRunning ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryActionText}>{actionPlan?.supported ? actionPlan.label : "Zeig mir wie"}</Text>}
-                      </Pressable>
+                      <LiquidButton
+                        style={styles.primaryAction}
+                        label={actionPlan?.supported ? actionPlan.label : "Zeig mir wie"}
+                        loading={actionRunning}
+                        onPress={() => runPrimaryAction().catch(() => undefined)}
+                      />
                     )}
 
                     {actionResult ? (
-                      <GlassSurface style={[styles.resultBanner, actionResult.succeeded && styles.resultBannerSuccess]} tintColor="rgba(255,255,255,0.18)">
+                      <GlassSurface variant="surface" style={[styles.resultBanner, actionResult.succeeded && styles.resultBannerSuccess]}>
                         <Text style={[styles.resultTitle, actionResult.succeeded && styles.resultTitleSuccess]}>{actionResult.succeeded ? "Erledigt" : "Hinweis"}</Text>
                         <Text style={styles.resultText}>{actionResult.message}</Text>
                       </GlassSurface>
                     ) : null}
 
                     {shortcutPlan.applicable && !actionPlan?.supported ? (
-                      <GlassSurface style={styles.shortcutCard} tintColor="rgba(255,255,255,0.15)">
+                      <GlassSurface variant="floating" style={styles.shortcutCard}>
                         <Text style={styles.shortcutBadge}>KURZBEFEHL-ASSISTENT</Text>
                         <Text style={styles.shortcutTitle}>{shortcutPlan.title}</Text>
                         <Text style={styles.shortcutText}>{shortcutPlan.explanation}</Text>
@@ -729,15 +1287,20 @@ export default function App() {
                         {shortcutPlan.choices?.length ? (
                           <View style={styles.shortcutChoices}>
                             {shortcutPlan.choices.map((choice) => (
-                              <Pressable key={choice.id} style={styles.shortcutChoice} onPress={() => runAsk(`${submittedQuery}. ${choice.queryHint}`).catch(() => undefined)}>
-                                <Text style={styles.shortcutChoiceText}>{choice.label}</Text>
+                              <Pressable key={choice.id} onPress={() => runAsk(`${submittedQuery}. ${choice.queryHint}`).catch(() => undefined)}>
+                                <GlassSurface variant="inset" interactive style={styles.shortcutChoice}>
+                                  <Text style={styles.shortcutChoiceText}>{choice.label}</Text>
+                                </GlassSurface>
                               </Pressable>
                             ))}
                           </View>
                         ) : null}
-                        <Pressable style={styles.secondaryAction} onPress={() => startGuide(bestResult, shortcutPlan.steps, shortcutPlan.title)}>
-                          <Text style={styles.secondaryActionText}>Automation vorbereiten</Text>
-                        </Pressable>
+                        <LiquidButton
+                          variant="glass"
+                          style={styles.secondaryAction}
+                          label="Automation vorbereiten"
+                          onPress={() => startPremiumShortcutGuide().catch(() => undefined)}
+                        />
                       </GlassSurface>
                     ) : null}
 
@@ -762,32 +1325,35 @@ export default function App() {
                   </View>
                 ) : submittedQuery ? (
                   <View style={styles.noResultArea}>
-                    <GlassSurface style={styles.noResultCard} tintColor="rgba(255,255,255,0.16)">
+                    <ContentSurface style={styles.noResultCard}>
                       <Text style={styles.noResultTitle}>Lieber keine erfundene Antwort.</Text>
                       <Text style={styles.noResultText}>Ich habe in unserem verifizierten Katalog keinen sicheren Treffer gefunden.</Text>
-                    </GlassSurface>
-                    <Pressable onPress={resetQuestion} style={styles.primaryAction}><Text style={styles.primaryActionText}>Anders formulieren</Text></Pressable>
+                    </ContentSurface>
+                    <LiquidButton style={styles.primaryAction} label="Anders formulieren" onPress={resetQuestion} />
                   </View>
                 ) : (
                   <View style={styles.ideaList}>
                     <Text style={styles.sectionLabel}>SCHNELL STARTEN</Text>
                     {quickIdeas.map((item, index) => (
-                      <View key={item.title}>
-                        <Pressable style={styles.ideaRow} onPress={() => runAsk(item.query).catch(() => undefined)}>
+                      <Pressable
+                        key={item.title}
+                        onPress={() => runAsk(item.query).catch(() => undefined)}
+                        style={({ pressed }) => [styles.ideaPressable, pressed && styles.ideaPressed]}
+                      >
+                        <ContentSurface style={styles.ideaRow}>
                           <View style={styles.ideaTextWrap}>
                             <Text style={styles.ideaText}>{item.title}</Text>
                             <Text style={styles.ideaSubtext}>
                               {index === 0
-                                ? "CanMyPhone prüft zuerst den direkten iOS-Weg."
+                                ? "Direkter iOS-Weg zuerst."
                                 : index === 1
-                                  ? "Ich prüfe Kurzbefehle und Automationen."
-                                  : "Finde Funktionen, die zu deinen bisherigen Fragen passen."}
+                                  ? "Kurzbefehle und Automationen prüfen."
+                                  : "Funktionen passend zu deinen Fragen."}
                             </Text>
                           </View>
                           <Text style={styles.chevron}>›</Text>
-                        </Pressable>
-                        {index < quickIdeas.length - 1 ? <View style={styles.ideaDivider} /> : null}
-                      </View>
+                        </ContentSurface>
+                      </Pressable>
                     ))}
                   </View>
                 )}
@@ -797,7 +1363,7 @@ export default function App() {
             {tab === "discover" ? (
               <>
                 <View style={styles.sectionHeroBlock}>
-                  <Text style={styles.hero}>{radarResults.length ? "Für dich entdeckt." : "Entdecke, was dein iPhone schon kann."}</Text>
+                    <Text style={styles.hero}>{radarResults.length ? "Ideen für dich." : "Entdecke, was dein iPhone schon kann."}</Text>
                   <Text style={styles.heroSubtext}>
                     {radarResults.length
                       ? "Need Radar sortiert nützliche Funktionen nach deinen bisherigen Fragen — lokal und transparent."
@@ -805,18 +1371,20 @@ export default function App() {
                   </Text>
                 </View>
 
+                <Top100Section onSelect={(query) => runAsk(query).catch(() => undefined)} />
+
                 {radarResults.length ? (
                   <View style={styles.discoveryList}>
                     {radarResults.map((item, index) => (
                       <Pressable key={item.id} onPress={() => runAsk(item.title).catch(() => undefined)}>
-                        <GlassSurface style={styles.discoveryCard} interactive tintColor="rgba(255,255,255,0.14)">
+                        <ContentSurface style={styles.discoveryCard}>
                           <View style={styles.discoveryNumber}><Text style={styles.discoveryNumberText}>{index + 1}</Text></View>
                           <View style={styles.discoveryTextWrap}>
                             <Text style={styles.discoveryBadge}>FÜR DICH</Text>
                             <Text style={styles.discoveryTitle}>{item.title}</Text>
                             <Text style={styles.discoverySummary}>{item.summary}</Text>
                           </View>
-                        </GlassSurface>
+                        </ContentSurface>
                       </Pressable>
                     ))}
                   </View>
@@ -824,13 +1392,13 @@ export default function App() {
                   <View style={styles.discoveryList}>
                     {hiddenFeatures.map((item) => (
                       <Pressable key={item.title} onPress={() => runAsk(item.query).catch(() => undefined)}>
-                        <GlassSurface style={styles.discoveryCard} interactive tintColor="rgba(255,255,255,0.14)">
+                        <ContentSurface style={styles.discoveryCard}>
                           <View style={styles.discoveryTextWrap}>
                             <Text style={styles.discoveryBadge}>ENTDECKEN</Text>
                             <Text style={styles.discoveryTitle}>{item.title}</Text>
                             <Text style={styles.discoveryCTA}>Ansehen →</Text>
                           </View>
-                        </GlassSurface>
+                        </ContentSurface>
                       </Pressable>
                     ))}
                   </View>
@@ -845,7 +1413,37 @@ export default function App() {
                   <Text style={styles.heroSubtext}>Wenige Einstellungen, klar erklärt und jederzeit zurücksetzbar.</Text>
                 </View>
 
-                <GlassSurface style={styles.youCard} tintColor="rgba(255,255,255,0.16)">
+                <ContentSurface emphasis={entitlements.pro ? "active" : "quiet"} style={styles.proCard}>
+                  <View style={styles.proHeader}>
+                    <View style={styles.proTitleWrap}>
+                      <Text style={styles.proEyebrow}>CANMYPHONE PRO</Text>
+                      <Text style={styles.proTitle}>{entitlements.pro ? "Pro ist aktiv." : "Mehr automatisch erledigen."}</Text>
+                      <Text style={styles.proText}>
+                        {entitlements.pro
+                          ? "Automationen, Premium-Kurzbefehle und unterstützte direkte Aktionen sind freigeschaltet."
+                          : entitlements.freeAutomaticActionUsed
+                            ? "Deine kostenlose automatische Aktion wurde genutzt. Mit Pro bleiben unterstützte Automationen freigeschaltet."
+                            : "Eine automatische Aktion ist kostenlos. Danach schaltet Pro unterstützte Automationen und Premium-Kurzbefehle frei."}
+                      </Text>
+                    </View>
+                    <View style={[styles.proStatus, entitlements.pro && styles.proStatusActive]}>
+                      <Text style={[styles.proStatusText, entitlements.pro && styles.proStatusTextActive]}>{entitlements.pro ? "AKTIV" : "FREE"}</Text>
+                    </View>
+                  </View>
+                  <LiquidButton
+                    variant={entitlements.pro ? "glass" : "primary"}
+                    label={entitlements.pro ? "Käufe wiederherstellen" : "CanMyPhone Pro ansehen"}
+                    onPress={() => entitlements.pro ? handleRestore().catch(() => undefined) : showPaywall()}
+                    loading={entitlements.pro && restoreRunning}
+                    style={styles.proAction}
+                  />
+                </ContentSurface>
+
+                <MyAutomationsCard items={automations} onToggle={(item)=>{const updated={...item,enabled:!item.enabled,materializationState:(!item.enabled?"ACTIVE":"DISABLED") as StoredAutomation["materializationState"]};automationRepository.save(updated).then(async()=>{setAutomations(await automationRepository.list());trackProductEvent(updated.enabled?"automation_enabled":"automation_disabled",{});}).catch(()=>undefined);}} onDelete={(id)=>automationRepository.remove(id).then(async()=>setAutomations(await automationRepository.list())).catch(()=>undefined)} />
+
+                <ConnectorSettingsCard profile={connectorConnections} onConnect={(providerId,input)=>connectProvider(providerId,input).catch(()=>undefined)} />
+
+                <ContentSurface emphasis="active" style={styles.youCard}>
                   <View style={styles.youRow}>
                     <View style={styles.youTextWrap}>
                       <Text style={styles.youTitle}>Einsteiger-Modus</Text>
@@ -874,8 +1472,8 @@ export default function App() {
 
                   <View style={styles.youRow}>
                     <View style={styles.youTextWrap}>
-                      <Text style={styles.youTitle}>Lokale KI-Hilfe</Text>
-                      <Text style={styles.youText}>Nur als Fallback. Die KI darf ausschließlich eine bereits verifizierte Lösung auswählen — keine Schritte erfinden.</Text>
+                      <Text style={styles.youTitle}>KI-Verständnis</Text>
+                      <Text style={styles.youText}>Versteht freie Sprache, zerlegt Wünsche in Trigger und Aktionen und darf nur verifizierte Capabilities und Connectoren verwenden.</Text>
                     </View>
                     <Pressable onPress={() => updatePreferences({ useOnDeviceAI: !preferences.useOnDeviceAI })} style={[styles.toggle, preferences.useOnDeviceAI && styles.toggleOn]}>
                       <Text style={[styles.toggleText, preferences.useOnDeviceAI && styles.toggleTextOn]}>{preferences.useOnDeviceAI ? "AN" : "AUS"}</Text>
@@ -899,92 +1497,104 @@ export default function App() {
                   <Pressable onPress={resetRadar} style={styles.resetButton}>
                     <Text style={styles.resetText}>Gelernte Präferenzen löschen</Text>
                   </Pressable>
-                </GlassSurface>
+                </ContentSurface>
               </>
             ) : null}
           </ScrollView>
         )}
 
-        {!guideSession ? (
-          <GlassSurface style={styles.tabBar} tintColor="rgba(255,255,255,0.18)">
-            {(["ask", "discover", "you"] as Tab[]).map((item) => (
-              <Pressable key={item} onPress={() => switchTab(item)} style={[styles.tabButton, tab === item && styles.tabButtonActive]}>
-                <Text style={[styles.tabText, tab === item && styles.tabTextActive]}>{item === "ask" ? "Fragen" : item === "discover" ? "Entdecken" : "Du"}</Text>
-              </Pressable>
-            ))}
-          </GlassSurface>
-        ) : null}
+        {!guideSession ? <FloatingTabBar selected={tab} onSelect={switchTab} /> : null}
       </KeyboardAvoidingView>
 
-      <ActionTransition visible={isSearching || actionRunning} reduceMotion={reduceMotion} label={transitionLabel} />
+      <ProPaywall
+        visible={paywallVisible}
+        products={proProducts}
+        loadingProducts={storeLoading}
+        purchasingProductId={purchasingProductId}
+        restoring={restoreRunning}
+        message={paywallMessage}
+        onClose={() => {
+          if (!purchasingProductId && !restoreRunning) setPaywallVisible(false);
+        }}
+        onPurchase={(productId) => handlePurchase(productId).catch(() => undefined)}
+        onRestore={() => handleRestore().catch(() => undefined)}
+      />
+
+      <ActionTransitionV2 visible={isSearching || actionRunning} reduceMotion={reduceMotion} label={transitionLabel} />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#F4F7FB" },
+  safe: { flex: 1, backgroundColor: liquidIce.color.bgApp },
   screen: { flex: 1, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 10 },
-  glassFallback: { backgroundColor: "rgba(255,255,255,0.78)", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(255,255,255,0.92)" },
+  glassFallback: { backgroundColor: "rgba(255,255,255,0.82)", borderWidth: StyleSheet.hairlineWidth, borderColor: "rgba(255,255,255,0.96)" },
   header: { minHeight: 54, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   headerActions: { flexDirection: "row", alignItems: "center", gap: 8 },
-  brand: { fontSize: 19, fontWeight: "700", letterSpacing: -0.45, color: "#111827" },
-  modePill: { fontSize: 9, fontWeight: "800", letterSpacing: 0.7, color: "#506174", backgroundColor: "rgba(255,255,255,0.72)", paddingHorizontal: 9, paddingVertical: 6, borderRadius: 999, overflow: "hidden" },
+  brand: { ...liquidIce.type.titleMedium, color: liquidIce.color.textPrimary },
+  guideBackButton: { minHeight: 44, flexDirection: "row", alignItems: "center", paddingRight: 8 },
+  guideBackIcon: { fontSize: 37, lineHeight: 40, color: liquidIce.color.accent, fontWeight: "300", marginTop: -2 },
+  guideBackText: { marginLeft: 2, fontSize: 16, fontWeight: "600", color: liquidIce.color.accent },
+  guideHeaderTitle: { fontSize: 15, fontWeight: "700", color: "#657283" },
+  modePill: { fontSize: 9, fontWeight: "800", letterSpacing: 0.7, color: "#506174", backgroundColor: "rgba(255,255,255,0.76)", paddingHorizontal: 9, paddingVertical: 6, borderRadius: 999, overflow: "hidden" },
   moreButton: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center", overflow: "hidden" },
-  moreButtonText: { fontSize: 17, fontWeight: "700", color: "#53606F", marginTop: -5 },
+  moreButtonText: { fontSize: 17, fontWeight: "700", color: liquidIce.color.textSecondary, marginTop: -5 },
   mainContent: { flex: 1 },
-  contentContainer: { flexGrow: 1, paddingBottom: 18 },
-  guideScrollContent: { flexGrow: 1, justifyContent: "center", paddingVertical: 18 },
-  heroBlock: { paddingTop: 74, paddingHorizontal: 8, alignItems: "center" },
-  heroBlockAnswer: { paddingTop: 38 },
-  sectionHeroBlock: { paddingTop: 52, paddingHorizontal: 8, alignItems: "center", marginBottom: 24 },
-  hero: { maxWidth: 350, fontSize: 36, lineHeight: 40, fontWeight: "700", letterSpacing: -1.15, color: "#101725", textAlign: "center" },
-  heroSubtext: { maxWidth: 330, marginTop: 18, fontSize: 16, lineHeight: 22, color: "#667181", textAlign: "center" },
-  askBox: { height: 64, marginTop: 42, borderRadius: 32, flexDirection: "row", alignItems: "center", paddingLeft: 18, paddingRight: 9, overflow: "hidden", shadowColor: "#426185", shadowOpacity: 0.10, shadowRadius: 24, shadowOffset: { width: 0, height: 10 } },
+  contentContainer: { flexGrow: 1, paddingBottom: 16 },
+  guideScrollContent: { flexGrow: 1, justifyContent: "center", paddingVertical: 14 },
+  heroBlock: { paddingTop: 58, paddingHorizontal: 8, alignItems: "center" },
+  heroBlockAnswer: { paddingTop: 30 },
+  sectionHeroBlock: { paddingTop: 42, paddingHorizontal: 8, alignItems: "center", marginBottom: 22 },
+  hero: { maxWidth: 354, ...liquidIce.type.display, color: liquidIce.color.textPrimary, textAlign: "center" },
+  heroSubtext: { maxWidth: 334, marginTop: 16, ...liquidIce.type.bodyLarge, color: liquidIce.color.textSecondary, textAlign: "center" },
+  askBox: { height: 64, marginTop: 34, borderRadius: 32, flexDirection: "row", alignItems: "center", paddingLeft: 18, paddingRight: 9, overflow: "hidden", shadowColor: "#426185", shadowOpacity: 0.11, shadowRadius: 26, shadowOffset: { width: 0, height: 11 } },
   input: { flex: 1, height: 56, fontSize: 16, color: "#17202B", paddingRight: 12 },
   askButton: { width: 46, height: 46, borderRadius: 23, backgroundColor: "#087BFF", alignItems: "center", justifyContent: "center", shadowColor: "#007AFF", shadowOpacity: 0.25, shadowRadius: 14, shadowOffset: { width: 0, height: 6 } },
   askButtonText: { color: "#FFFFFF", fontSize: 23, lineHeight: 26, fontWeight: "700" },
-  ideaList: { marginTop: 42, paddingHorizontal: 4 },
-  sectionLabel: { fontSize: 12, fontWeight: "700", letterSpacing: 0.8, color: "#858F9D", marginBottom: 14 },
-  ideaRow: { minHeight: 66, flexDirection: "row", alignItems: "center", paddingVertical: 8 },
+  ideaList: { marginTop: 34, gap: 12 },
+  sectionLabel: { ...liquidIce.type.eyebrow, color: liquidIce.color.textTertiary, marginBottom: 2 },
+  ideaPressable: { borderRadius: 24 },
+  ideaPressed: { transform: [{ scale: liquidIce.motion.pressScale }], opacity: 0.9 },
+  ideaRow: { minHeight: 78, borderRadius: 24, flexDirection: "row", alignItems: "center", paddingHorizontal: 17, paddingVertical: 14, overflow: "hidden" },
   ideaTextWrap: { flex: 1, paddingRight: 12 },
-  ideaText: { fontSize: 16, lineHeight: 20, fontWeight: "600", color: "#202B39" },
-  ideaSubtext: { marginTop: 4, fontSize: 12, lineHeight: 16, color: "#7C8795" },
-  chevron: { fontSize: 25, color: "#A1A9B4" },
+  ideaText: { fontSize: 15, lineHeight: 20, fontWeight: "600", color: liquidIce.color.textPrimary },
+  ideaSubtext: { marginTop: 4, ...liquidIce.type.caption, color: liquidIce.color.textTertiary },
+  chevron: { fontSize: 25, color: liquidIce.color.textTertiary },
   ideaDivider: { height: StyleSheet.hairlineWidth, backgroundColor: "rgba(70,86,104,0.13)" },
   answerTopBar: { flexDirection: "row", alignItems: "center", minHeight: 42, marginTop: 4 },
   backButton: { width: 34, fontSize: 38, lineHeight: 40, color: "#007AFF", fontWeight: "300" },
   answerTopTitle: { fontSize: 18, fontWeight: "700", color: "#17202B", marginLeft: 4 },
-  answerArea: { paddingTop: 34, paddingHorizontal: 2 },
+  answerArea: { paddingTop: 30, paddingHorizontal: 2 },
   answerMetaRow: { flexDirection: "row", alignItems: "center" },
   answerEyebrow: { fontSize: 10, fontWeight: "800", letterSpacing: 0.8, color: "#7890A6", marginBottom: 8 },
   answerTitle: { fontSize: 25, lineHeight: 30, fontWeight: "700", letterSpacing: -0.45, color: "#17202B" },
   answerSummary: { marginTop: 10, fontSize: 15, lineHeight: 21, color: "#667181" },
   noticeText: { marginTop: 12, fontSize: 13, lineHeight: 18, color: "#62758A" },
-  capabilityCard: { marginTop: 24, minHeight: 96, borderRadius: 26, padding: 18, flexDirection: "row", alignItems: "center", overflow: "hidden" },
+  capabilityCard: { marginTop: 22, minHeight: 96, borderRadius: 26, padding: 18, flexDirection: "row", alignItems: "center", overflow: "hidden" },
   capabilityIcon: { width: 38, height: 38, borderRadius: 19, backgroundColor: "rgba(26,199,114,0.13)", alignItems: "center", justifyContent: "center" },
   capabilityIconText: { color: "#18A864", fontSize: 20, fontWeight: "800" },
   capabilityTextWrap: { flex: 1, marginLeft: 14 },
   capabilityTitle: { fontSize: 16, fontWeight: "700", color: "#1A2531" },
   capabilityText: { marginTop: 4, fontSize: 13, lineHeight: 18, color: "#6E7A88" },
-  primaryAction: { marginTop: 24, minHeight: 58, borderRadius: 29, alignItems: "center", justifyContent: "center", backgroundColor: "#087BFF", shadowColor: "#087BFF", shadowOpacity: 0.20, shadowRadius: 20, shadowOffset: { width: 0, height: 10 } },
+  primaryAction: { marginTop: 22 },
   primaryActionText: { color: "#FFFFFF", fontSize: 17, fontWeight: "700" },
-  secondaryAction: { marginTop: 16, minHeight: 50, borderRadius: 25, alignItems: "center", justifyContent: "center", backgroundColor: "#17202B" },
+  secondaryAction: { marginTop: 16 },
   secondaryActionText: { color: "#FFFFFF", fontSize: 14, fontWeight: "700" },
   textAction: { alignItems: "center", paddingVertical: 18 },
   textActionText: { fontSize: 15, color: "#566375", fontWeight: "600" },
-  followUpCard: { marginTop: 34, borderRadius: 28, padding: 20, overflow: "hidden" },
+  followUpCard: { marginTop: 30, borderRadius: 28, padding: 20, overflow: "hidden" },
   followUpText: { fontSize: 19, lineHeight: 25, fontWeight: "700", color: "#293640" },
-  followUpInputRow: { marginTop: 18, flexDirection: "row", alignItems: "center", backgroundColor: "rgba(255,255,255,0.62)", borderRadius: 22, paddingLeft: 14, paddingRight: 6 },
+  followUpInputRow: { marginTop: 18, flexDirection: "row", alignItems: "center", borderRadius: 22, paddingLeft: 14, paddingRight: 6, overflow: "hidden" },
   followUpInput: { flex: 1, height: 48, fontSize: 15, color: "#17202B" },
   smallSendButton: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: "#087BFF" },
   smallSendText: { color: "#FFFFFF", fontSize: 20, fontWeight: "700" },
   choiceSection: { marginTop: 22 },
   choiceTitle: { fontSize: 13, fontWeight: "700", color: "#566375", marginBottom: 10 },
   choiceRow: { flexDirection: "row", gap: 8 },
-  choiceChip: { flex: 1, paddingVertical: 12, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.72)", alignItems: "center" },
+  choiceChip: { minWidth: 76, minHeight: 44, paddingHorizontal: 12, borderRadius: 22, alignItems: "center", justifyContent: "center", overflow: "hidden" },
   choiceChipText: { fontSize: 13, fontWeight: "700", color: "#263548" },
   resultBanner: { marginTop: 14, borderRadius: 22, padding: 16, overflow: "hidden" },
-  resultBannerSuccess: { backgroundColor: "rgba(223,249,235,0.78)" },
+  resultBannerSuccess: { borderColor: "rgba(39,133,110,0.42)" },
   resultTitle: { fontSize: 12, fontWeight: "800", letterSpacing: 0.5, color: "#586777" },
   resultTitleSuccess: { color: "#168A55" },
   resultText: { marginTop: 5, fontSize: 14, lineHeight: 19, color: "#3F4D5D" },
@@ -994,15 +1604,15 @@ const styles = StyleSheet.create({
   shortcutText: { marginTop: 8, fontSize: 14, lineHeight: 20, color: "#677485" },
   shortcutQuestion: { marginTop: 15, fontSize: 14, lineHeight: 20, fontWeight: "700", color: "#334155" },
   shortcutChoices: { marginTop: 10, gap: 8 },
-  shortcutChoice: { minHeight: 44, borderRadius: 17, backgroundColor: "rgba(255,255,255,0.72)", justifyContent: "center", paddingHorizontal: 14 },
+  shortcutChoice: { minHeight: 44, borderRadius: 17, justifyContent: "center", paddingHorizontal: 14, overflow: "hidden" },
   shortcutChoiceText: { fontSize: 14, fontWeight: "600", color: "#344154" },
   feedbackSection: { marginTop: 24 },
   feedbackTitle: { fontSize: 13, fontWeight: "700", color: "#5C6979", marginBottom: 10 },
   feedbackRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  feedbackChip: { paddingHorizontal: 12, paddingVertical: 9, borderRadius: 999, backgroundColor: "rgba(255,255,255,0.70)" },
-  feedbackChipActive: { backgroundColor: "#17202B" },
+  feedbackChip: { minHeight: 40, justifyContent: "center", paddingHorizontal: 13, paddingVertical: 9, borderRadius: 999, backgroundColor: liquidIce.color.glassSubtle, borderWidth: StyleSheet.hairlineWidth, borderColor: liquidIce.color.glassBorder },
+  feedbackChipActive: { backgroundColor: "rgba(8,123,255,0.10)", borderColor: "rgba(8,123,255,0.42)" },
   feedbackChipText: { fontSize: 12, fontWeight: "700", color: "#5D6875" },
-  feedbackChipTextActive: { color: "#FFFFFF" },
+  feedbackChipTextActive: { color: liquidIce.color.accent },
   noResultArea: { paddingTop: 24 },
   noResultCard: { borderRadius: 28, padding: 20, overflow: "hidden" },
   noResultTitle: { fontSize: 18, fontWeight: "700", color: "#26303D" },
@@ -1016,44 +1626,39 @@ const styles = StyleSheet.create({
   discoveryTitle: { fontSize: 18, lineHeight: 23, fontWeight: "700", color: "#1F2A37" },
   discoverySummary: { marginTop: 5, fontSize: 13, lineHeight: 18, color: "#748090" },
   discoveryCTA: { marginTop: 10, fontSize: 13, fontWeight: "600", color: "#007AFF" },
+  proCard: { borderRadius: 30, padding: 20, overflow: "hidden", marginBottom: 14 },
+  proHeader: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  proTitleWrap: { flex: 1 },
+  proEyebrow: { ...liquidIce.type.eyebrow, color: liquidIce.color.automation },
+  proTitle: { marginTop: 7, fontSize: 20, lineHeight: 25, fontWeight: "800", color: liquidIce.color.textPrimary },
+  proText: { marginTop: 7, fontSize: 13, lineHeight: 19, color: liquidIce.color.textSecondary },
+  proStatus: { minWidth: 52, minHeight: 28, borderRadius: 14, alignItems: "center", justifyContent: "center", backgroundColor: liquidIce.color.content, borderWidth: StyleSheet.hairlineWidth, borderColor: liquidIce.color.contentBorder },
+  proStatusActive: { backgroundColor: "rgba(39,133,110,0.09)", borderColor: "rgba(39,133,110,0.30)" },
+  proStatusText: { fontSize: 9, fontWeight: "900", letterSpacing: 0.7, color: liquidIce.color.textTertiary },
+  proStatusTextActive: { color: liquidIce.color.success },
+  proAction: { marginTop: 16 },
   youCard: { borderRadius: 30, padding: 20, overflow: "hidden" },
   youRow: { flexDirection: "row", gap: 14, alignItems: "center" },
   youTextWrap: { flex: 1 },
   youTitle: { fontSize: 16, fontWeight: "700", color: "#26323C" },
   youText: { marginTop: 5, fontSize: 13, lineHeight: 18, color: "#6F7B84" },
-  toggle: { minWidth: 54, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, backgroundColor: "rgba(116,126,139,0.12)" },
-  toggleOn: { backgroundColor: "#087BFF" },
+  toggle: { minWidth: 54, minHeight: 40, justifyContent: "center", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, backgroundColor: liquidIce.color.glassSubtle, borderWidth: StyleSheet.hairlineWidth, borderColor: liquidIce.color.glassBorder },
+  toggleOn: { backgroundColor: liquidIce.color.accent, borderColor: "rgba(255,255,255,0.72)" },
   toggleText: { textAlign: "center", fontSize: 10, fontWeight: "800", color: "#78848E" },
   toggleTextOn: { color: "#FFFFFF" },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: "rgba(79,94,110,0.14)", marginVertical: 20 },
   regionRow: { flexDirection: "row", gap: 8, marginTop: 10 },
-  regionButton: { flex: 1, paddingVertical: 11, borderRadius: 15, backgroundColor: "rgba(112,125,140,0.09)" },
-  regionButtonActive: { backgroundColor: "#18212D" },
+  regionButton: { flex: 1, minHeight: 44, justifyContent: "center", paddingVertical: 11, borderRadius: 22, backgroundColor: liquidIce.color.glassSubtle, borderWidth: StyleSheet.hairlineWidth, borderColor: liquidIce.color.glassBorder },
+  regionButtonActive: { backgroundColor: liquidIce.color.glassStrong, borderColor: "rgba(8,123,255,0.34)" },
   regionButtonText: { textAlign: "center", fontSize: 12, fontWeight: "700", color: "#66717A" },
-  regionButtonTextActive: { color: "#FFFFFF" },
+  regionButtonTextActive: { color: liquidIce.color.accent },
   radarHint: { marginTop: 18, fontSize: 12, lineHeight: 17, color: "#71808B" },
   resetButton: { marginTop: 16, alignSelf: "flex-start" },
   resetText: { fontSize: 12, fontWeight: "600", color: "#7E8996" },
-  settingsHint: { marginTop: 10, fontSize: 12, lineHeight: 17, color: "#78838C", textAlign: "center", paddingHorizontal: 12 },
-  tabBar: { height: 64, borderRadius: 32, flexDirection: "row", alignItems: "center", padding: 7, overflow: "hidden", shadowColor: "#30465F", shadowOpacity: 0.10, shadowRadius: 22, shadowOffset: { width: 0, height: 8 } },
+  settingsHint: { marginTop: 12, fontSize: 12, lineHeight: 17, color: "#697783", textAlign: "center", paddingHorizontal: 12 },
+  tabBar: { height: 64, borderRadius: 32, flexDirection: "row", alignItems: "center", padding: 7, overflow: "hidden", shadowColor: "#30465F", shadowOpacity: 0.11, shadowRadius: 24, shadowOffset: { width: 0, height: 9 } },
   tabButton: { flex: 1, height: 50, borderRadius: 25, alignItems: "center", justifyContent: "center" },
-  tabButtonActive: { backgroundColor: "rgba(255,255,255,0.76)" },
+  tabButtonActive: { backgroundColor: "rgba(255,255,255,0.82)" },
   tabText: { fontSize: 13, fontWeight: "600", color: "#7A8592" },
-  tabTextActive: { color: "#1F2937", fontWeight: "700" },
-
-  ambientBlue: { position: "absolute", width: 330, height: 330, borderRadius: 165, backgroundColor: "rgba(0,122,255,0.09)", top: -165, left: -95 },
-  ambientViolet: { position: "absolute", width: 330, height: 330, borderRadius: 165, backgroundColor: "rgba(128,82,255,0.065)", right: -160, bottom: 90 },
-  ambientCyan: { position: "absolute", width: 260, height: 260, borderRadius: 130, backgroundColor: "rgba(22,203,240,0.055)", right: -70, top: 150 },
-  actionHalo: { position: "absolute", width: 250, height: 90, borderRadius: 125, backgroundColor: "rgba(70,135,255,0.20)", top: "33%", alignSelf: "center", shadowColor: "#6B72FF", shadowOpacity: 0.28, shadowRadius: 54, shadowOffset: { width: 0, height: 0 } },
-  edgeTopSegment: { position: "absolute", width: 128, height: 3, top: 0, borderRadius: 999, backgroundColor: "#46DDF4", shadowColor: "#46DDF4", shadowOpacity: 0.9, shadowRadius: 14, shadowOffset: { width: 0, height: 0 } },
-  edgeRightSegment: { position: "absolute", width: 3, height: 142, right: 0, borderRadius: 999, backgroundColor: "#8F73FF", shadowColor: "#8F73FF", shadowOpacity: 0.9, shadowRadius: 15, shadowOffset: { width: 0, height: 0 } },
-  edgeBottomSegment: { position: "absolute", width: 126, height: 3, bottom: 0, borderRadius: 999, backgroundColor: "#D96CC5", shadowColor: "#D96CC5", shadowOpacity: 0.85, shadowRadius: 14, shadowOffset: { width: 0, height: 0 } },
-  edgeLeftSegment: { position: "absolute", width: 3, height: 142, left: 0, borderRadius: 999, backgroundColor: "#3A8CFF", shadowColor: "#3A8CFF", shadowOpacity: 0.9, shadowRadius: 15, shadowOffset: { width: 0, height: 0 } },
-
-  actionTransition: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, zIndex: 100, backgroundColor: "rgba(4,7,14,0.96)", alignItems: "center", justifyContent: "center", paddingHorizontal: 34 },
-  transitionGlow: { position: "absolute", width: 260, height: 100, borderRadius: 130, backgroundColor: "rgba(35,143,255,0.12)", shadowColor: "#765CFF", shadowOpacity: 0.45, shadowRadius: 70, shadowOffset: { width: 0, height: 0 } },
-  transitionRing: { width: 210, height: 74, borderRadius: 105, borderWidth: 1.5, borderColor: "rgba(75,211,244,0.36)", shadowColor: "#3ACBF3", shadowOpacity: 0.35, shadowRadius: 18, shadowOffset: { width: 0, height: 0 } },
-  transitionCore: { position: "absolute", width: 86, height: 24, borderRadius: 43, backgroundColor: "rgba(70,132,255,0.34)", shadowColor: "#7E67FF", shadowOpacity: 0.75, shadowRadius: 34, shadowOffset: { width: 0, height: 0 } },
-  transitionTitle: { marginTop: 84, color: "#F8FAFF", fontSize: 22, lineHeight: 28, fontWeight: "700", letterSpacing: -0.4, textAlign: "center" },
-  transitionSubtitle: { marginTop: 10, maxWidth: 300, color: "rgba(226,232,240,0.70)", fontSize: 13, lineHeight: 19, textAlign: "center" }
+  tabTextActive: { color: "#1F2937", fontWeight: "700" }
 });

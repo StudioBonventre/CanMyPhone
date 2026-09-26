@@ -1,6 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { addCredits, automaticActionAccess, consumeAutomaticAction, DEFAULT_ENTITLEMENTS, setPro } from "../src/lib/entitlements";
+import {
+  addCredits,
+  automationTierAccess,
+  automaticActionAccess,
+  consumeAutomaticAction,
+  DEFAULT_ENTITLEMENTS,
+  proFeatureAccess,
+  setPro
+} from "../src/lib/entitlements";
 
 test("first automatic action is free and is consumed only after success", () => {
   const access = automaticActionAccess(DEFAULT_ENTITLEMENTS);
@@ -23,6 +31,20 @@ test("pro never consumes credits and locked users stay unchanged", () => {
   const locked = { ...DEFAULT_ENTITLEMENTS, freeAutomaticActionUsed: true };
   assert.equal(automaticActionAccess(locked).allowed, false);
   assert.deepEqual(consumeAutomaticAction(locked), locked);
+});
+
+test("premium-only features require a real pro entitlement", () => {
+  assert.equal(proFeatureAccess(DEFAULT_ENTITLEMENTS), false);
+  assert.equal(proFeatureAccess(setPro(DEFAULT_ENTITLEMENTS, true)), true);
+});
+
+test("automation gating keeps planning free and reserves advanced integrations for Pro", () => {
+  assert.equal(automationTierAccess(DEFAULT_ENTITLEMENTS, "basic-plan"), true);
+  assert.equal(automationTierAccess(DEFAULT_ENTITLEMENTS, "single-step"), true);
+  assert.equal(automationTierAccess(DEFAULT_ENTITLEMENTS, "advanced-multi-step"), false);
+  assert.equal(automationTierAccess(DEFAULT_ENTITLEMENTS, "third-party"), false);
+  assert.equal(automationTierAccess(DEFAULT_ENTITLEMENTS, "proactive-suggestions"), false);
+  assert.equal(automationTierAccess(setPro(DEFAULT_ENTITLEMENTS, true), "third-party"), true);
 });
 
 test("adding credits rejects invalid values", () => {

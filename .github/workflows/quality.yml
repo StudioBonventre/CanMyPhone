@@ -1,5 +1,9 @@
 name: CanMyPhone Quality
 
+concurrency:
+  group: canmyphone-quality-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 on:
   pull_request:
     branches: [main]
@@ -30,3 +34,37 @@ jobs:
 
       - name: Expo doctor
         run: npx expo-doctor
+
+
+  ios-native-compile:
+    runs-on: macos-15
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Generate native iOS project
+        run: npx expo prebuild --platform ios --clean --no-install
+
+      - name: Install CocoaPods
+        run: cd ios && pod install
+
+      - name: Compile iOS simulator build
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -workspace ios/CanMyPhone.xcworkspace \
+            -scheme CanMyPhone \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            build
