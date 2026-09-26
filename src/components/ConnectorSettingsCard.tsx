@@ -28,9 +28,13 @@ export function ConnectorSettingsCard({profile,onConnect}:{profile:ConnectorConn
         const plan=connectorSetupPlan(provider.id);
         const state=connection?.status==="CONNECTED"
           ?"Verbunden"
-          :provider.implementation==="PLANNED"
-            ?"Geplant"
-            :"Noch nicht verbunden";
+          :connection?.status==="CONNECTING"
+            ?"Verbindung läuft"
+            :connection?.status==="ERROR"
+              ?"Zugriff fehlt"
+              :provider.implementation==="PLANNED"
+                ?"Geplant"
+                :"Noch nicht verbunden";
         const open=expanded===provider.id;
         return <View key={provider.id} style={styles.wrapper}>
           <Pressable onPress={()=>setExpanded(open?null:provider.id)} style={styles.row}>
