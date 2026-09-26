@@ -103,6 +103,7 @@ struct CanMyPhoneAutomationQuery: EntityQuery {
 struct RunCanMyPhoneAutomationIntent: AppIntent {
   static var title: LocalizedStringResource = "CanMyPhone Automation ausführen"
   static var description = IntentDescription("Führt eine gespeicherte und erneut geprüfte CanMyPhone-Automation aus.")
+  static var openAppWhenRun: Bool { false }
 
   @Parameter(title: "Automation")
   var automation: CanMyPhoneAutomationEntity

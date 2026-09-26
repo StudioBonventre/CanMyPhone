@@ -32,14 +32,37 @@ enum CanMyPhoneAutomationStore {
   static func delete(id: String) { guard validID(id) else { return }; defaults?.removeObject(forKey: prefix + id) }
 }
 
+private actor CanMyPhoneAutomationRunGate {
+  static let shared = CanMyPhoneAutomationRunGate()
+  private var running = Set<String>()
+  func acquire(_ id: String) -> Bool {
+    guard !running.contains(id) else { return false }
+    running.insert(id)
+    return true
+  }
+  func release(_ id: String) { running.remove(id) }
+}
+
 enum CanMyPhoneAutomationRunner {
   private static let proProductIDs = Set(["com.studiobonventre.canmyphone.pro.monthly", "com.studiobonventre.canmyphone.pro.yearly"])
   private static let allowedCapabilities = Set(["system.brightness.set", "system.volume.set", "system.low-power.set", "system.flashlight.set", "system.focus.set", "system.app.open", "system.clipboard.set", "system.url.open", "media.play-pause", "media.playlist.play", "media.apple-music.play", "media.spotify.open", "navigation.route.start", "communication.message.compose", "communication.mail.compose", "communication.call.start", "productivity.calendar.create", "productivity.reminder.create", "smart-home.scene.run", "smart-home.cover.open", "smart-home.cover.close", "smart-home.light.set", "smart-home.climate.set", "vehicle.lock", "vehicle.unlock", "tesla.rear-trunk.close"])
 
   static func run(id: String) async -> [String: Any] {
+    guard await CanMyPhoneAutomationRunGate.shared.acquire(id) else {
+      return result(id, "FAILED", "Diese Automation wird bereits ausgeführt.", [], nil, "AUTOMATION_ALREADY_RUNNING")
+    }
+    let outcome = await runUnchecked(id: id)
+    await CanMyPhoneAutomationRunGate.shared.release(id)
+    return outcome
+  }
+
+  private static func runUnchecked(id: String) async -> [String: Any] {
     guard CanMyPhoneAutomationStore.validID(id), var item = CanMyPhoneAutomationStore.load(id: id) else { return result(id, "INVALID_DEFINITION", "Die Automation wurde nicht gefunden oder ist ungültig.", [], nil, "INVALID_DEFINITION") }
     guard item["enabled"] as? Bool == true else { return finish(&item, id, "FAILED", "Diese Automation ist deaktiviert.", [], nil, "AUTOMATION_DISABLED") }
     guard item["version"] as? Int == 2, let definition = item["definition"] as? [String: Any], let actions = definition["actions"] as? [[String: Any]], !actions.isEmpty else { return finish(&item, id, "INVALID_DEFINITION", "Die Automation ist ungültig oder veraltet.", [], nil, "INVALID_DEFINITION") }
+    if let trigger = definition["trigger"] as? [String: Any], let capability = trigger["capabilityId"] as? String, ["trigger.homekit-characteristic", "trigger.homekit-time"].contains(capability) {
+      return finish(&item, id, "UNSUPPORTED_ACTION", "Diese Automation wird ausschließlich von Apple Home ausgeführt.", [], nil, "HOMEKIT_OWNS_EXECUTION")
+    }
     if item["requiresPro"] as? Bool == true {
       let active = await hasActiveProEntitlement(); CanMyPhoneAutomationStore.defaults?.set(active, forKey: "CanMyPhoneProEnabled")
       guard active else { return finish(&item, id, "BLOCKED_ENTITLEMENT", "CanMyPhone Pro ist für diese Automation erforderlich.", [], nil, "PRO_REQUIRED") }
@@ -260,7 +283,7 @@ enum CanMyPhoneAutomationRunner {
   private static func safetyFingerprint(item: [String: Any], definition: [String: Any]) -> String? {
     guard let id = item["id"], let version = item["version"], let risk = item["riskLevel"], let conditions = definition["conditions"] as? [[String: Any]], let actions = definition["actions"] as? [[String: Any]] else { return nil }
     let safeSteps: ([[String: Any]]) -> [[String: Any]] = { steps in steps.compactMap { step in guard let capability = step["capabilityId"], let parameters = step["parameters"] else { return nil }; return ["capabilityId": capability, "parameters": parameters] } }
-    let payload: [String: Any] = ["id": id, "schemaVersion": version, "riskLevel": risk, "integrations": (item["integrations"] as? [String] ?? []).sorted(), "conditions": safeSteps(conditions), "actions": safeSteps(actions)]
+    let payload: [String: Any] = ["id": id, "schemaVersion": version, "riskLevel": risk, "integrations": (item["integrations"] as? [String] ?? []).sorted(), "trigger": definition["trigger"] as? [String: Any] ?? [:], "conditions": safeSteps(conditions), "actions": safeSteps(actions)]
     guard let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys, .withoutEscapingSlashes]) else { return nil }
     var hash: UInt32 = 0x811c9dc5; for byte in data { hash = (hash ^ UInt32(byte)) &* 0x01000193 }; return String(format: "fnv1a32:%08x", hash)
   }

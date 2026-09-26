@@ -1,4 +1,4 @@
-import type { AutomationExecutionResult, StoredAutomation } from "./materialization";
+import { hasValidSafetyApproval, validateStoredAutomation, type AutomationExecutionResult, type StoredAutomation } from "./materialization";
 
 export type VerifiedProviderEvent = {
   eventId: string;
@@ -27,7 +27,7 @@ export async function dispatchVerifiedProviderEvent(
   const providerId = normalize(event.providerId);
   const eventName = normalize(event.event);
   const matches = automations.filter((automation) => {
-    if (!automation.enabled || automation.definition.trigger.capabilityId !== "trigger.provider-event") return false;
+    if (!validateStoredAutomation(automation) || !automation.enabled || !hasValidSafetyApproval(automation) || automation.definition.trigger.capabilityId !== "trigger.provider-event") return false;
     const parameters = automation.definition.trigger.parameters;
     return normalize(String(parameters.provider ?? "")) === providerId && normalize(String(parameters.event ?? "")) === eventName;
   });

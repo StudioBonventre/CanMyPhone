@@ -2,6 +2,7 @@ import { capabilityV2 } from "./capabilityCatalogV2";
 import type { ShortcutDefinition, ShortcutStep } from "./shortcutCompiler";
 import { validateShortcutDefinition } from "./shortcutValidation";
 import { compileAutomationRuntime } from "./engine";
+import { installationPlanForDefinition, type InstallationPlan } from "./installationPlan";
 import { automationDisplayName } from "./displayName";
 
 export const STORED_AUTOMATION_SCHEMA_VERSION = 2 as const;
@@ -47,6 +48,7 @@ export type StoredAutomation = {
   requiredSetup: string[];
   integrations: string[];
   materializationState: MaterializationState;
+  installationPlan?: InstallationPlan;
   personalSetup?: PersonalAutomationSetup;
   failurePolicy: FailurePolicy;
 };
@@ -83,10 +85,14 @@ function stableValue(value:unknown):unknown {
 }
 
 export function safetyDefinitionFingerprint(item:Pick<StoredAutomation,"id"|"version"|"definition"|"riskLevel"|"integrations">):string {
-  const payload=stableValue({id:item.id,schemaVersion:item.version,riskLevel:item.riskLevel,integrations:[...item.integrations].sort(),conditions:item.definition.conditions.map(({capabilityId,parameters})=>({capabilityId,parameters})),actions:item.definition.actions.map(({capabilityId,parameters})=>({capabilityId,parameters}))});
+  const payload=stableValue({id:item.id,schemaVersion:item.version,riskLevel:item.riskLevel,integrations:[...item.integrations].sort(),trigger:item.definition.trigger,conditions:item.definition.conditions.map(({capabilityId,parameters})=>({capabilityId,parameters})),actions:item.definition.actions.map(({capabilityId,parameters})=>({capabilityId,parameters}))});
   const bytes=new TextEncoder().encode(JSON.stringify(payload));let hash=0x811c9dc5;
   for(const byte of bytes){hash^=byte;hash=Math.imul(hash,0x01000193)>>>0;}
   return `fnv1a32:${hash.toString(16).padStart(8,"0")}`;
+}
+
+export function homekitInstallationFingerprint(item:Pick<StoredAutomation,"id"|"definition">):string {
+  return JSON.stringify(stableValue({id:item.id,trigger:item.definition.trigger,actions:item.definition.actions,conditions:item.definition.conditions}));
 }
 
 export function approveSensitiveAutomation(item:StoredAutomation,at=new Date()):StoredAutomation {
@@ -125,11 +131,12 @@ export function materializeShortcutDefinition(definition: ShortcutDefinition, no
   const integrations = [...new Set([...definition.integrations, ...(triggerProvider ? [triggerProvider] : [])])];
   const modes = definition.actions.map(actionExecutionMode);
   let materializationState: MaterializationState = "READY_TO_INSTALL";
-  if (integrations.length || modes.includes("REQUIRES_PROVIDER") || runtime.triggerDriver === "PROVIDER") materializationState = "INTEGRATION_REQUIRED";
+  if (runtime.installationHost === "UNSUPPORTED") materializationState = "BROKEN";
+  else if (integrations.length || modes.includes("REQUIRES_PROVIDER") || runtime.triggerDriver === "PROVIDER") materializationState = "INTEGRATION_REQUIRED";
   else if (definition.requiredSetup.length) materializationState = "PERMISSION_REQUIRED";
   else if (runtime.appleBridgeRequired) materializationState = "APPLE_SETUP_REQUIRED";
 
-  const personalSetup = runtime.appleBridgeRequired ? createPersonalAutomationSetup(id, definition.trigger, definition.actions, definition.name) : undefined;
+  const personalSetup = runtime.installationHost === "APPLE_PERSONAL_AUTOMATION" ? createPersonalAutomationSetup(id, definition.trigger, definition.actions, definition.name) : undefined;
   return {
     id, name: automationDisplayName(definition), version: STORED_AUTOMATION_SCHEMA_VERSION,
     originalIntentSummary: definition.name.slice(0, 120), definition, enabled: false,
@@ -137,7 +144,7 @@ export function materializeShortcutDefinition(definition: ShortcutDefinition, no
     riskLevel: definition.risk, confirmationRequired: definition.confirmationRequired,
     safetyApproval:{required:definition.confirmationRequired,confirmed:false},
     requiredSetup: [...definition.requiredSetup], integrations,
-    materializationState, personalSetup,
+    materializationState, installationPlan: installationPlanForDefinition(definition), personalSetup,
     failurePolicy: definition.risk === "high" ? "STOP" : (modes.length > 1 ? "BEST_EFFORT" : "STOP")
   };
 }
@@ -147,7 +154,7 @@ export function createPersonalAutomationSetup(automationId: string, trigger: Sho
   const value = Object.values(trigger.parameters)[0];
   const selector = value === undefined ? triggerLabel : `${triggerLabel}: ${String(value)}`;
   const shortcutActions = actions.filter(action => actionExecutionMode(action) === "REQUIRES_SHORTCUT_ACTION");
-  const runnerActions = actions.filter(action => actionExecutionMode(action) === "EXECUTABLE_DIRECT" || actionExecutionMode(action) === "EXECUTABLE_APP_INTENT");
+  const runnerActions = actions.filter(action => ["EXECUTABLE_DIRECT","EXECUTABLE_APP_INTENT","REQUIRES_PROVIDER"].includes(actionExecutionMode(action)));
   const actionSteps = [
     ...(runnerActions.length ? [`Die Aktion „CanMyPhone Automation ausführen“ hinzufügen und die gerade erstellte Automation aus der Liste auswählen.`] : []),
     ...shortcutActions.map(action => `Apples Aktion „${capabilityV2(action.capabilityId)?.description ?? action.capabilityId}“ hinzufügen.`)
@@ -161,7 +168,7 @@ export function createPersonalAutomationSetup(automationId: string, trigger: Sho
       `CanMyPhone öffnet Kurzbefehle. Dort „Automation“ und anschließend „Neue Automation“ wählen.`,
       `${selector} als Auslöser auswählen.`,
       ...actionSteps,
-      "Apples Zusammenfassung prüfen und die Automation sichern."
+      "Wenn iOS es für diesen Auslöser anbietet, „Sofort ausführen“ wählen; dann die Automation sichern."
     ],
     estimatedUserActions: 3 + actionSteps.length,
     setupState: "NOT_STARTED"

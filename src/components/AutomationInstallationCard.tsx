@@ -3,7 +3,6 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { hasValidSafetyApproval, type StoredAutomation } from "../automation/materialization";
 import { compileAutomationRuntime } from "../automation/engine";
 import { connectorPlanForDefinition } from "../automation/connectorPlanning";
-import { launcherPlanForDefinition } from "../automation/appLauncher";
 import { liquidIce } from "../theme/liquidIce";
 import { ContentSurface } from "./ContentSurface";
 import { LiquidButton } from "./LiquidButton";
@@ -14,7 +13,6 @@ export function AutomationInstallationCard({
   onConfirm,
   onCancel,
   onApprove,
-  onLaunchWithCanMyPhone,
   onRequestLocationPermission,
   onSaveNamedLocation,
   locationAlways = false,
@@ -26,7 +24,6 @@ export function AutomationInstallationCard({
   onConfirm:()=>void;
   onCancel:()=>void;
   onApprove:()=>void;
-  onLaunchWithCanMyPhone?:()=>void;
   onRequestLocationPermission?:()=>void;
   onSaveNamedLocation?:(name:string)=>void;
   locationAlways?:boolean;
@@ -37,7 +34,6 @@ export function AutomationInstallationCard({
   const direct=!setup;
   const runtime=compileAutomationRuntime(automation.definition);
   const connectorPlan=connectorPlanForDefinition(automation.definition,new Set(connectedProviderIds));
-  const launcherPlan=launcherPlanForDefinition(automation.definition);
   const locationTrigger=["trigger.location-enter","trigger.location-exit"].includes(automation.definition.trigger.capabilityId);
   const locationValue=typeof automation.definition.trigger.parameters.value==="string"?automation.definition.trigger.parameters.value:"";
   const locationConfigured=locationValue
@@ -48,6 +44,8 @@ export function AutomationInstallationCard({
   const locationLabel=locationValue==="parked-vehicle-location"?"Standort bei deinem Tesla":locationValue;
   const heading=automation.materializationState==="ACTIVE"
     ?"AKTIV"
+    :runtime.installationHost==="UNSUPPORTED"
+      ?"NOCH NICHT AUSFÜHRBAR"
     :waitingForConnector
       ?"VERBINDUNGEN NÖTIG"
       :waitingForLocation
@@ -56,7 +54,15 @@ export function AutomationInstallationCard({
         ?"SYSTEM-TRIGGER NÖTIG"
         :"BEREIT";
   const status=automation.materializationState==="ACTIVE"
-    ?"CanMyPhone überwacht diese Automation."
+    ?runtime.installationHost==="APPLE_PERSONAL_AUTOMATION"
+      ?"Der Auslöser wird von iOS überwacht. CanMyPhone übernimmt anschließend die Automation."
+      :runtime.installationHost==="HOMEKIT"
+        ?"Apple Home führt diese Automation aus."
+        :runtime.installationHost==="PROVIDER"
+          ?"Der verbundene Dienst überwacht diesen Auslöser."
+          :"CanMyPhone überwacht diesen Auslöser selbst."
+    :runtime.installationHost==="UNSUPPORTED"
+      ?runtime.summary
     :waitingForConnector
       ?"CanMyPhone hat die Logik verstanden. Vor der Ausführung müssen die benötigten Hersteller oder Smart-Home-Systeme verbunden werden."
       :waitingForLocation
@@ -69,15 +75,6 @@ export function AutomationInstallationCard({
     <Text style={styles.eyebrow}>{heading}</Text>
     <Text style={styles.title}>{automation.name}</Text>
     <Text style={styles.status}>{status}</Text>
-
-    {launcherPlan.available
-      ?<View style={styles.launcherBox}>
-        <Text style={styles.launcherEyebrow}>OHNE KURZBEFEHLE</Text>
-        <Text style={styles.launcherTitle}>{launcherPlan.target.displayName} über CanMyPhone öffnen</Text>
-        <Text style={styles.launcherText}>CanMyPhone führt die gespeicherten Aktionen zuerst aus und öffnet danach {launcherPlan.target.displayName}. So ist für diesen Weg kein Apple-Trigger nötig.</Text>
-        <LiquidButton label={`${launcherPlan.target.displayName} mit Automation öffnen`} onPress={()=>onLaunchWithCanMyPhone?.()}/>
-      </View>
-      :null}
 
     {runtime.appleBridgePurpose==="TRIGGER_ONLY"
       ?<Text style={styles.engineNote}>Kurzbefehle ist hier nur der letzte Trigger-Fallback — nicht die Automation selbst.</Text>
@@ -136,10 +133,11 @@ export function AutomationInstallationCard({
         {setup
           ?<View style={styles.steps}>{(runtime.appleBridgePurpose==="TRIGGER_ONLY"
             ?[
-              "Nur wenn du den originalen App-/System-Trigger verwenden willst: „Apple-Trigger verbinden“ öffnen.",
-              "In Kurzbefehle die CanMyPhone-Aktion „Automation ausführen“ verwenden.",
-              setup.setupSteps[1] ?? "Den gewünschten Apple-Trigger auswählen.",
-              "Mit „Fertig“ sichern."
+              "Für diesen Auslöser benötigt iOS einmalig deine Freigabe. Danach läuft die Automation automatisch.",
+              setup.setupSteps[0] ?? "In Kurzbefehle eine persönliche Automation erstellen.",
+              setup.setupSteps[1] ?? "Den gewünschten Auslöser auswählen.",
+              "Als einzige Aktion „CanMyPhone Automation ausführen“ hinzufügen und diese Automation auswählen.",
+              "„Sofort ausführen“ wählen, falls iOS diese Option anbietet, und sichern."
             ]
             :setup.handoffMode==="APPLE_INTELLIGENCE"
               ?[
@@ -160,14 +158,12 @@ export function AutomationInstallationCard({
             <LiquidButton label="Ja, fertig" onPress={onConfirm}/>
             <Pressable onPress={onCancel} style={styles.cancel}><Text style={styles.cancelText}>Noch nicht</Text></Pressable>
           </>
-          :waitingForConnector||waitingForLocation
+          :waitingForConnector||waitingForLocation||runtime.installationHost==="UNSUPPORTED"
             ?null
-            :launcherPlan.available&&runtime.appleBridgePurpose==="TRIGGER_ONLY"
-              ?<Pressable onPress={onHandoff} style={styles.secondaryAction}><Text style={styles.secondaryActionText}>Original-App-Icon verwenden → Apple-Trigger verbinden</Text></Pressable>
-              :<LiquidButton
-                label={direct?"Jetzt aktivieren":runtime.appleBridgePurpose==="TRIGGER_ONLY"?"Apple-Trigger verbinden":setup?.setupState==="HANDED_OFF"?"Kurzbefehle erneut öffnen":"Kurzbefehle öffnen"}
-                onPress={direct?onConfirm:onHandoff}
-              />}
+            :<LiquidButton
+              label={direct?"Automation aktivieren":runtime.appleBridgePurpose==="TRIGGER_ONLY"?"Einmalig in iOS aktivieren":setup?.setupState==="HANDED_OFF"?"iOS-Einrichtung erneut öffnen":"Einmalig in iOS aktivieren"}
+              onPress={direct?onConfirm:onHandoff}
+            />}
       </>}
   </ContentSurface>;
 }

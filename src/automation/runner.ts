@@ -16,6 +16,7 @@ const result = (automationId: string, status: AutomationExecutionResult["status"
 
 export async function runStoredAutomation(item: StoredAutomation, context: RunnerContext, execute: ActionExecutor): Promise<AutomationExecutionResult> {
   if (!validateStoredAutomation(item) || !validateShortcutDefinition(item.definition).ok) return result(item?.id ?? "unknown", "INVALID_DEFINITION", "Diese Automation ist ungültig oder veraltet.", { errorCode: "INVALID_DEFINITION" });
+  if (["trigger.homekit-characteristic","trigger.homekit-time"].includes(item.definition.trigger.capabilityId)) return result(item.id, "UNSUPPORTED_ACTION", "Diese Automation wird ausschließlich von Apple Home ausgeführt.", { errorCode: "HOMEKIT_OWNS_EXECUTION" });
   if (!item.enabled) return result(item.id, "FAILED", "Diese Automation ist deaktiviert.", { errorCode: "AUTOMATION_DISABLED" });
   if (item.requiresPro && !context.pro) return result(item.id, "BLOCKED_ENTITLEMENT", "CanMyPhone Pro ist für diese Automation erforderlich.", { errorCode: "PRO_REQUIRED" });
   if (!hasValidSafetyApproval(item)) return result(item.id, "FAILED", "Diese konkrete Version der sensiblen Automation muss zuerst bestätigt werden.", { errorCode: "CONFIRMATION_REQUIRED" });

@@ -25,8 +25,7 @@ import { compileShortcutGoal } from "./src/automation/shortcutCompiler";
 import { interpretAutomationWithOnDeviceAI, type AutomationSuggestion } from "./src/automation/semanticInterpreter";
 import { buildAppleIntelligenceAutomationDescription } from "./src/automation/appleShortcutsHandoff";
 import { compileAutomationRuntime } from "./src/automation/engine";
-import { launcherPlanForDefinition } from "./src/automation/appLauncher";
-import { approveSensitiveAutomation, materializeShortcutDefinition, type StoredAutomation } from "./src/automation/materialization";
+import { approveSensitiveAutomation, homekitInstallationFingerprint, materializeShortcutDefinition, type StoredAutomation } from "./src/automation/materialization";
 import { automationRepository, syncNativeRunnerResults } from "./src/automation/automationRepository";
 import { loadConnectorConnections, saveConnectorConnection } from "./src/automation/connectorConnectionRepository";
 import { connectedProviderIds, EMPTY_CONNECTOR_CONNECTION_PROFILE, type ConnectorConnectionProfile } from "./src/automation/connectorConnectionState";
@@ -138,6 +137,20 @@ function osMajor(): number | undefined {
   const value = String(Platform.Version);
   const major = Number.parseInt(value.split(".")[0] ?? "", 10);
   return Number.isFinite(major) ? major : undefined;
+}
+
+async function installHomeKitAutomation(item: StoredAutomation) {
+  const trigger=item.definition.trigger.parameters;
+  const action=item.definition.actions[0]?.parameters;
+  if (!action || item.definition.actions.length!==1) return null;
+  const fingerprint=homekitInstallationFingerprint(item);
+  if (item.definition.trigger.capabilityId==="trigger.homekit-characteristic") {
+    return CanMyPhoneNative?.installHomeKitCharacteristicAutomation?.(item.id,fingerprint,item.name,String(trigger.home ?? ""),String(trigger.sensor),String(trigger.sensorType),trigger.value===true,String(action.room),String(action.value)).catch(()=>null) ?? null;
+  }
+  if (item.definition.trigger.capabilityId==="trigger.homekit-time") {
+    return CanMyPhoneNative?.installHomeKitDailyLightAutomation?.(item.id,fingerprint,item.name,String(trigger.home ?? ""),String(trigger.time),String(action.room),String(action.value)).catch(()=>null) ?? null;
+  }
+  return null;
 }
 
 export default function App() {
@@ -453,68 +466,41 @@ export default function App() {
     setInstallingAutomation(saved);setAutomations(await automationRepository.list());
   };
 
-  const launchAutomationThroughCanMyPhone = async () => {
-    if (!installingAutomation) return;
-    const launcher = launcherPlanForDefinition(installingAutomation.definition);
-    if (!launcher.available) {
-      setActionResult({ handled:true, succeeded:false, message:"Für diese App gibt es noch keinen direkten CanMyPhone-Launcher." });
-      return;
-    }
-
-    try {
-      const runnable: StoredAutomation = {
-        ...installingAutomation,
-        enabled:true,
-        materializationState:"ACTIVE",
-        personalSetup: installingAutomation.personalSetup
-          ? { ...installingAutomation.personalSetup, setupState:"NOT_STARTED" }
-          : undefined
-      };
-      const saved=await automationRepository.save(runnable);
-      setInstallingAutomation(saved);
-      setAutomations(await automationRepository.list());
-
-      const runResult=await CanMyPhoneNative?.runStoredAutomation(saved.id);
-      if(runResult?.status!=="SUCCESS"){
-        setActionResult({
-          handled:true,
-          succeeded:false,
-          message:typeof runResult?.humanMessage==="string"
-            ?runResult.humanMessage
-            :"Die gespeicherten Aktionen konnten nicht sicher ausgeführt werden."
-        });
-        return;
-      }
-
-      const opened=await Linking.openURL(launcher.target.universalUrl).then(()=>true).catch(()=>false);
-      if(!opened){
-        setActionResult({
-          handled:true,
-          succeeded:false,
-          message:`Die Automation wurde ausgeführt, aber ${launcher.target.displayName} konnte nicht geöffnet werden.`
-        });
-        return;
-      }
-
-      setActionResult({
-        handled:true,
-        succeeded:true,
-        message:`Automation ausgeführt · ${launcher.target.displayName} wurde geöffnet.`
-      });
-      trackProductEvent("automation_run_success",{status:"LAUNCHER"});
-    } catch {
-      setActionResult({ handled:true, succeeded:false, message:"Der CanMyPhone-Launcher konnte die Automation gerade nicht ausführen." });
-      trackProductEvent("automation_run_failed",{status:"LAUNCHER_ERROR"});
-    }
-  };
-
   const confirmAutomation = async () => {
     if (!installingAutomation) return;
+    const runtime = compileAutomationRuntime(installingAutomation.definition);
+    if (["trigger.location-enter","trigger.location-exit"].includes(installingAutomation.definition.trigger.capabilityId)) {
+      const [authorization, locations]=await Promise.all([
+        CanMyPhoneNative?.locationAuthorizationStatus?.().catch(()=>null),
+        CanMyPhoneNative?.namedLocationsSnapshot?.().catch(()=>[])
+      ]);
+      const locationName=String(installingAutomation.definition.trigger.parameters.value ?? "");
+      if (!authorization?.always || !locations?.some(location=>location.name.localeCompare(locationName,undefined,{sensitivity:"accent"})===0)) {
+        setActionResult({handled:true,succeeded:false,message:"Für diesen Ortsauslöser brauchst du Standortzugriff „Immer“ und einen gespeicherten Ort."});
+        return;
+      }
+      const occupied=(await automationRepository.list()).filter(item=>item.enabled && item.id!==installingAutomation.id && ["trigger.location-enter","trigger.location-exit"].includes(item.definition.trigger.capabilityId)).length;
+      if (occupied>=20) {
+        setActionResult({handled:true,succeeded:false,message:"iOS kann höchstens 20 Ortsautomationen gleichzeitig überwachen. Deaktiviere zuerst eine andere."});
+        return;
+      }
+    }
+    if (runtime.installationHost === "UNSUPPORTED") {
+      setActionResult({ handled:true, succeeded:false, message:"Diese Kombination kann noch nicht automatisch installiert werden." });
+      return;
+    }
+    if (runtime.installationHost === "HOMEKIT") {
+      const installed = await installHomeKitAutomation(installingAutomation);
+      if (!installed?.success) {
+        setActionResult({ handled:true, succeeded:false, message:installed?.message ?? "Apple Home konnte die Automation nicht installieren." });
+        return;
+      }
+    }
     const updated: StoredAutomation = { ...installingAutomation, enabled:true, materializationState:"ACTIVE", personalSetup: installingAutomation.personalSetup ? { ...installingAutomation.personalSetup, setupState:"ACTIVE" } : undefined };
     const saved=await automationRepository.save(updated); await automationRepository.setPendingSetup(null);
     setInstallingAutomation(saved); setAutomations(await automationRepository.list());
     trackProductEvent("automation_setup_confirmed", { strategy:saved.definition.executionStrategy });
-    if (!saved.personalSetup) {
+    if (!saved.personalSetup && saved.definition.trigger.capabilityId === "trigger.manual") {
       const runResult = await CanMyPhoneNative?.runStoredAutomation(saved.id);
       const succeeded = runResult?.status === "SUCCESS";
       setActionResult({ handled:true, succeeded, message: typeof runResult?.humanMessage === "string" ? runResult.humanMessage : "Die Automation ist aktiviert." });
@@ -1151,7 +1137,7 @@ export default function App() {
                   <View style={styles.answerArea}>
                     <ShortcutDefinitionPreview definition={shortcutDefinition} />
                     {semanticSuggestion ? <ContentSurface style={styles.resultBanner}><Text style={styles.resultTitle}>{semanticSuggestion.title}</Text><Text style={styles.resultText}>{semanticSuggestion.message}</Text>{semanticSuggestion.proposedGoal ? <Pressable onPress={()=>runAsk(semanticSuggestion.proposedGoal!).catch(()=>undefined)} style={styles.textAction}><Text style={styles.textActionText}>Vorschlag verwenden</Text></Pressable> : null}</ContentSurface> : null}
-                    {installingAutomation ? <AutomationInstallationCard automation={installingAutomation} connectedProviderIds={[...connectedProviderIds(connectorConnections)]} locationAlways={locationAuthorization?.always===true} namedLocationNames={namedLocations.map((item)=>item.name)} onRequestLocationPermission={()=>requestLocationAutomationPermission().catch(()=>undefined)} onSaveNamedLocation={(name)=>saveNamedLocationHere(name).catch(()=>undefined)} onApprove={()=>approveAutomation().catch(()=>undefined)} onLaunchWithCanMyPhone={()=>launchAutomationThroughCanMyPhone().catch(()=>undefined)} onHandoff={()=>handoffAutomation().catch(()=>undefined)} onConfirm={()=>confirmAutomation().catch(()=>undefined)} onCancel={()=>cancelSetup().catch(()=>undefined)} /> : <LiquidButton style={styles.primaryAction} label="Automation einrichten" onPress={()=>createAutomation().catch(()=>undefined)} />}
+                    {installingAutomation ? <AutomationInstallationCard automation={installingAutomation} connectedProviderIds={[...connectedProviderIds(connectorConnections)]} locationAlways={locationAuthorization?.always===true} namedLocationNames={namedLocations.map((item)=>item.name)} onRequestLocationPermission={()=>requestLocationAutomationPermission().catch(()=>undefined)} onSaveNamedLocation={(name)=>saveNamedLocationHere(name).catch(()=>undefined)} onApprove={()=>approveAutomation().catch(()=>undefined)} onHandoff={()=>handoffAutomation().catch(()=>undefined)} onConfirm={()=>confirmAutomation().catch(()=>undefined)} onCancel={()=>cancelSetup().catch(()=>undefined)} /> : <LiquidButton style={styles.primaryAction} label="Automation einrichten" onPress={()=>createAutomation().catch(()=>undefined)} />}
                     {actionResult ? <ContentSurface style={styles.resultBanner}><Text style={styles.resultTitle}>Status</Text><Text style={styles.resultText}>{actionResult.message}</Text></ContentSurface> : null}
                   </View>
                 ) : semanticClarification ? (
@@ -1185,7 +1171,6 @@ export default function App() {
                         onRequestLocationPermission={()=>requestLocationAutomationPermission().catch(()=>undefined)}
                         onSaveNamedLocation={(name)=>saveNamedLocationHere(name).catch(()=>undefined)}
                         onApprove={()=>approveAutomation().catch(()=>undefined)}
-                        onLaunchWithCanMyPhone={()=>launchAutomationThroughCanMyPhone().catch(()=>undefined)}
                         onHandoff={()=>handoffAutomation().catch(()=>undefined)}
                         onConfirm={()=>confirmAutomation().catch(()=>undefined)}
                         onCancel={()=>cancelSetup().catch(()=>undefined)}
@@ -1439,7 +1424,18 @@ export default function App() {
                   />
                 </ContentSurface>
 
-                <MyAutomationsCard items={automations} onToggle={(item)=>{const updated={...item,enabled:!item.enabled,materializationState:(!item.enabled?"ACTIVE":"DISABLED") as StoredAutomation["materializationState"]};automationRepository.save(updated).then(async()=>{setAutomations(await automationRepository.list());trackProductEvent(updated.enabled?"automation_enabled":"automation_disabled",{});}).catch(()=>undefined);}} onDelete={(id)=>automationRepository.remove(id).then(async()=>setAutomations(await automationRepository.list())).catch(()=>undefined)} />
+                <MyAutomationsCard items={automations} onToggle={(item)=>{void (async()=>{
+                  if (!item.enabled && ["trigger.location-enter","trigger.location-exit"].includes(item.definition.trigger.capabilityId)) {
+                    const occupied=(await automationRepository.list()).filter(other=>other.enabled && other.id!==item.id && ["trigger.location-enter","trigger.location-exit"].includes(other.definition.trigger.capabilityId)).length;
+                    if (occupied>=20) throw new Error("GEOFENCE_LIMIT");
+                  }
+                  if (!item.enabled && item.definition.trigger.capabilityId.startsWith("trigger.homekit-")) {
+                    const installed=await installHomeKitAutomation(item);
+                    if (!installed?.success) throw new Error("HOMEKIT_INSTALL_FAILED");
+                  }
+                  const updated={...item,enabled:!item.enabled,materializationState:(!item.enabled?"ACTIVE":"DISABLED") as StoredAutomation["materializationState"]};
+                  await automationRepository.save(updated);setAutomations(await automationRepository.list());trackProductEvent(updated.enabled?"automation_enabled":"automation_disabled",{});
+                })().catch(()=>setActionResult({handled:true,succeeded:false,message:"Der Status der Automation konnte nicht geändert werden."}));}} onDelete={(id)=>automationRepository.remove(id).then(async()=>setAutomations(await automationRepository.list())).catch(()=>setActionResult({handled:true,succeeded:false,message:"Die Automation konnte nicht entfernt werden."}))} />
 
                 <ConnectorSettingsCard profile={connectorConnections} onConnect={(providerId,input)=>connectProvider(providerId,input).catch(()=>undefined)} />
 

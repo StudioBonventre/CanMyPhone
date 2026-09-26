@@ -28,21 +28,21 @@ export function solveAutomationRoutes(
   const connectors=connectorPlanForDefinition(definition,connectedProviderIds);
   const routes:AutomationRouteCandidate[]=[];
 
-  if(!runtime.appleBridgeRequired&&!runtime.providerRequired&&runtime.canmyphoneOwnsAllActions){
+  if(runtime.installationHost==="CANMYPHONE_NATIVE"&&!runtime.providerRequired&&runtime.canmyphoneOwnsAllActions){
     routes.push({kind:"CANMYPHONE_NATIVE",rank:100,automatic:true,exact:true,summary:"CanMyPhone kann Trigger und Aktionen selbst ausführen."});
   }
 
   if(launcher.available){
-    routes.push({kind:"CANMYPHONE_LAUNCHER",rank:90,automatic:true,exact:true,summary:`CanMyPhone führt die Aktionen aus und öffnet danach ${launcher.target.displayName}.`});
+    routes.push({kind:"CANMYPHONE_LAUNCHER",rank:20,automatic:false,exact:false,summary:`Manuell über CanMyPhone gestartet: Aktionen ausführen und danach ${launcher.target.displayName} öffnen.`});
   }
 
-  if(connectors.requirements.length&&connectors.ready){
+  if(runtime.installationHost!=="UNSUPPORTED"&&connectors.requirements.length&&connectors.ready){
     routes.push({kind:"CONNECTED_PROVIDER",rank:85,automatic:true,exact:true,summary:"Alle benötigten Hersteller-Connectoren sind verbunden."});
-  }else if(connectors.requirements.length){
+  }else if(runtime.installationHost!=="UNSUPPORTED"&&connectors.requirements.length){
     routes.push({kind:"SETUP_REQUIRED",rank:45,automatic:false,exact:true,summary:"Die Automation ist technisch auflösbar, benötigt aber noch eine Herstellerverbindung."});
   }
 
-  if(runtime.appleBridgeRequired){
+  if(runtime.installationHost==="APPLE_PERSONAL_AUTOMATION"){
     routes.push({kind:"APPLE_SYSTEM_BRIDGE",rank:30,automatic:false,exact:true,summary:"Mindestens ein Trigger oder eine Aktion gehört weiterhin Apples System-Orchestrierung."});
   }
 

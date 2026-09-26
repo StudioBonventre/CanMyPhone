@@ -4,10 +4,19 @@ import { AutomationPersistence } from "./automationPersistence";
 
 export const automationRepository = new AutomationPersistence(AsyncStorage, {
   async save(item){
+    if (!item.enabled && item.materializationState === "DISABLED" && item.definition.trigger.capabilityId.startsWith("trigger.homekit-")) {
+      const removed = await CanMyPhoneNative?.removeHomeKitAutomation?.(item.id);
+      if (!removed?.success) throw new Error("HOMEKIT_REMOVE_FAILED");
+    }
     await CanMyPhoneNative?.syncAutomationDefinition(JSON.stringify(item));
     await CanMyPhoneNative?.syncLocationAutomations?.().catch(()=>undefined);
   },
   async remove(id){
+    const item = await automationRepository.get(id);
+    if (item?.definition.trigger.capabilityId.startsWith("trigger.homekit-") && item.materializationState === "ACTIVE") {
+      const removed = await CanMyPhoneNative?.removeHomeKitAutomation?.(id);
+      if (!removed?.success) throw new Error("HOMEKIT_REMOVE_FAILED");
+    }
     await CanMyPhoneNative?.deleteAutomationDefinition(id);
     await CanMyPhoneNative?.syncLocationAutomations?.().catch(()=>undefined);
   }

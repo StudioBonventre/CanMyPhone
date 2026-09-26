@@ -127,6 +127,137 @@ final class CanMyPhoneHomeKitBridge: NSObject, HMHomeManagerDelegate {
     return failure("HOMEKIT_SCENE_NOT_FOUND", "Die Apple-Home-Szene „\(cleanScene)“ wurde nicht gefunden.")
   }
 
+  func installCharacteristicAutomation(id: String, fingerprint: String, name: String, homeName: String, sensorName: String, sensorType: String, sensorValue: Bool, room: String, lightValue: String) async -> [String: Any] {
+    await waitUntilReady()
+    guard manager.authorizationStatus.contains(.authorized) else { return failure("HOMEKIT_NOT_AUTHORIZED", "Apple Home-Zugriff ist nicht erlaubt.") }
+    let homes = homeName.isEmpty ? manager.homes : manager.homes.filter { $0.name.compare(homeName, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }
+    guard CanMyPhoneAutomationStore.validID(id), homes.count == 1, let home = homes.first else { return failure("HOMEKIT_HOME_AMBIGUOUS", "Wähle genau ein Apple-Home-Zuhause aus.") }
+    let triggerName = "CanMyPhone \(id)"
+    if home.triggers.contains(where: { $0.name == triggerName }) {
+      guard CanMyPhoneAutomationStore.defaults?.string(forKey: "CanMyPhoneHomeKitFingerprint.\(id)") == fingerprint else { return failure("HOMEKIT_DEFINITION_CHANGED", "Die Apple-Home-Automation wurde verändert und muss zuerst entfernt werden.") }
+      return ["success": true, "alreadyInstalled": true, "message": "Die Apple-Home-Automation ist bereits installiert."]
+    }
+    let sensorMatches=home.accessories.filter { $0.name.compare(sensorName, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }
+    let characteristicType = sensorType == "contact" ? HMCharacteristicTypeContactState : sensorType == "motion" ? HMCharacteristicTypeMotionDetected : ""
+    guard sensorMatches.count == 1, let sensor = sensorMatches.first,
+          let observed = sensor.services.flatMap({ $0.characteristics }).first(where: { $0.characteristicType == characteristicType && $0.properties.contains(HMCharacteristicPropertySupportsEventNotification) }) else {
+      return failure("HOMEKIT_SENSOR_NOT_FOUND", "Der HomeKit-Sensor oder sein Ereignis wurde nicht gefunden.")
+    }
+    let normalized = lightValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    let percent = parsePercent(normalized)
+    let power: Bool? = ["on", "an", "ein"].contains(normalized) ? true : ["off", "aus"].contains(normalized) ? false : percent.map { $0 > 0 }
+    guard let power else { return failure("INVALID_LIGHT_VALUE", "Für Licht werden an, aus oder ein Prozentwert unterstützt.") }
+    let matchingRooms = home.rooms.filter { $0.name.compare(room, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }
+    guard matchingRooms.count == 1, let targetRoom = matchingRooms.first else { return failure("HOMEKIT_ROOM_AMBIGUOUS", "Wähle genau einen Apple-Home-Raum aus.") }
+    let lights = targetRoom.accessories.flatMap { $0.services.filter { $0.serviceType == HMServiceTypeLightbulb }.flatMap { $0.characteristics } }
+    let powerCharacteristics = lights.filter { $0.characteristicType == HMCharacteristicTypePowerState }
+    guard !powerCharacteristics.isEmpty else { return failure("HOMEKIT_TARGET_NOT_FOUND", "In diesem Raum wurde kein steuerbares Licht gefunden.") }
+    do {
+      let actionSet = try await home.addActionSet(named: "\(name.prefix(50)) [\(id)]")
+      do {
+        for characteristic in powerCharacteristics {
+          try await actionSet.addAction(HMCharacteristicWriteAction(characteristic: characteristic, targetValue: NSNumber(value: power)))
+        }
+        if let percent {
+          for characteristic in lights where characteristic.characteristicType == HMCharacteristicTypeBrightness {
+            try await actionSet.addAction(HMCharacteristicWriteAction(characteristic: characteristic, targetValue: NSNumber(value: percent)))
+          }
+        }
+        let event = HMCharacteristicEvent(characteristic: observed, triggerValue: NSNumber(value: sensorValue))
+        let trigger = HMEventTrigger(name: triggerName, events: [event], predicate: nil)
+        try await home.addTrigger(trigger)
+        do {
+          try await trigger.addActionSet(actionSet)
+          try await trigger.enable(true)
+          CanMyPhoneAutomationStore.defaults?.set(fingerprint, forKey: "CanMyPhoneHomeKitFingerprint.\(id)")
+          return ["success": true, "message": "Apple Home überwacht den Sensor und führt die Lichtaktion aus."]
+        } catch {
+          try? await home.removeTrigger(trigger)
+          throw error
+        }
+      } catch {
+        try? await home.removeActionSet(actionSet)
+        throw error
+      }
+    } catch {
+      return failure("HOMEKIT_INSTALL_FAILED", "Die Apple-Home-Automation konnte nicht installiert werden.")
+    }
+  }
+
+  func removeAutomation(id: String) async -> [String: Any] {
+    await waitUntilReady()
+    guard manager.authorizationStatus.contains(.authorized), CanMyPhoneAutomationStore.validID(id) else {
+      return failure("HOMEKIT_NOT_AUTHORIZED", "Apple Home-Zugriff fehlt.")
+    }
+    let triggerName = "CanMyPhone \(id)"
+    for home in manager.homes {
+      for trigger in home.triggers where trigger.name == triggerName {
+        do { try await home.removeTrigger(trigger) }
+        catch { return failure("HOMEKIT_REMOVE_FAILED", "Die Apple-Home-Automation konnte nicht entfernt werden.") }
+      }
+      for actionSet in home.actionSets where actionSet.name.hasSuffix("[\(id)]") {
+        try? await home.removeActionSet(actionSet)
+      }
+    }
+    CanMyPhoneAutomationStore.defaults?.removeObject(forKey: "CanMyPhoneHomeKitFingerprint.\(id)")
+    return ["success": true, "message": "Apple-Home-Automation entfernt."]
+  }
+
+  func installDailyLightAutomation(id: String, fingerprint: String, name: String, homeName: String, time: String, room: String, lightValue: String) async -> [String: Any] {
+    await waitUntilReady()
+    guard manager.authorizationStatus.contains(.authorized) else { return failure("HOMEKIT_NOT_AUTHORIZED", "Apple Home-Zugriff ist nicht erlaubt.") }
+    let homes = homeName.isEmpty ? manager.homes : manager.homes.filter { $0.name.compare(homeName, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }
+    guard CanMyPhoneAutomationStore.validID(id), homes.count == 1, let home = homes.first else { return failure("HOMEKIT_HOME_AMBIGUOUS", "Wähle genau ein Apple-Home-Zuhause aus.") }
+    let parts=time.split(separator: ":")
+    guard parts.count == 2, let hour=Int(parts[0]), let minute=Int(parts[1]), (0...23).contains(hour), (0...59).contains(minute) else { return failure("HOMEKIT_TIME_INVALID", "Die Uhrzeit muss im Format HH:MM vorliegen.") }
+    let triggerName="CanMyPhone \(id)"
+    if home.triggers.contains(where: { $0.name == triggerName }) {
+      guard CanMyPhoneAutomationStore.defaults?.string(forKey: "CanMyPhoneHomeKitFingerprint.\(id)") == fingerprint else { return failure("HOMEKIT_DEFINITION_CHANGED", "Die Apple-Home-Automation wurde verändert und muss zuerst entfernt werden.") }
+      return ["success": true, "alreadyInstalled": true, "message": "Die Apple-Home-Automation ist bereits installiert."]
+    }
+    let matchingRooms=home.rooms.filter { $0.name.compare(room, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }
+    guard matchingRooms.count == 1, let targetRoom=matchingRooms.first else { return failure("HOMEKIT_ROOM_AMBIGUOUS", "Wähle genau einen Apple-Home-Raum aus.") }
+    let lights=targetRoom.accessories.flatMap { $0.services.filter { $0.serviceType == HMServiceTypeLightbulb }.flatMap { $0.characteristics } }
+    let powerCharacteristics=lights.filter { $0.characteristicType == HMCharacteristicTypePowerState }
+    guard !powerCharacteristics.isEmpty else { return failure("HOMEKIT_TARGET_NOT_FOUND", "In diesem Raum wurde kein steuerbares Licht gefunden.") }
+    let normalized=lightValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    let percent=parsePercent(normalized)
+    let power: Bool?=["on","an","ein"].contains(normalized) ? true : ["off","aus"].contains(normalized) ? false : percent.map { $0 > 0 }
+    guard let power else { return failure("INVALID_LIGHT_VALUE", "Für Licht werden an, aus oder ein Prozentwert unterstützt.") }
+    var calendar=Calendar.current
+    calendar.timeZone=TimeZone.current
+    guard let fireDate=calendar.nextDate(after: Date(), matching: DateComponents(hour: hour, minute: minute), matchingPolicy: .nextTime) else { return failure("HOMEKIT_TIME_INVALID", "Die nächste Ausführung konnte nicht berechnet werden.") }
+    do {
+      let actionSet=try await home.addActionSet(named: "\(name.prefix(50)) [\(id)]")
+      do {
+        for characteristic in powerCharacteristics {
+          try await actionSet.addAction(HMCharacteristicWriteAction(characteristic: characteristic, targetValue: NSNumber(value: power)))
+        }
+        if let percent {
+          for characteristic in lights where characteristic.characteristicType == HMCharacteristicTypeBrightness {
+            try await actionSet.addAction(HMCharacteristicWriteAction(characteristic: characteristic, targetValue: NSNumber(value: percent)))
+          }
+        }
+        let trigger=HMTimerTrigger(name: triggerName, fireDate: fireDate, recurrence: DateComponents(day: 1))
+        try await home.addTrigger(trigger)
+        do {
+          try await trigger.addActionSet(actionSet)
+          try await trigger.enable(true)
+          CanMyPhoneAutomationStore.defaults?.set(fingerprint, forKey: "CanMyPhoneHomeKitFingerprint.\(id)")
+          return ["success": true, "message": "Apple Home führt die Lichtaktion täglich um \(time) aus."]
+        } catch {
+          try? await home.removeTrigger(trigger)
+          throw error
+        }
+      } catch {
+        try? await home.removeActionSet(actionSet)
+        throw error
+      }
+    } catch {
+      return failure("HOMEKIT_INSTALL_FAILED", "Die Apple-Home-Zeitautomation konnte nicht installiert werden.")
+    }
+  }
+
   func setCover(room: String, device: String?, position: Int) async -> [String: Any] {
     await waitUntilReady()
     guard manager.authorizationStatus.contains(.authorized) else {

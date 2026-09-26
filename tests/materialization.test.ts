@@ -34,7 +34,7 @@ const scenarios=[
  ["Wenn ich zuhause ankomme, Fokus Arbeit aus.","trigger.location-enter","REQUIRES_SHORTCUT_ACTION"],
  ["Wenn Bluetooth mit meinem Auto verbunden, Maps und Spotify.","trigger.bluetooth-connected","EXECUTABLE_DIRECT"]
 ] as const;
-for(const [goal,trigger,mode] of scenarios)test(`materializes honestly: ${goal}`,()=>{const item=materialize(goal);const runtime=compileAutomationRuntime(item.definition);if(runtime.appleBridgeRequired){assert.equal(item.personalSetup?.appleTriggerType,trigger);assert.equal(item.personalSetup?.setupState,"NOT_STARTED");}else{assert.equal(item.personalSetup,undefined);}assert.equal(actionExecutionMode(item.definition.actions[0]!),mode);assert.notEqual(item.materializationState,"ACTIVE");});
+for(const [goal,trigger,mode] of scenarios)test(`materializes honestly: ${goal}`,()=>{const item=materialize(goal);const runtime=compileAutomationRuntime(item.definition);if(runtime.installationHost==="APPLE_PERSONAL_AUTOMATION"){assert.equal(item.personalSetup?.appleTriggerType,trigger);assert.equal(item.personalSetup?.setupState,"NOT_STARTED");}else{assert.equal(item.personalSetup,undefined);}assert.equal(actionExecutionMode(item.definition.actions[0]!),mode);assert.notEqual(item.materializationState,"ACTIVE");});
 test("manual brightness is directly executable without Apple automation",()=>{const item=materialize("Setze Helligkeit auf 35 %.");assert.equal(item.definition.trigger.capabilityId,"trigger.manual");assert.equal(item.personalSetup,undefined);assert.equal(actionExecutionMode(item.definition.actions[0]!),"EXECUTABLE_DIRECT");});
 test("iOS 27 handoff description gives Shortcuts the trigger and CanMyPhone action",()=>{const definition=compileShortcutGoal("Wenn ich Instagram öffne, setze die Helligkeit auf 35 %.");const prompt=buildAppleIntelligenceAutomationDescription(definition);assert.match(prompt,/persönliche Automation/i);assert.match(prompt,/Instagram/);assert.match(prompt,/35 Prozent/);assert.match(prompt,/CanMyPhone Automation ausführen/);});
 test("materialized personal automations can track an Apple Intelligence handoff",()=>{const item=materialize("Wenn ich Instagram öffne, setze die Helligkeit auf 35 %.");assert.equal(item.personalSetup?.handoffMode,undefined);const updated={...item,personalSetup:item.personalSetup?{...item.personalSetup,handoffMode:"APPLE_INTELLIGENCE" as const}:undefined};assert.equal(updated.personalSetup?.handoffMode,"APPLE_INTELLIGENCE");});
@@ -49,6 +49,7 @@ test("runner handles multi-step stop and best effort deterministically",async()=
 test("unknown capability and arbitrary URL never execute",async()=>{const item=runnable();item.definition.actions=[{capabilityId:"native.selector.perform",parameters:{}}];let called=false;const r=await runStoredAutomation(item,context,async()=>{called=true;return true;});assert.equal(r.status,"INVALID_DEFINITION");assert.equal(called,false);});
 test("handoff lifecycle persists pending setup without claiming installation",async()=>{const storage=new MemoryStorage(),repo=new AutomationPersistence(storage),item=materialize(scenarios[0][0]);await repo.save(item);await repo.setPendingSetup(item.id);assert.equal(await repo.getPendingSetup(),item.id);assert.equal(item.personalSetup?.setupState,"NOT_STARTED");await repo.setPendingSetup(null);assert.equal(await repo.getPendingSetup(),null);});
 test("sensitive approval is bound to the exact safety definition",()=>{const item=runnable("Wenn ich mich von meinem Tesla entferne, schließe den Heckkofferraum.");assert.equal(item.safetyApproval.required,true);assert.equal(hasValidSafetyApproval(item),false);const approved=approveSensitiveAutomation(item,new Date("2026-09-19T11:00:00Z"));assert.equal(hasValidSafetyApproval(approved),true);assert.equal(approved.safetyApproval.definitionFingerprint,safetyDefinitionFingerprint(approved));const edited={...approved,definition:{...approved.definition,conditions:[{capabilityId:"condition.time-window",parameters:{after:"22:00"}}]}};assert.equal(hasValidSafetyApproval(edited),false);});
+test("sensitive approval is bound to the trigger as well",()=>{const item=approveSensitiveAutomation(runnable("Wenn ich mich von meinem Tesla entferne, schließe den Heckkofferraum."));const changed={...item,definition:{...item.definition,trigger:{...item.definition.trigger,parameters:{value:"work"}}}};assert.equal(hasValidSafetyApproval(changed),false);});
 test("sensitive runner requires a matching approval fingerprint",async()=>{const item=runnable("Wenn ich mich von meinem Tesla entferne, schließe den Heckkofferraum.");const ready={...context,grantedPermissions:new Set(["location"]),connectedIntegrations:new Set(["tesla"])};let result=await runStoredAutomation(item,ready,async()=>true);assert.equal(result.errorCode,"CONFIRMATION_REQUIRED");const approved=approveSensitiveAutomation(item);result=await runStoredAutomation(approved,ready,async()=>true);assert.equal(result.status,"UNSUPPORTED_ACTION");const mismatch={...approved,riskLevel:"medium" as const};result=await runStoredAutomation(mismatch,ready,async()=>true);assert.equal(result.errorCode,"CONFIRMATION_REQUIRED");});
 test("runner snapshots update real last-run state and execution count",async()=>{const storage=new MemoryStorage(),repo=new AutomationPersistence(storage),item=runnable();await repo.save(item);const snapshot={...item,lastRunAt:"2026-09-19T12:00:00Z",lastRunStatus:"SUCCESS" as const,executionCount:3};const merged=await repo.mergeRunnerSnapshots([snapshot]);assert.equal(merged[0]?.executionCount,3);assert.equal(merged[0]?.lastRunStatus,"SUCCESS");assert.equal(merged[0]?.lastRunAt,snapshot.lastRunAt);});
 test("deleted and disabled automations cannot run",async()=>{const storage=new MemoryStorage(),repo=new AutomationPersistence(storage),item=runnable();await repo.save(item);const disabled={...item,enabled:false};assert.equal((await runStoredAutomation(disabled,context,async()=>true)).errorCode,"AUTOMATION_DISABLED");await repo.remove(item.id);assert.equal(await repo.get(item.id),null);});
@@ -171,11 +172,11 @@ test("launcher route is not offered when an action still belongs to Apple Shortc
 });
 
 
-test("route solver prefers CanMyPhone launcher over Apple bridge when actions are owned",()=>{
+test("route solver prefers the real Apple app trigger over a manual launcher",()=>{
   const d=compileShortcutGoal("Wenn Instagram geöffnet wird, Helligkeit auf 35 %.");
   const routes=solveAutomationRoutes(d);
-  assert.equal(routes[0]?.kind,"CANMYPHONE_LAUNCHER");
-  assert.equal(routes[0]?.automatic,true);
+  assert.equal(routes[0]?.kind,"APPLE_SYSTEM_BRIDGE");
+  assert.equal(routes.find(route=>route.kind==="CANMYPHONE_LAUNCHER")?.automatic,false);
   assert.ok(routes.some((route)=>route.kind==="APPLE_SYSTEM_BRIDGE"));
 });
 
@@ -262,8 +263,8 @@ test("verified provider events dispatch only exact enabled connector triggers",a
   const runtime=compileAutomationRuntime(parsed.definition);
   assert.equal(runtime.triggerDriver,"PROVIDER");
   assert.equal(runtime.appleBridgeRequired,false);
-  assert.equal(runtime.triggerReliability,"BACKGROUND_EVENT");
-  assert.equal(active.materializationState,"INTEGRATION_REQUIRED");
+  assert.equal(runtime.triggerReliability,"UNAVAILABLE");
+  assert.equal(active.materializationState,"BROKEN");
   assert.deepEqual(active.integrations,["tesla"]);
   let calls=0;
   const dispatched=await dispatchVerifiedProviderEvent({eventId:"evt-1",providerId:"TESLA",event:"vehicle-parked",receivedAt:"2026-09-26T10:00:00Z"},[active,{...active,id:"cmp_auto_disabled",enabled:false}],async item=>{calls+=1;return {automationId:item.id,status:"SUCCESS",executedSteps:["vehicle.lock"],humanMessage:"ok",timestamp:"2026-09-26T10:00:01Z"};});

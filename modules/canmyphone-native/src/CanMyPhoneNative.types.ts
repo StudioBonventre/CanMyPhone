@@ -130,6 +130,9 @@ export type NativeModuleShape = {
   requestPermission(kind: PermissionKind): Promise<PermissionResult>;
   setBrightness(level: number): Promise<BrightnessResult>;
   homeKitSnapshot(): Promise<HomeKitSnapshotResult>;
+  installHomeKitCharacteristicAutomation(id: string, fingerprint: string, name: string, home: string, sensorName: string, sensorType: string, sensorValue: boolean, room: string, lightValue: string): Promise<HomeKitActionResult>;
+  installHomeKitDailyLightAutomation(id: string, fingerprint: string, name: string, home: string, time: string, room: string, lightValue: string): Promise<HomeKitActionResult>;
+  removeHomeKitAutomation(id: string): Promise<HomeKitActionResult>;
   homeKitSetCover(room: string, device: string | null, position: number): Promise<HomeKitActionResult>;
   homeKitSetLight(room: string, device: string | null, value: string): Promise<HomeKitActionResult>;
   homeKitSetClimate(room: string, device: string | null, value: string): Promise<HomeKitActionResult>;

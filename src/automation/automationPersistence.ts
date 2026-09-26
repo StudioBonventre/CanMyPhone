@@ -25,8 +25,8 @@ export class AutomationPersistence {
     } catch { return []; }
   }
   async get(id:string){return(await this.list()).find(item=>item.id===id)??null;}
-  async save(item:StoredAutomation){if(!validateStoredAutomation(item))throw new Error("INVALID_STORED_AUTOMATION");const saved={...item,updatedAt:new Date().toISOString()};const next=[...(await this.list()).filter(x=>x.id!==item.id),saved];await this.storage.setItem(AUTOMATIONS_KEY,JSON.stringify(next));await this.mirror?.save(saved);return saved;}
-  async remove(id:string){const next=(await this.list()).filter(x=>x.id!==id);await this.storage.setItem(AUTOMATIONS_KEY,JSON.stringify(next));await this.mirror?.remove(id);}
+  async save(item:StoredAutomation){if(!validateStoredAutomation(item))throw new Error("INVALID_STORED_AUTOMATION");const saved={...item,updatedAt:new Date().toISOString()};const next=[...(await this.list()).filter(x=>x.id!==item.id),saved];await this.mirror?.save(saved);await this.storage.setItem(AUTOMATIONS_KEY,JSON.stringify(next));return saved;}
+  async remove(id:string){const next=(await this.list()).filter(x=>x.id!==id);await this.mirror?.remove(id);await this.storage.setItem(AUTOMATIONS_KEY,JSON.stringify(next));}
   async setPendingSetup(id:string|null){if(id)await this.storage.setItem(PENDING_SETUP_KEY,id);else await this.storage.removeItem(PENDING_SETUP_KEY);}
   async getPendingSetup(){return this.storage.getItem(PENDING_SETUP_KEY);}
   async mergeRunnerSnapshots(snapshots:unknown):Promise<StoredAutomation[]> {

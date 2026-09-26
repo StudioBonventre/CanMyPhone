@@ -1,6 +1,6 @@
 import { capabilityV2, selectCapabilityCandidates, type CapabilityV2, type Feasibility, type Strategy } from "./capabilityCatalogV2";
 
-export type ExtractedEntities={app?:string;bluetoothDevice?:string;location?:string;time?:string;weekdays?:string;percent?:number;focus?:string;playlist?:string;destination?:string;contact?:string;homeScene?:string};
+export type ExtractedEntities={app?:string;bluetoothDevice?:string;location?:string;time?:string;weekdays?:string;percent?:number;focus?:string;playlist?:string;destination?:string;contact?:string;homeScene?:string;homekitSensor?:string;homekitSensorType?:"contact"|"motion";homekitRoom?:string};
 export type ShortcutStep={capabilityId:string;parameters:Record<string,string|number|boolean>};
 export type ShortcutDefinition={name:string;trigger:ShortcutStep;conditions:ShortcutStep[];actions:ShortcutStep[];variables:Record<string,string>;integrations:string[];requiredSetup:string[];executionStrategy:Strategy;feasibility:Feasibility;reasons:string[];confidence:number;risk:"low"|"medium"|"high";confirmationRequired:boolean;background:boolean;clarification?:string};
 
@@ -49,10 +49,18 @@ export function extractEntities(goal:string):ExtractedEntities {
   const playlist=q.match(/(?:meine[rn]?\s+)?([a-zäöüß -]*playlist)/); if(playlist)entities.playlist=playlist[1].trim();
   if(/nach hause|zurück nach hause/.test(q))entities.destination="home"; else if(/zur arbeit|navigation.*arbeit/.test(q))entities.destination="work";
   const scene=q.match(/(?:homekit\s+)?szene\s+([a-zäöüß0-9 -]+)/); if(scene)entities.homeScene=scene[1].trim();
+  const contact=q.match(/(?:wenn|sobald)\s+(?:die\s+)?([a-zäöüß0-9 -]*tür)\s+(?:geöffnet wird|öffnet)/);
+  const motion=q.match(/(?:wenn|sobald)\s+(?:der\s+)?([a-zäöüß0-9 -]*bewegungsmelder)\s+(?:bewegung erkennt|auslöst)/);
+  if(contact){entities.homekitSensor=contact[1].trim();entities.homekitSensorType="contact";}
+  else if(motion){entities.homekitSensor=motion[1].trim();entities.homekitSensorType="motion";}
+  const lightRoom=q.match(/licht\s+(?:im|in der)\s+([a-zäöüß0-9 -]+?)\s+(?:an|ein|aus|auf)/);
+  if(lightRoom)entities.homekitRoom=lightRoom[1].trim();
   return entities;
 }
 
 function extractTrigger(q:string,e:ExtractedEntities):ShortcutStep|undefined {
+  if(e.homekitSensor&&e.homekitSensorType)return {capabilityId:"trigger.homekit-characteristic",parameters:{sensor:e.homekitSensor,sensorType:e.homekitSensorType,value:true}};
+  if(e.time&&e.homekitRoom&&/apple home|homekit/.test(q))return {capabilityId:"trigger.homekit-time",parameters:{time:e.time}};
   if(/ankomm|betret|eintreff|bin und|daheim nach/.test(q)&&e.location)return {capabilityId:"trigger.location-enter",parameters:{value:e.location}};
   if(/verlass|entfern|weggeh/.test(q)&&e.location)return {capabilityId:"trigger.location-exit",parameters:{value:e.location}};
   if(/getrennt/.test(q)&&e.bluetoothDevice)return {capabilityId:"trigger.bluetooth-disconnected",parameters:{value:e.bluetoothDevice}};
@@ -65,6 +73,7 @@ function extractTrigger(q:string,e:ExtractedEntities):ShortcutStep|undefined {
 }
 
 function extractActions(q:string,e:ExtractedEntities):ShortcutStep[]{const out:ShortcutStep[]=[];
+  if((e.homekitSensor||(/apple home|homekit/.test(q)&&e.time))&&/licht/.test(q)&&e.homekitRoom)out.push({capabilityId:"smart-home.light.set",parameters:{provider:"apple-home",room:e.homekitRoom,value:/licht.+?\b(aus|ausschalt)/.test(q)?"off":e.percent!==undefined?String(e.percent):"on"}});
   if(/fokus|focus/.test(q)&&/(aus|deaktiv|an|aktiv|einschalt)/.test(q)&&e.focus)out.push({capabilityId:"system.focus.set",parameters:{value:`${e.focus}:${/(aus|deaktiv)/.test(q)?"off":"on"}`}});
   if(/helligkeit/.test(q)&&e.percent!==undefined)out.push({capabilityId:"system.brightness.set",parameters:{percent:e.percent}});
   if(/lautstärke/.test(q)&&e.percent!==undefined)out.push({capabilityId:"system.volume.set",parameters:{value:String(e.percent)}});
@@ -102,7 +111,7 @@ export function compileShortcutGoal(goal:string):ShortcutDefinition {const q=nor
   const asksForTrigger=/(wenn|sobald|falls|jed(en|e)|immer wenn|bei verbind|beim|akku|batter|um \d|werktag)/.test(q);
   if(!t&&a.length&&!asksForTrigger)t={capabilityId:"trigger.manual",parameters:{}};
   if(!t)clarification=/einsteige|ins auto/.test(q)?"Woran soll ich erkennen, dass du im Auto bist: CarPlay, Bluetooth oder Standort?":/bluetooth|kopfhörer/.test(q)&&/musik|spotify|apple music/.test(q)?"Welches Bluetooth-Gerät soll die Automation auslösen – oder reicht jedes?":"Wann soll die Automation starten?";
-  else if(!a.length)clarification="Was soll dann passieren?";
+  else if(!a.length)clarification=e.homekitSensor&&/licht/.test(q)?"In welchem Apple-Home-Raum soll das Licht geschaltet werden?":"Was soll dann passieren?";
   const conditions:ShortcutStep[]=[];if(/nach\s+\d{1,2}/.test(q)&&e.time&&t?.capabilityId!=="trigger.time"&&t?.capabilityId!=="trigger.weekday")conditions.push({capabilityId:"condition.time-window",parameters:{after:e.time}});
   const steps=[...(t?[t]:[]),...conditions,...a],caps=steps.map(s=>capabilityV2(s.capabilityId)).filter((c):c is CapabilityV2=>Boolean(c));const strategy=resolveStrategy(steps),assessment=assess(steps,strategy);
   const integrations=[...new Set(caps.map(c=>c.integration).filter((x):x is string=>Boolean(x)))],requiredSetup=[...new Set(caps.flatMap(c=>c.permissions).concat(integrations))];const risk=riskByRank[Math.max(0,...caps.map(c=>riskRank[c.risk]))];

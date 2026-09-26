@@ -100,6 +100,18 @@ public final class CanMyPhoneNativeModule: Module {
       return await CanMyPhoneHomeKitBridge.shared.snapshot()
     }
 
+    AsyncFunction("installHomeKitCharacteristicAutomation") { (id: String, fingerprint: String, name: String, home: String, sensorName: String, sensorType: String, sensorValue: Bool, room: String, lightValue: String) async -> [String: Any] in
+      return await CanMyPhoneHomeKitBridge.shared.installCharacteristicAutomation(id: id, fingerprint: fingerprint, name: name, homeName: home, sensorName: sensorName, sensorType: sensorType, sensorValue: sensorValue, room: room, lightValue: lightValue)
+    }
+
+    AsyncFunction("installHomeKitDailyLightAutomation") { (id: String, fingerprint: String, name: String, home: String, time: String, room: String, lightValue: String) async -> [String: Any] in
+      return await CanMyPhoneHomeKitBridge.shared.installDailyLightAutomation(id: id, fingerprint: fingerprint, name: name, homeName: home, time: time, room: room, lightValue: lightValue)
+    }
+
+    AsyncFunction("removeHomeKitAutomation") { (id: String) async -> [String: Any] in
+      return await CanMyPhoneHomeKitBridge.shared.removeAutomation(id: id)
+    }
+
     AsyncFunction("homeKitSetCover") { (room: String, device: String?, position: Int) async -> [String: Any] in
       return await CanMyPhoneHomeKitBridge.shared.setCover(room: room, device: device, position: position)
     }
