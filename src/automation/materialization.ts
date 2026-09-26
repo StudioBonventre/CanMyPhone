@@ -1,6 +1,7 @@
 import { capabilityV2 } from "./capabilityCatalogV2";
 import type { ShortcutDefinition, ShortcutStep } from "./shortcutCompiler";
 import { validateShortcutDefinition } from "./shortcutValidation";
+import { compileAutomationRuntime } from "./engine";
 
 export const STORED_AUTOMATION_SCHEMA_VERSION = 2 as const;
 
@@ -114,14 +115,14 @@ export function materializeShortcutDefinition(definition: ShortcutDefinition, no
   const stamp = now.toISOString();
   const id = `cmp_auto_${Math.random().toString(36).slice(2, 10)}`;
   const requiresPro = definition.variables.entitlement === "pro";
-  const triggerIsPersonal = definition.trigger.capabilityId !== "trigger.manual";
+  const runtime = compileAutomationRuntime(definition);
   const modes = definition.actions.map(actionExecutionMode);
   let materializationState: MaterializationState = "READY_TO_INSTALL";
   if (definition.integrations.length) materializationState = "INTEGRATION_REQUIRED";
   else if (definition.requiredSetup.length) materializationState = "PERMISSION_REQUIRED";
-  else if (triggerIsPersonal) materializationState = "APPLE_SETUP_REQUIRED";
+  else if (runtime.appleBridgeRequired) materializationState = "APPLE_SETUP_REQUIRED";
 
-  const personalSetup = triggerIsPersonal ? createPersonalAutomationSetup(id, definition.trigger, definition.actions, definition.name) : undefined;
+  const personalSetup = runtime.appleBridgeRequired ? createPersonalAutomationSetup(id, definition.trigger, definition.actions, definition.name) : undefined;
   return {
     id, name: definition.name, version: STORED_AUTOMATION_SCHEMA_VERSION,
     originalIntentSummary: definition.name.slice(0, 120), definition, enabled: false,

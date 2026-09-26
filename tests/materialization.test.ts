@@ -5,6 +5,7 @@ import { actionExecutionMode, approveSensitiveAutomation, hasValidSafetyApproval
 import { runStoredAutomation } from "../src/automation/runner";
 import { compileShortcutGoal } from "../src/automation/shortcutCompiler";
 import { buildAppleIntelligenceAutomationDescription } from "../src/automation/appleShortcutsHandoff";
+import { compileAutomationRuntime } from "../src/automation/engine";
 
 class MemoryStorage implements KeyValueStorage {
   data = new Map<string, string>();
@@ -46,3 +47,26 @@ test("runner snapshots update real last-run state and execution count",async()=>
 test("deleted and disabled automations cannot run",async()=>{const storage=new MemoryStorage(),repo=new AutomationPersistence(storage),item=runnable();await repo.save(item);const disabled={...item,enabled:false};assert.equal((await runStoredAutomation(disabled,context,async()=>true)).errorCode,"AUTOMATION_DISABLED");await repo.remove(item.id);assert.equal(await repo.get(item.id),null);});
 test("invalid ids, schemas and extra native parameters fail closed",async()=>{const item=runnable();assert.equal(validateStoredAutomation({...item,id:"bad/id"}),false);assert.equal(validateStoredAutomation({...item,version:99}),false);const invalid={...item,definition:{...item.definition,actions:[{capabilityId:"system.brightness.set",parameters:{percent:35,selector:"private"}}]}};assert.equal((await runStoredAutomation(invalid,context,async()=>true)).status,"INVALID_DEFINITION");});
 test("Pro transitions are evaluated per run, including restore and expiry",async()=>{const item={...runnable(),requiresPro:true};assert.equal((await runStoredAutomation(item,{...context,pro:false},async()=>true)).status,"BLOCKED_ENTITLEMENT");assert.equal((await runStoredAutomation(item,{...context,pro:true},async()=>true)).status,"SUCCESS");assert.equal((await runStoredAutomation(item,{...context,pro:false},async()=>true)).status,"BLOCKED_ENTITLEMENT");});
+
+test("engine keeps TikTok app-open as trigger-only Apple bridge",()=>{
+  const d=compileShortcutGoal("Wenn TikTok geöffnet wird, Helligkeit auf 100 %.");
+  const runtime=compileAutomationRuntime(d);
+  assert.equal(runtime.triggerDriver,"APPLE_SHORTCUTS_BRIDGE");
+  assert.deepEqual(runtime.actionDrivers,["CANMYPHONE_NATIVE"]);
+  assert.equal(runtime.appleBridgePurpose,"TRIGGER_ONLY");
+  assert.equal(runtime.canmyphoneOwnsAllActions,true);
+});
+test("engine keeps manual brightness fully inside CanMyPhone",()=>{
+  const d=compileShortcutGoal("Setze Helligkeit auf 35 %.");
+  const runtime=compileAutomationRuntime(d);
+  assert.equal(runtime.triggerDriver,"CANMYPHONE_MANUAL");
+  assert.equal(runtime.appleBridgeRequired,false);
+  assert.equal(runtime.canmyphoneOwnsAllActions,true);
+});
+test("engine reports Apple-owned actions honestly",()=>{
+  const d=compileShortcutGoal("Wenn Akku unter 20 %, Stromsparmodus an.");
+  const runtime=compileAutomationRuntime(d);
+  assert.equal(runtime.appleBridgePurpose,"TRIGGER_AND_ACTIONS");
+  assert.equal(runtime.actionDrivers[0],"APPLE_SHORTCUTS_ACTION");
+  assert.equal(runtime.canmyphoneOwnsAllActions,false);
+});
