@@ -44,7 +44,7 @@ import { liquidIce } from "./src/theme/liquidIce";
 import { solutions } from "./src/data/solutions";
 import { directActionPlan, runDirectAction, type DirectActionResult } from "./src/lib/actions";
 import { compileVerifiedGoal, planGoal, type PlannerResponse } from "./src/automation/planner";
-import { getSupabasePlannerClient } from "./src/lib/supabasePlanner";
+import { getSupabasePlannerClient, getSupabaseSemanticClient } from "./src/lib/supabasePlanner";
 import { resolveWithOnDeviceAI } from "./src/lib/aiResolver";
 import { resolveConversation } from "./src/lib/conversation";
 import { DEFAULT_ENTITLEMENTS, proFeatureAccess } from "./src/lib/entitlements";
@@ -490,6 +490,24 @@ export default function App() {
         } else if (semantic.kind === "clarification") {
           setSemanticClarification(semantic.question);
           semanticHandled = true;
+        }
+      }
+
+      if (!semanticHandled && preferences.useOnDeviceAI) {
+        const serverSemantic = getSupabaseSemanticClient();
+        if (serverSemantic) {
+          const semantic = await serverSemantic.interpret(normalized, {
+            locale: "de",
+            connectedProviderIds: [...connectedProviderIds(connectorConnections)]
+          });
+          if (semantic.kind === "understood") {
+            setSemanticDefinition(semantic.definition);
+            setSemanticSuggestion(semantic.suggestion ?? null);
+            semanticHandled = true;
+          } else if (semantic.kind === "clarification") {
+            setSemanticClarification(semantic.question);
+            semanticHandled = true;
+          }
         }
       }
 
