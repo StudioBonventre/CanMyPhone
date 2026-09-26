@@ -31,7 +31,7 @@ import { automationRepository, syncNativeRunnerResults } from "./src/automation/
 import { loadConnectorConnections, saveConnectorConnection } from "./src/automation/connectorConnectionRepository";
 import { connectedProviderIds, EMPTY_CONNECTOR_CONNECTION_PROFILE, type ConnectorConnectionProfile } from "./src/automation/connectorConnectionState";
 import { resolveConnectedProviders } from "./src/automation/providerResolution";
-import { CanMyPhoneNative } from "./modules/canmyphone-native";
+import { CanMyPhoneNative, type LocationAuthorizationResult, type NamedLocation } from "./modules/canmyphone-native";
 import { trackProductEvent } from "./src/lib/analytics";
 import { AuraV2 } from "./src/components/AuraV2";
 import { CapabilityCard } from "./src/components/CapabilityCard";
@@ -175,6 +175,8 @@ export default function App() {
   const [semanticSuggestion, setSemanticSuggestion] = useState<AutomationSuggestion | null>(null);
   const [semanticClarification, setSemanticClarification] = useState<string | null>(null);
   const [connectorConnections, setConnectorConnections] = useState<ConnectorConnectionProfile>(EMPTY_CONNECTOR_CONNECTION_PROFILE);
+  const [locationAuthorization, setLocationAuthorization] = useState<LocationAuthorizationResult | null>(null);
+  const [namedLocations, setNamedLocations] = useState<NamedLocation[]>([]);
   const [automations, setAutomations] = useState<StoredAutomation[]>([]);
   const [installingAutomation, setInstallingAutomation] = useState<StoredAutomation | null>(null);
 
@@ -201,6 +203,14 @@ export default function App() {
     let alive = true;
     loadConnectorConnections().then((profile) => {
       if (alive) setConnectorConnections(profile);
+    }).catch(() => undefined);
+    Promise.all([
+      CanMyPhoneNative?.locationAuthorizationStatus?.().catch(() => null) ?? Promise.resolve(null),
+      CanMyPhoneNative?.namedLocationsSnapshot?.().catch(() => []) ?? Promise.resolve([])
+    ]).then(([authorization, locations]) => {
+      if (!alive) return;
+      if (authorization) setLocationAuthorization(authorization);
+      setNamedLocations(locations);
     }).catch(() => undefined);
     Promise.all([loadNeedRadarProfile(), loadGuideSession(), loadUserPreferences(), syncNativeRunnerResults()])
       .then(([savedProfile, savedGuide, savedPreferences, savedAutomations]) => {
@@ -262,6 +272,8 @@ export default function App() {
       if (nextState === "active" && previous !== "active") {
         refreshProEntitlement().then(setEntitlements).catch(() => undefined);
         syncNativeRunnerResults().then(setAutomations).catch(() => undefined);
+        CanMyPhoneNative?.locationAuthorizationStatus?.().then(setLocationAuthorization).catch(() => undefined);
+        CanMyPhoneNative?.namedLocationsSnapshot?.().then(setNamedLocations).catch(() => undefined);
         const pendingId = await automationRepository.getPendingSetup();
         if (pendingId) {
           const pending = await automationRepository.get(pendingId);
@@ -779,6 +791,35 @@ export default function App() {
     await clearNeedRadarProfile();
   };
 
+  const refreshLocationAutomationState = async () => {
+    const [authorization, locations] = await Promise.all([
+      CanMyPhoneNative?.locationAuthorizationStatus?.().catch(() => null) ?? Promise.resolve(null),
+      CanMyPhoneNative?.namedLocationsSnapshot?.().catch(() => []) ?? Promise.resolve([])
+    ]);
+    if (authorization) setLocationAuthorization(authorization);
+    setNamedLocations(locations);
+  };
+
+  const requestLocationAutomationPermission = async () => {
+    const result = await CanMyPhoneNative?.requestLocationAutomationPermission?.().catch(() => null);
+    if (!result) {
+      setActionResult({ handled:true, succeeded:false, message:"Der installierte Development Build enthält die neue Standort-Automation noch nicht." });
+      return;
+    }
+    setLocationAuthorization(result);
+    setTimeout(() => refreshLocationAutomationState().catch(() => undefined), 1200);
+  };
+
+  const saveNamedLocationHere = async (name: string) => {
+    const result = await CanMyPhoneNative?.saveCurrentLocationAs?.(name, 150).catch(() => null);
+    if (!result?.success) {
+      setActionResult({ handled:true, succeeded:false, message:result?.message ?? "Der Ort konnte noch nicht gespeichert werden." });
+      return;
+    }
+    await refreshLocationAutomationState();
+    setActionResult({ handled:true, succeeded:true, message:result.message });
+  };
+
   const connectProvider = async (providerId: string) => {
     const startedAt = new Date().toISOString();
     let profile = await saveConnectorConnection({
@@ -955,7 +996,7 @@ export default function App() {
                   <View style={styles.answerArea}>
                     <ShortcutDefinitionPreview definition={shortcutDefinition} />
                     {semanticSuggestion ? <ContentSurface style={styles.resultBanner}><Text style={styles.resultTitle}>{semanticSuggestion.title}</Text><Text style={styles.resultText}>{semanticSuggestion.message}</Text>{semanticSuggestion.proposedGoal ? <Pressable onPress={()=>runAsk(semanticSuggestion.proposedGoal!).catch(()=>undefined)} style={styles.textAction}><Text style={styles.textActionText}>Vorschlag verwenden</Text></Pressable> : null}</ContentSurface> : null}
-                    {installingAutomation ? <AutomationInstallationCard automation={installingAutomation} connectedProviderIds={[...connectedProviderIds(connectorConnections)]} onApprove={()=>approveAutomation().catch(()=>undefined)} onLaunchWithCanMyPhone={()=>launchAutomationThroughCanMyPhone().catch(()=>undefined)} onHandoff={()=>handoffAutomation().catch(()=>undefined)} onConfirm={()=>confirmAutomation().catch(()=>undefined)} onCancel={()=>cancelSetup().catch(()=>undefined)} /> : <LiquidButton style={styles.primaryAction} label="Automation einrichten" onPress={()=>createAutomation().catch(()=>undefined)} />}
+                    {installingAutomation ? <AutomationInstallationCard automation={installingAutomation} connectedProviderIds={[...connectedProviderIds(connectorConnections)]} locationAlways={locationAuthorization?.always===true} namedLocationNames={namedLocations.map((item)=>item.name)} onRequestLocationPermission={()=>requestLocationAutomationPermission().catch(()=>undefined)} onSaveNamedLocation={(name)=>saveNamedLocationHere(name).catch(()=>undefined)} onApprove={()=>approveAutomation().catch(()=>undefined)} onLaunchWithCanMyPhone={()=>launchAutomationThroughCanMyPhone().catch(()=>undefined)} onHandoff={()=>handoffAutomation().catch(()=>undefined)} onConfirm={()=>confirmAutomation().catch(()=>undefined)} onCancel={()=>cancelSetup().catch(()=>undefined)} /> : <LiquidButton style={styles.primaryAction} label="Automation einrichten" onPress={()=>createAutomation().catch(()=>undefined)} />}
                     {actionResult ? <ContentSurface style={styles.resultBanner}><Text style={styles.resultTitle}>Status</Text><Text style={styles.resultText}>{actionResult.message}</Text></ContentSurface> : null}
                   </View>
                 ) : semanticClarification ? (
