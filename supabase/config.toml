@@ -1,3 +1,6 @@
 [functions.plan-automation]
 verify_jwt = true
 
+
+[functions.interpret-automation]
+verify_jwt = true
