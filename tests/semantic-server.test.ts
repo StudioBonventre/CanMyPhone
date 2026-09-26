@@ -49,7 +49,7 @@ test("semantic server client sends only compact planning context and revalidates
       }),{status:200});
     }
   });
-  const result=await client.interpret("TikTok auf, Bildschirm voll hell",{locale:"de",connectedProviderIds:["tesla"]});
+  const result=await client.interpret("TikTok auf, Bildschirm voll hell",{locale:"de",connectedProviderIds:["tesla"],localNow:"2026-09-26T08:00:00.000Z",timeZone:"Europe/Berlin"});
   assert.equal(result.kind,"understood");
-  assert.deepEqual(sent,{goal:"TikTok auf, Bildschirm voll hell",locale:"de",connectedProviderIds:["tesla"]});
+  assert.deepEqual(sent,{goal:"TikTok auf, Bildschirm voll hell",locale:"de",connectedProviderIds:["tesla"],localNow:"2026-09-26T08:00:00.000Z",timeZone:"Europe/Berlin"});
 });
