@@ -18,9 +18,9 @@ export function AutomationInstallationCard({ automation, onHandoff, onConfirm, o
     {automation.requiredSetup.length ? <Text style={styles.requirements}>Benötigt: {automation.requiredSetup.join(" · ")}</Text> : null}
     {automation.safetyApproval.required&&!hasValidSafetyApproval(automation)?<><Text style={styles.warning}>Sensible Aktion: Prüfe Trigger, Bedingungen und Aktion genau. Deine Freigabe gilt nur für diese konkrete Version.</Text><LiquidButton label="Diese Automation ausdrücklich freigeben" onPress={onApprove}/></>:<>{setup ? <View style={styles.steps}>{(runtime.appleBridgePurpose === "TRIGGER_ONLY" ? [
       "Tippe unten auf „Apple-Trigger verbinden“. Erst dann öffnet CanMyPhone Kurzbefehle.",
-      "Dort „Automation“ → „Neue Automation“ öffnen und " + (setup.setupSteps[1] ?? "den gewünschten Trigger auswählen") + ".",
-      "Als Aktion „CanMyPhone Automation ausführen“ wählen und die bereits gespeicherte Automation antippen. Kein Text und keine ID nötig.",
-      "Mit „Fertig“ sichern und zu CanMyPhone zurückkehren."
+      "In Kurzbefehle „App Shortcuts“ → „CanMyPhone“ öffnen und beim App Shortcut „Automation ausführen“ „In neuem Kurzbefehl verwenden“ wählen.",
+      "Im neuen Kurzbefehl die bereits gespeicherte CanMyPhone-Automation auswählen. Kein Text und keine ID nötig.",
+      "Danach „Bearbeiten“ → „Automation“ und " + (setup.setupSteps[1] ?? "den gewünschten Trigger") + " auswählen. Mit „Fertig“ sichern."
     ] : setup.handoffMode === "APPLE_INTELLIGENCE" ? [
       "CanMyPhone hat die komplette Automation beschrieben und in die Zwischenablage gelegt.",
       "Füge die Beschreibung in Kurzbefehle bei „Beschreibe einen Kurzbefehl“ ein. Kurzbefehle baut Trigger und Aktionen.",
