@@ -16,9 +16,14 @@ export type TeslaAuthorizationResult =
   | { ok: true; url: string }
   | { ok: false; code: string; message: string };
 
+export type TeslaNativeExecutionGrant =
+  | { ok: true; endpoint: string; token: string; expiresAt: string }
+  | { ok: false; code: string; message: string };
+
 export type TeslaConnectorService = TeslaConnectorClient & {
   authorizationUrl(): Promise<TeslaAuthorizationResult>;
   status(): Promise<TeslaConnectorStatus>;
+  nativeExecutionGrant(): Promise<TeslaNativeExecutionGrant>;
   disconnect(): Promise<TeslaClientResult>;
 };
 
@@ -116,6 +121,22 @@ export function createTeslaConnectorService(config: TeslaConnectorServiceConfig)
         pairedVehicleCount: typeof payload.pairedVehicleCount === "number" ? payload.pairedVehicleCount : 0,
         ...(typeof payload.pairingUrl === "string" ? { pairingUrl: payload.pairingUrl } : {}),
         message: typeof payload.message === "string" ? payload.message : "Tesla-Verbindung geprüft."
+      };
+    },
+    async nativeExecutionGrant() {
+      const payload = await request({ action: "native-grant" });
+      if (
+        payload.ok === true &&
+        typeof payload.endpoint === "string" &&
+        typeof payload.token === "string" &&
+        typeof payload.expiresAt === "string"
+      ) {
+        return { ok: true, endpoint: payload.endpoint, token: payload.token, expiresAt: payload.expiresAt };
+      }
+      return {
+        ok: false,
+        code: typeof payload.code === "string" ? payload.code : "TESLA_NATIVE_GRANT_FAILED",
+        message: typeof payload.message === "string" ? payload.message : "Der sichere Tesla-Hintergrundzugang konnte nicht erstellt werden."
       };
     },
     async disconnect() {
