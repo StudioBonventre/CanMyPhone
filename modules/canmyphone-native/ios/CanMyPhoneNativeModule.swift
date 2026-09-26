@@ -128,6 +128,14 @@ public final class CanMyPhoneNativeModule: Module {
       return CanMyPhoneHomematicBridge.shared.disconnect()
     }
 
+    AsyncFunction("configureTeslaExecutionGrant") { (endpoint: String, token: String) -> [String: Any] in
+      return CanMyPhoneTeslaBridge.shared.configure(endpoint: endpoint, token: token)
+    }
+
+    AsyncFunction("clearTeslaExecutionGrant") { () -> [String: Any] in
+      return CanMyPhoneTeslaBridge.shared.clear()
+    }
+
     AsyncFunction("setBrightness") { (level: Double) async -> [String: Any] in
       guard level.isFinite, (0.0...1.0).contains(level) else {
         return [
