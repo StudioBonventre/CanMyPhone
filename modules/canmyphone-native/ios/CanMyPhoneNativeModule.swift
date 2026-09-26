@@ -14,6 +14,11 @@ public final class CanMyPhoneNativeModule: Module {
   public func definition() -> ModuleDefinition {
     Name("CanMyPhoneNative")
 
+    OnCreate {
+      CanMyPhoneLocationAutomationMonitor.shared.start()
+      _ = CanMyPhoneLocationAutomationMonitor.shared.syncAutomations()
+    }
+
     AsyncFunction("foundationModelStatus") { () async -> [String: Any] in
       #if canImport(FoundationModels)
       if #available(iOS 26.0, *) {
@@ -69,6 +74,26 @@ public final class CanMyPhoneNativeModule: Module {
 
     AsyncFunction("requestPermission") { (kind: String) async -> [String: Any] in
       return await self.requestPermission(kind: kind)
+    }
+
+    AsyncFunction("locationAuthorizationStatus") { () -> [String: Any] in
+      return CanMyPhoneLocationAutomationMonitor.shared.authorizationSnapshot()
+    }
+
+    AsyncFunction("requestLocationAutomationPermission") { () -> [String: Any] in
+      return CanMyPhoneLocationAutomationMonitor.shared.requestAlwaysAuthorization()
+    }
+
+    AsyncFunction("saveCurrentLocationAs") { (name: String, radius: Double) async -> [String: Any] in
+      return await CanMyPhoneLocationAutomationMonitor.shared.saveCurrentLocation(name: name, radius: radius)
+    }
+
+    AsyncFunction("namedLocationsSnapshot") { () -> [[String: Any]] in
+      return CanMyPhoneLocationAutomationMonitor.shared.namedLocationsSnapshot()
+    }
+
+    AsyncFunction("syncLocationAutomations") { () -> [String: Any] in
+      return CanMyPhoneLocationAutomationMonitor.shared.syncAutomations()
     }
 
     AsyncFunction("homeKitSnapshot") { () async -> [String: Any] in
