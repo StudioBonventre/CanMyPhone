@@ -50,7 +50,7 @@ export function connectorSetupPlan(providerId: string): ConnectorSetupPlan | nul
   if(provider.id==="apple-home"){
     return {
       provider,
-      executableToday:false,
+      executableToday:true,
       steps:[
         ...common,
         {id:"permission",title:"Apple-Home-Zugriff erlauben",detail:"CanMyPhone benötigt die HomeKit-Berechtigung, um vorhandene Räume und Geräte zu lesen und zu steuern.",userActionRequired:true},
