@@ -139,7 +139,7 @@ export function createPersonalAutomationSetup(automationId: string, trigger: Sho
   const shortcutActions = actions.filter(action => actionExecutionMode(action) === "REQUIRES_SHORTCUT_ACTION");
   const runnerActions = actions.filter(action => actionExecutionMode(action) === "EXECUTABLE_DIRECT" || actionExecutionMode(action) === "EXECUTABLE_APP_INTENT");
   const actionSteps = [
-    ...(runnerActions.length ? [`Die Aktion „CanMyPhone Automation ausführen“ hinzufügen und „${automationId}“ einsetzen.`] : []),
+    ...(runnerActions.length ? [`Die Aktion „CanMyPhone Automation ausführen“ hinzufügen und die gerade erstellte Automation aus der Liste auswählen.`] : []),
     ...shortcutActions.map(action => `Apples Aktion „${capabilityV2(action.capabilityId)?.description ?? action.capabilityId}“ hinzufügen.`)
   ];
   return {

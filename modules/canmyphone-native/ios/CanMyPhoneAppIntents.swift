@@ -46,19 +46,74 @@ struct SetCanMyPhoneBrightnessIntent: AppIntent {
 }
 
 @available(iOS 16.0, *)
+struct CanMyPhoneAutomationEntity: AppEntity {
+  static var typeDisplayRepresentation: TypeDisplayRepresentation = "CanMyPhone Automation"
+  static let defaultQuery = CanMyPhoneAutomationQuery()
+
+  let id: String
+
+  @Property
+  var name: String
+
+  init(id: String, name: String) {
+    self.id = id
+    self.name = name
+  }
+
+  var displayRepresentation: DisplayRepresentation {
+    DisplayRepresentation(title: "\(name)")
+  }
+}
+
+@available(iOS 16.0, *)
+struct CanMyPhoneAutomationQuery: EntityQuery {
+  func entities(for identifiers: [CanMyPhoneAutomationEntity.ID]) async throws -> [CanMyPhoneAutomationEntity] {
+    let wanted = Set(identifiers)
+    return allEntities().filter { wanted.contains($0.id) }
+  }
+
+  func suggestedEntities() async throws -> [CanMyPhoneAutomationEntity] {
+    allEntities()
+  }
+
+  private func allEntities() -> [CanMyPhoneAutomationEntity] {
+    guard
+      let data = CanMyPhoneAutomationStore.snapshotsJSON().data(using: .utf8),
+      let values = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+    else {
+      return []
+    }
+
+    return values.compactMap { item in
+      guard
+        let id = item["id"] as? String,
+        CanMyPhoneAutomationStore.validID(id),
+        let name = item["name"] as? String,
+        !name.isEmpty
+      else {
+        return nil
+      }
+
+      return CanMyPhoneAutomationEntity(id: id, name: name)
+    }
+    .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+  }
+}
+
+@available(iOS 16.0, *)
 struct RunCanMyPhoneAutomationIntent: AppIntent {
   static var title: LocalizedStringResource = "CanMyPhone Automation ausführen"
   static var description = IntentDescription("Führt eine gespeicherte und erneut geprüfte CanMyPhone-Automation aus.")
 
-  @Parameter(title: "Automation-ID", description: "Die in CanMyPhone angezeigte ID, zum Beispiel cmp_auto_abc123.")
-  var automationId: String
+  @Parameter(title: "Automation")
+  var automation: CanMyPhoneAutomationEntity
 
   static var parameterSummary: some ParameterSummary {
-    Summary("Automation \(\.$automationId) ausführen")
+    Summary("Automation \(\.$automation) ausführen")
   }
 
   func perform() async throws -> some IntentResult & ProvidesDialog {
-    let value = await CanMyPhoneAutomationRunner.run(id: automationId)
+    let value = await CanMyPhoneAutomationRunner.run(id: automation.id)
     let message = value["humanMessage"] as? String ?? "Die Automation konnte nicht ausgeführt werden."
     return .result(dialog: IntentDialog("\(message)"))
   }
