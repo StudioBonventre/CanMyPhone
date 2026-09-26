@@ -112,6 +112,22 @@ public final class CanMyPhoneNativeModule: Module {
       return await CanMyPhoneHomeKitBridge.shared.setClimate(room: room, device: device, value: value)
     }
 
+    AsyncFunction("homematicPair") { (lastFourSGTIN: String, activationKey: String) async -> [String: Any] in
+      return await CanMyPhoneHomematicBridge.shared.pair(lastFourSGTIN: lastFourSGTIN, activationKey: activationKey)
+    }
+
+    AsyncFunction("homematicSnapshot") { () async -> [String: Any] in
+      return await CanMyPhoneHomematicBridge.shared.snapshot()
+    }
+
+    AsyncFunction("homematicExecute") { (path: String, bodyJSON: String) async -> [String: Any] in
+      return await CanMyPhoneHomematicBridge.shared.execute(path: path, bodyJSON: bodyJSON)
+    }
+
+    AsyncFunction("homematicDisconnect") { () -> [String: Any] in
+      return CanMyPhoneHomematicBridge.shared.disconnect()
+    }
+
     AsyncFunction("setBrightness") { (level: Double) async -> [String: Any] in
       guard level.isFinite, (0.0...1.0).contains(level) else {
         return [
