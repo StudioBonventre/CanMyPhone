@@ -119,7 +119,7 @@ export function bindProvider(
   if (!candidates.length) return { status: "UNSUPPORTED", operation, fallbackCandidates: [] };
 
   const requested = normalized(hints.provider) ?? normalized(hints.brand);
-  const matched = requested
+  let matched = requested
     ? candidates.filter((provider) =>
         provider.id === requested ||
         provider.displayName.toLowerCase() === requested ||
@@ -128,7 +128,16 @@ export function bindProvider(
     : candidates;
 
   if (!matched.length) return { status: "UNSUPPORTED", operation, fallbackCandidates: fallbackCandidates(operation) };
-  if (matched.length > 1 && !requested) return { status: "AMBIGUOUS", candidates: matched, operation };
+
+  if (!requested) {
+    const connectedMatches = matched.filter((provider) => connectedProviderIds.has(provider.id));
+    if (connectedMatches.length === 1) return { status: "BOUND", provider: connectedMatches[0]!, operation };
+    if (connectedMatches.length > 1) return { status: "AMBIGUOUS", candidates: connectedMatches, operation };
+
+    const availableMatches = matched.filter((provider) => provider.implementation !== "PLANNED");
+    if (availableMatches.length === 1) matched = availableMatches;
+    else return { status: "AMBIGUOUS", candidates: matched, operation };
+  }
 
   const provider = matched[0]!;
   if (provider.implementation === "PLANNED") return { status: "NOT_IMPLEMENTED", provider, operation };
