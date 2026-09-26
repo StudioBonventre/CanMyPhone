@@ -20,6 +20,7 @@ import { ShortcutDefinitionPreview } from "./src/components/ShortcutDefinitionPr
 import { AutomationInstallationCard } from "./src/components/AutomationInstallationCard";
 import { MyAutomationsCard } from "./src/components/MyAutomationsCard";
 import { compileShortcutGoal } from "./src/automation/shortcutCompiler";
+import { buildAppleIntelligenceAutomationDescription } from "./src/automation/appleShortcutsHandoff";
 import { approveSensitiveAutomation, materializeShortcutDefinition, type StoredAutomation } from "./src/automation/materialization";
 import { automationRepository, syncNativeRunnerResults } from "./src/automation/automationRepository";
 import { CanMyPhoneNative } from "./modules/canmyphone-native";
@@ -322,6 +323,58 @@ export default function App() {
     setMotionPhase("idle");
   };
 
+  const openPersonalAutomationInShortcuts = async (stored: StoredAutomation): Promise<StoredAutomation | null> => {
+    if (!stored.personalSetup) return stored;
+
+    let opened = false;
+    let handoffMode: "GUIDED" | "APPLE_INTELLIGENCE" = "GUIDED";
+    const major = osMajor();
+
+    if (
+      major !== undefined &&
+      major >= 27 &&
+      typeof CanMyPhoneNative?.prepareShortcutDescription === "function"
+    ) {
+      const description = buildAppleIntelligenceAutomationDescription(stored.definition);
+      const prepared = await CanMyPhoneNative.prepareShortcutDescription(description).catch(() => null);
+      opened = Boolean(prepared?.opened);
+      if (opened && prepared?.copied) handoffMode = "APPLE_INTELLIGENCE";
+    }
+
+    if (!opened) {
+      opened = Boolean(await CanMyPhoneNative?.openShortcuts("app"));
+    }
+
+    if (!opened) {
+      setActionResult({
+        handled: true,
+        succeeded: false,
+        message: "Kurzbefehle konnte nicht geöffnet werden."
+      });
+      return null;
+    }
+
+    const updated: StoredAutomation = {
+      ...stored,
+      personalSetup: {
+        ...stored.personalSetup,
+        setupState: "HANDED_OFF",
+        handedOffAt: new Date().toISOString(),
+        handoffMode
+      }
+    };
+
+    const saved = await automationRepository.save(updated);
+    await automationRepository.setPendingSetup(saved.id);
+    setInstallingAutomation(saved);
+    setAutomations(await automationRepository.list());
+    trackProductEvent("automation_handoff_opened", {
+      trigger: saved.definition.trigger.capabilityId,
+      handoff_mode: handoffMode
+    });
+    return saved;
+  };
+
   const createAutomation = async () => {
     if (!shortcutDefinition) return;
     trackProductEvent("automation_materialization_started", { strategy: shortcutDefinition.executionStrategy });
@@ -331,28 +384,7 @@ export default function App() {
       setAutomations(await automationRepository.list());
 
       if (stored.personalSetup) {
-        const opened = await CanMyPhoneNative?.openShortcuts("app");
-        if (!opened) {
-          setActionResult({
-            handled: true,
-            succeeded: false,
-            message: "Kurzbefehle konnte nicht geöffnet werden. Öffne die Apple-App „Kurzbefehle“ und wähle dort „Automation“."
-          });
-          return;
-        }
-
-        stored = await automationRepository.save({
-          ...stored,
-          personalSetup: {
-            ...stored.personalSetup,
-            setupState: "HANDED_OFF",
-            handedOffAt: new Date().toISOString()
-          }
-        });
-        await automationRepository.setPendingSetup(stored.id);
-        setInstallingAutomation(stored);
-        setAutomations(await automationRepository.list());
-        trackProductEvent("automation_handoff_opened", { trigger: stored.definition.trigger.capabilityId });
+        await openPersonalAutomationInShortcuts(stored);
       }
     } catch {
       setActionResult({ handled: true, succeeded: false, message: "Diese Automation kann ich noch nicht sicher erstellen." });
@@ -361,12 +393,7 @@ export default function App() {
 
   const handoffAutomation = async () => {
     if (!installingAutomation?.personalSetup) return;
-    const opened = await CanMyPhoneNative?.openShortcuts("app");
-    if (!opened) { setActionResult({ handled:true,succeeded:false,message:"Kurzbefehle konnte nicht geöffnet werden." }); return; }
-    const updated: StoredAutomation = { ...installingAutomation, personalSetup: { ...installingAutomation.personalSetup, setupState:"HANDED_OFF", handedOffAt:new Date().toISOString() } };
-    await automationRepository.save(updated); await automationRepository.setPendingSetup(updated.id);
-    setInstallingAutomation(updated); setAutomations(await automationRepository.list());
-    trackProductEvent("automation_handoff_opened", { trigger: updated.definition.trigger.capabilityId });
+    await openPersonalAutomationInShortcuts(installingAutomation);
   };
 
   const approveAutomation = async () => {
