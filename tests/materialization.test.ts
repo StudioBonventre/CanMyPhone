@@ -70,3 +70,10 @@ test("engine reports Apple-owned actions honestly",()=>{
   assert.equal(runtime.actionDrivers[0],"APPLE_SHORTCUTS_ACTION");
   assert.equal(runtime.canmyphoneOwnsAllActions,false);
 });
+
+test("materialization stores a concise display name but keeps the original intent summary",()=>{
+  const goal="Wenn Instagram geöffnet wird, setze die Helligkeit auf 35 %.";
+  const item=materialize(goal);
+  assert.equal(item.name,"Instagram → Helligkeit 35 %");
+  assert.match(item.originalIntentSummary,/Instagram/);
+});
