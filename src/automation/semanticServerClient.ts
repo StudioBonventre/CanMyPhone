@@ -12,6 +12,8 @@ export type SemanticServerClientConfig={
 export type SemanticServerContext={
   locale:string;
   connectedProviderIds:string[];
+  localNow?:string;
+  timeZone?:string;
 };
 
 export function createSemanticServerClient(config:SemanticServerClientConfig){
@@ -35,7 +37,9 @@ export function createSemanticServerClient(config:SemanticServerClientConfig){
             body:JSON.stringify({
               goal:goal.slice(0,800),
               locale:context.locale.slice(0,10),
-              connectedProviderIds:context.connectedProviderIds.slice(0,20)
+              connectedProviderIds:context.connectedProviderIds.slice(0,20),
+              localNow:context.localNow ?? new Date().toISOString(),
+              timeZone:context.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "unknown"
             })
           }
         );
