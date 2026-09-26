@@ -16,7 +16,7 @@ function transportLabel(value:string){
   }
 }
 
-export function ConnectorSettingsCard({profile}:{profile:ConnectorConnectionProfile}){
+export function ConnectorSettingsCard({profile,onConnect}:{profile:ConnectorConnectionProfile;onConnect?:(providerId:string)=>void}){
   const [expanded,setExpanded]=useState<string|null>(null);
   return <ContentSurface style={styles.card}>
     <Text style={styles.eyebrow}>VERBINDUNGEN</Text>
@@ -51,6 +51,9 @@ export function ConnectorSettingsCard({profile}:{profile:ConnectorConnectionProf
               </View>
             </View>)}
             <Text style={styles.footnote}>{plan.executableToday?"Connector ausführbar":"Connector-Plattform vorbereitet · Verbindung noch nicht freigeschaltet"}</Text>
+            {plan.executableToday&&connection?.status!=="CONNECTED"
+              ?<Pressable onPress={()=>onConnect?.(provider.id)} style={styles.connectButton}><Text style={styles.connectButtonText}>{connection?.status==="CONNECTING"?"Verbindung läuft …":"Verbinden"}</Text></Pressable>
+              :null}
           </View>:null}
         </View>;
       })}
@@ -79,5 +82,7 @@ const styles=StyleSheet.create({
   stepCopy:{flex:1},
   stepTitle:{fontSize:12,fontWeight:"700",color:liquidIce.color.textPrimary},
   stepDetail:{marginTop:2,fontSize:11,lineHeight:16,color:liquidIce.color.textSecondary},
-  footnote:{marginTop:2,fontSize:10,fontWeight:"700",color:liquidIce.color.textTertiary}
+  footnote:{marginTop:2,fontSize:10,fontWeight:"700",color:liquidIce.color.textTertiary},
+  connectButton:{marginTop:4,alignSelf:"flex-start",paddingHorizontal:14,paddingVertical:9,borderRadius:999,backgroundColor:liquidIce.color.textPrimary},
+  connectButtonText:{fontSize:12,fontWeight:"800",color:"#FFFFFF"}
 });
