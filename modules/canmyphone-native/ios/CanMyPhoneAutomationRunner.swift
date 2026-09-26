@@ -34,7 +34,7 @@ enum CanMyPhoneAutomationStore {
 
 enum CanMyPhoneAutomationRunner {
   private static let proProductIDs = Set(["com.studiobonventre.canmyphone.pro.monthly", "com.studiobonventre.canmyphone.pro.yearly"])
-  private static let allowedCapabilities = Set(["system.brightness.set", "system.volume.set", "system.low-power.set", "system.flashlight.set", "system.focus.set", "system.app.open", "system.clipboard.set", "system.url.open", "media.play-pause", "media.playlist.play", "media.apple-music.play", "media.spotify.open", "navigation.route.start", "communication.message.compose", "communication.mail.compose", "communication.call.start", "productivity.calendar.create", "productivity.reminder.create", "smart-home.scene.run", "smart-home.cover.open", "smart-home.cover.close", "smart-home.light.set", "smart-home.climate.set", "tesla.rear-trunk.close"])
+  private static let allowedCapabilities = Set(["system.brightness.set", "system.volume.set", "system.low-power.set", "system.flashlight.set", "system.focus.set", "system.app.open", "system.clipboard.set", "system.url.open", "media.play-pause", "media.playlist.play", "media.apple-music.play", "media.spotify.open", "navigation.route.start", "communication.message.compose", "communication.mail.compose", "communication.call.start", "productivity.calendar.create", "productivity.reminder.create", "smart-home.scene.run", "smart-home.cover.open", "smart-home.cover.close", "smart-home.light.set", "smart-home.climate.set", "vehicle.lock", "vehicle.unlock", "tesla.rear-trunk.close"])
 
   static func run(id: String) async -> [String: Any] {
     guard CanMyPhoneAutomationStore.validID(id), var item = CanMyPhoneAutomationStore.load(id: id) else { return result(id, "INVALID_DEFINITION", "Die Automation wurde nicht gefunden oder ist ungültig.", [], nil, "INVALID_DEFINITION") }
@@ -111,6 +111,32 @@ enum CanMyPhoneAutomationRunner {
         guard Set(parameters.keys).isSubset(of: allowed), let title = parameters["title"] as? String else { return finish(&item, id, "INVALID_DEFINITION", "Der Erinnerungstitel fehlt.", executed, capability, "INVALID_PARAMETER") }
         let reminderResult = await CanMyPhoneEventKitBridge.shared.createReminder(title: title, due: parameters["due"] as? String, notes: parameters["notes"] as? String)
         guard reminderResult["success"] as? Bool == true else { return finish(&item, id, "FAILED", reminderResult["message"] as? String ?? "Die Erinnerung konnte nicht erstellt werden.", executed, capability, reminderResult["code"] as? String ?? "REMINDER_FAILED") }
+        executed.append(capability)
+
+      case "vehicle.lock", "vehicle.unlock":
+        let allowed = Set(["brand", "vehicle"])
+        guard
+          Set(parameters.keys).isSubset(of: allowed),
+          let brand = parameters["brand"] as? String,
+          ["tesla"].contains(brand.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
+        else {
+          return finish(&item, id, "INVALID_DEFINITION", "Für diese Fahrzeugaktion ist kein freigegebener Anbieter ausgewählt.", executed, capability, "INVALID_PARAMETER")
+        }
+        let vehicleResult = await CanMyPhoneTeslaBridge.shared.execute(
+          operation: capability,
+          vehicle: parameters["vehicle"] as? String
+        )
+        guard vehicleResult["success"] as? Bool == true else {
+          return finish(
+            &item,
+            id,
+            "FAILED",
+            vehicleResult["message"] as? String ?? "Tesla hat den Fahrzeugbefehl nicht bestätigt.",
+            executed,
+            capability,
+            vehicleResult["code"] as? String ?? "TESLA_COMMAND_FAILED"
+          )
+        }
         executed.append(capability)
 
       case "tesla.rear-trunk.close":
