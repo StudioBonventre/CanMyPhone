@@ -102,6 +102,8 @@ export function actionExecutionMode(step: ShortcutStep): ActionExecutionMode {
   const cap = capabilityV2(step.capabilityId);
   if (!cap || cap.role !== "action") return "UNSUPPORTED";
   if (cap.executionModes.includes("DIRECT_PUBLIC_API")) return "EXECUTABLE_DIRECT";
+  const provider = typeof step.parameters.provider === "string" ? step.parameters.provider.trim().toLowerCase() : "";
+  if (step.capabilityId.startsWith("smart-home.") && ["apple-home","apple home","homekit","home"].includes(provider)) return "EXECUTABLE_DIRECT";
   if (cap.integration || cap.executionModes.includes("THIRD_PARTY_API")) return "REQUIRES_PROVIDER";
   if (cap.executionModes.includes("SHORTCUT") || cap.executionModes.includes("PERSONAL_AUTOMATION")) return "REQUIRES_SHORTCUT_ACTION";
   if (cap.executionModes.includes("APP_INTENT")) return "EXECUTABLE_APP_INTENT";
@@ -119,7 +121,7 @@ export function materializeShortcutDefinition(definition: ShortcutDefinition, no
   const runtime = compileAutomationRuntime(definition);
   const modes = definition.actions.map(actionExecutionMode);
   let materializationState: MaterializationState = "READY_TO_INSTALL";
-  if (definition.integrations.length || definition.executionStrategy === "THIRD_PARTY_API") materializationState = "INTEGRATION_REQUIRED";
+  if (definition.integrations.length || modes.includes("REQUIRES_PROVIDER")) materializationState = "INTEGRATION_REQUIRED";
   else if (definition.requiredSetup.length) materializationState = "PERMISSION_REQUIRED";
   else if (runtime.appleBridgeRequired) materializationState = "APPLE_SETUP_REQUIRED";
 
