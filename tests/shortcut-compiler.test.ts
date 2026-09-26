@@ -222,3 +222,26 @@ test("unknown smart-home vendors get standards-based fallback suggestions instea
     assert.match(result.suggestion?.message??"",/Apple Home|Matter|Home Assistant/);
   }
 });
+
+
+test("connector router chooses the only connected smart-home provider when brand is omitted",()=>{
+  const binding=bindProvider("smart-home.cover.open",{room:"Wohnzimmer"},new Set(["homematic-ip"]));
+  assert.equal(binding.status,"BOUND");
+  if(binding.status==="BOUND")assert.equal(binding.provider.id,"homematic-ip");
+});
+
+test("connector router asks instead of guessing when multiple connected providers can do the same thing",()=>{
+  const binding=bindProvider("smart-home.cover.open",{room:"Wohnzimmer"},new Set(["homematic-ip","home-assistant"]));
+  assert.equal(binding.status,"AMBIGUOUS");
+});
+
+test("semantic plans may leave provider blank so runtime discovery can choose",()=>{
+  const raw=JSON.stringify({
+    kind:"automation",confidence:0.96,
+    trigger:{capabilityId:"trigger.manual",parameters:{}},
+    actions:[{capabilityId:"smart-home.cover.open",parameters:{room:"Wohnzimmer"}}],
+    clarificationQuestion:null,suggestion:null
+  });
+  const result=acceptSemanticAutomationOutput("Rollläden im Wohnzimmer hoch",raw);
+  assert.equal(result.kind,"understood");
+});
