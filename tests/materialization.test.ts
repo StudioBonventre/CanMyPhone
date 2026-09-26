@@ -29,9 +29,9 @@ const scenarios=[
  ["Wenn meine Bose Kopfhörer verbunden werden, starte Apple Music.","trigger.bluetooth-connected","REQUIRES_SHORTCUT_ACTION"],
  ["Wenn ich Instagram öffne, setze die Helligkeit auf 35 %.","trigger.app-opened","EXECUTABLE_DIRECT"],
  ["Wenn Akku unter 20 %, Stromsparmodus an.","trigger.battery-level","REQUIRES_SHORTCUT_ACTION"],
- ["Jeden Werktag um 7 Uhr Navigation zur Arbeit.","trigger.weekday","REQUIRES_SHORTCUT_ACTION"],
+ ["Jeden Werktag um 7 Uhr Navigation zur Arbeit.","trigger.weekday","EXECUTABLE_DIRECT"],
  ["Wenn ich zuhause ankomme, Fokus Arbeit aus.","trigger.location-enter","REQUIRES_SHORTCUT_ACTION"],
- ["Wenn Bluetooth mit meinem Auto verbunden, Maps und Spotify.","trigger.bluetooth-connected","REQUIRES_SHORTCUT_ACTION"]
+ ["Wenn Bluetooth mit meinem Auto verbunden, Maps und Spotify.","trigger.bluetooth-connected","EXECUTABLE_DIRECT"]
 ] as const;
 for(const [goal,trigger,mode] of scenarios)test(`materializes honestly: ${goal}`,()=>{const item=materialize(goal);assert.equal(item.personalSetup?.appleTriggerType,trigger);assert.equal(actionExecutionMode(item.definition.actions[0]!),mode);assert.notEqual(item.materializationState,"ACTIVE");assert.equal(item.personalSetup?.setupState,"NOT_STARTED");});
 test("manual brightness is directly executable without Apple automation",()=>{const item=materialize("Setze Helligkeit auf 35 %.");assert.equal(item.definition.trigger.capabilityId,"trigger.manual");assert.equal(item.personalSetup,undefined);assert.equal(actionExecutionMode(item.definition.actions[0]!),"EXECUTABLE_DIRECT");});
