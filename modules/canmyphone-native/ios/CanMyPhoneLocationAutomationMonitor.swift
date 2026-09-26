@@ -75,7 +75,10 @@ final class CanMyPhoneLocationAutomationMonitor: NSObject, CLLocationManagerDele
   }
 
   func syncAutomations() -> [String: Any] {
-    let enabled = automationLocationRegions()
+    let requested = automationLocationRegions()
+    // Core Location allows at most 20 monitored regions per app.
+    let enabled = Array(requested.prefix(20))
+    let limited = max(0, requested.count - enabled.count)
 
     let expectedIDs = Set(enabled.map { $0.identifier })
     for region in manager.monitoredRegions where region.identifier.hasPrefix(regionPrefix) && !expectedIDs.contains(region.identifier) {
@@ -98,7 +101,10 @@ final class CanMyPhoneLocationAutomationMonitor: NSObject, CLLocationManagerDele
     return [
       "success": true,
       "active": enabled.count,
-      "message": "\(enabled.count) Ortsautomation(en) werden überwacht."
+      "limited": limited,
+      "message": limited == 0
+        ? "\(enabled.count) Ortsautomation(en) werden überwacht."
+        : "\(enabled.count) Ortsautomation(en) werden überwacht; \(limited) weitere überschreiten das iOS-Limit."
     ]
   }
 

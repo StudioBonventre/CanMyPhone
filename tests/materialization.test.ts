@@ -12,6 +12,7 @@ import { acceptSemanticAutomationOutput } from "../src/automation/semanticInterp
 import { launcherPlanForDefinition } from "../src/automation/appLauncher";
 import { solveAutomationRoutes } from "../src/automation/automationSolver";
 import { resolveConnectedProviders } from "../src/automation/providerResolution";
+import { dispatchVerifiedProviderEvent } from "../src/automation/providerEventDispatch";
 
 class MemoryStorage implements KeyValueStorage {
   data = new Map<string, string>();
@@ -33,7 +34,7 @@ const scenarios=[
  ["Wenn ich zuhause ankomme, Fokus Arbeit aus.","trigger.location-enter","REQUIRES_SHORTCUT_ACTION"],
  ["Wenn Bluetooth mit meinem Auto verbunden, Maps und Spotify.","trigger.bluetooth-connected","EXECUTABLE_DIRECT"]
 ] as const;
-for(const [goal,trigger,mode] of scenarios)test(`materializes honestly: ${goal}`,()=>{const item=materialize(goal);assert.equal(item.personalSetup?.appleTriggerType,trigger);assert.equal(actionExecutionMode(item.definition.actions[0]!),mode);assert.notEqual(item.materializationState,"ACTIVE");assert.equal(item.personalSetup?.setupState,"NOT_STARTED");});
+for(const [goal,trigger,mode] of scenarios)test(`materializes honestly: ${goal}`,()=>{const item=materialize(goal);const runtime=compileAutomationRuntime(item.definition);if(runtime.appleBridgeRequired){assert.equal(item.personalSetup?.appleTriggerType,trigger);assert.equal(item.personalSetup?.setupState,"NOT_STARTED");}else{assert.equal(item.personalSetup,undefined);}assert.equal(actionExecutionMode(item.definition.actions[0]!),mode);assert.notEqual(item.materializationState,"ACTIVE");});
 test("manual brightness is directly executable without Apple automation",()=>{const item=materialize("Setze Helligkeit auf 35 %.");assert.equal(item.definition.trigger.capabilityId,"trigger.manual");assert.equal(item.personalSetup,undefined);assert.equal(actionExecutionMode(item.definition.actions[0]!),"EXECUTABLE_DIRECT");});
 test("iOS 27 handoff description gives Shortcuts the trigger and CanMyPhone action",()=>{const definition=compileShortcutGoal("Wenn ich Instagram öffne, setze die Helligkeit auf 35 %.");const prompt=buildAppleIntelligenceAutomationDescription(definition);assert.match(prompt,/persönliche Automation/i);assert.match(prompt,/Instagram/);assert.match(prompt,/35 Prozent/);assert.match(prompt,/CanMyPhone Automation ausführen/);});
 test("materialized personal automations can track an Apple Intelligence handoff",()=>{const item=materialize("Wenn ich Instagram öffne, setze die Helligkeit auf 35 %.");assert.equal(item.personalSetup?.handoffMode,undefined);const updated={...item,personalSetup:item.personalSetup?{...item.personalSetup,handoffMode:"APPLE_INTELLIGENCE" as const}:undefined};assert.equal(updated.personalSetup?.handoffMode,"APPLE_INTELLIGENCE");});
@@ -241,5 +242,31 @@ test("location enter and exit are native triggers with Apple only as fallback",(
     const runtime=compileAutomationRuntime(semantic.definition);
     assert.equal(runtime.triggerDriver,"CANMYPHONE_NATIVE");
     assert.equal(runtime.appleBridgeRequired,false);
+    assert.equal(runtime.triggerReliability,"BACKGROUND_EVENT");
   }
+});
+
+test("time and app-open triggers remain honest Apple system fallbacks",()=>{
+  for(const goal of ["Jeden Werktag um 7 Uhr Navigation zur Arbeit.","Wenn TikTok geöffnet wird, Helligkeit auf 100 %."]){
+    const runtime=compileAutomationRuntime(compileShortcutGoal(goal));
+    assert.equal(runtime.triggerDriver,"APPLE_SHORTCUTS_BRIDGE");
+    assert.equal(runtime.triggerReliability,"APPLE_SYSTEM");
+  }
+});
+
+test("verified provider events dispatch only exact enabled connector triggers",async()=>{
+  const parsed=acceptSemanticAutomationOutput("Bei Tesla-Ereignis verriegeln",JSON.stringify({kind:"automation",confidence:0.99,trigger:{capabilityId:"trigger.provider-event",parameters:{provider:"tesla",event:"vehicle-parked"}},actions:[{capabilityId:"vehicle.lock",parameters:{brand:"Tesla"}}],clarificationQuestion:null,suggestion:null}));
+  assert.equal(parsed.kind,"understood");
+  if(parsed.kind!=="understood")return;
+  const active=approveSensitiveAutomation({...materializeShortcutDefinition(parsed.definition),enabled:true});
+  const runtime=compileAutomationRuntime(parsed.definition);
+  assert.equal(runtime.triggerDriver,"PROVIDER");
+  assert.equal(runtime.appleBridgeRequired,false);
+  assert.equal(runtime.triggerReliability,"BACKGROUND_EVENT");
+  assert.equal(active.materializationState,"INTEGRATION_REQUIRED");
+  assert.deepEqual(active.integrations,["tesla"]);
+  let calls=0;
+  const dispatched=await dispatchVerifiedProviderEvent({eventId:"evt-1",providerId:"TESLA",event:"vehicle-parked",receivedAt:"2026-09-26T10:00:00Z"},[active,{...active,id:"cmp_auto_disabled",enabled:false}],async item=>{calls+=1;return {automationId:item.id,status:"SUCCESS",executedSteps:["vehicle.lock"],humanMessage:"ok",timestamp:"2026-09-26T10:00:01Z"};});
+  assert.equal(calls,1);
+  assert.deepEqual(dispatched.matchedAutomationIds,[active.id]);
 });

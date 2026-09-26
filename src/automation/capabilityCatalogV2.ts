@@ -46,9 +46,10 @@ export const CAPABILITY_CATALOG_V2: readonly CapabilityV2[] = [
     },
     inputs:[],
     outputs:["event"],
-    fallback:"GUIDED_HANDOFF",
+    fallback:name.startsWith("location")?"PERSONAL_AUTOMATION":"GUIDED_HANDOFF",
     availability:"ios"
   })),
+  cap({id:"trigger.provider-event",category:"trigger",provider:"provider-router",role:"trigger",description:"Verifiziertes Connector-Ereignis",executionModes:["THIRD_PARTY_API"],risk:"medium",requiresPro:true,publicApi:true,background:true,confirmation:false,permissions:[],parameters:{provider:{type:"string",required:true},event:{type:"string",required:true}},inputs:["verified-provider-event"],outputs:["event"],fallback:"GUIDED_HANDOFF",availability:"ios"}),
   cap({id:"condition.time-window",category:"trigger",provider:"shortcuts",role:"condition",description:"Zeitfenster",executionModes:["SHORTCUT"],risk:"low",requiresPro:true,publicApi:true,background:true,confirmation:false,permissions:[],parameters:{after:{type:"string",required:true}},inputs:["date"],outputs:["boolean"],fallback:"GUIDED_HANDOFF",availability:"ios"}),
   cap({id:"system.brightness.set",category:"system",provider:"ios",role:"action",description:"Helligkeit setzen",executionModes:["DIRECT_PUBLIC_API","SHORTCUT"],risk:"low",requiresPro:false,publicApi:true,background:true,confirmation:false,permissions:[],parameters:{percent:{type:"number",required:true,min:0,max:100}},inputs:[],outputs:[],fallback:"SHORTCUT",availability:"ios"}),
   ...["volume.set","low-power.set","focus.set","app.open"].map((name)=>cap({id:`system.${name}`,category:"system",provider:"apple-shortcuts",role:"action",description:name,executionModes:["SHORTCUT","PERSONAL_AUTOMATION"],risk:"low",requiresPro:false,publicApi:true,background:!name.includes("app.open"),confirmation:false,permissions:[],parameters:{value:{type:"string",required:true}},inputs:[],outputs:[],fallback:"GUIDED_HANDOFF",availability:"ios"})),

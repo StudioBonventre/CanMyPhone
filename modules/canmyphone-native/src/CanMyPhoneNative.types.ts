@@ -87,6 +87,7 @@ export type LocationActionResult = {
   name?: string;
   radius?: number;
   active?: number;
+  limited?: number;
   message: string;
 };
 

@@ -24,6 +24,7 @@ export type AutomationRuntimePlan = {
   canmyphoneOwnsLogic: boolean;
   canmyphoneOwnsAllActions: boolean;
   providerRequired: boolean;
+  triggerReliability: "FOREGROUND" | "BACKGROUND_EVENT" | "APPLE_SYSTEM" | "UNAVAILABLE";
   summary: string;
 };
 
@@ -57,6 +58,10 @@ export function compileAutomationRuntime(definition: ShortcutDefinition): Automa
   const bridgeForTrigger = trigger === "APPLE_SHORTCUTS_BRIDGE";
   const appleBridgeRequired = bridgeForTrigger || hasAppleActions;
   const providerRequired = trigger === "PROVIDER" || actions.includes("PROVIDER");
+  const triggerReliability: AutomationRuntimePlan["triggerReliability"] =
+    trigger === "CANMYPHONE_MANUAL" ? "FOREGROUND" :
+    trigger === "CANMYPHONE_NATIVE" || trigger === "PROVIDER" ? "BACKGROUND_EVENT" :
+    trigger === "APPLE_SHORTCUTS_BRIDGE" ? "APPLE_SYSTEM" : "UNAVAILABLE";
   const canmyphoneOwnsAllActions = actions.every((driver) =>
     driver === "CANMYPHONE_NATIVE" || driver === "CANMYPHONE_APP_INTENT"
   );
@@ -85,6 +90,7 @@ export function compileAutomationRuntime(definition: ShortcutDefinition): Automa
     canmyphoneOwnsLogic: true,
     canmyphoneOwnsAllActions,
     providerRequired,
+    triggerReliability,
     summary
   };
 }

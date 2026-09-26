@@ -119,9 +119,13 @@ export function materializeShortcutDefinition(definition: ShortcutDefinition, no
   const id = `cmp_auto_${Math.random().toString(36).slice(2, 10)}`;
   const requiresPro = definition.variables.entitlement === "pro";
   const runtime = compileAutomationRuntime(definition);
+  const triggerProvider = definition.trigger.capabilityId === "trigger.provider-event" && typeof definition.trigger.parameters.provider === "string"
+    ? definition.trigger.parameters.provider.trim().toLowerCase()
+    : "";
+  const integrations = [...new Set([...definition.integrations, ...(triggerProvider ? [triggerProvider] : [])])];
   const modes = definition.actions.map(actionExecutionMode);
   let materializationState: MaterializationState = "READY_TO_INSTALL";
-  if (definition.integrations.length || modes.includes("REQUIRES_PROVIDER")) materializationState = "INTEGRATION_REQUIRED";
+  if (integrations.length || modes.includes("REQUIRES_PROVIDER") || runtime.triggerDriver === "PROVIDER") materializationState = "INTEGRATION_REQUIRED";
   else if (definition.requiredSetup.length) materializationState = "PERMISSION_REQUIRED";
   else if (runtime.appleBridgeRequired) materializationState = "APPLE_SETUP_REQUIRED";
 
@@ -132,7 +136,7 @@ export function materializeShortcutDefinition(definition: ShortcutDefinition, no
     createdAt: stamp, updatedAt: stamp, executionCount: 0, requiresPro,
     riskLevel: definition.risk, confirmationRequired: definition.confirmationRequired,
     safetyApproval:{required:definition.confirmationRequired,confirmed:false},
-    requiredSetup: [...definition.requiredSetup], integrations: [...definition.integrations],
+    requiredSetup: [...definition.requiredSetup], integrations,
     materializationState, personalSetup,
     failurePolicy: definition.risk === "high" ? "STOP" : (modes.length > 1 ? "BEST_EFFORT" : "STOP")
   };

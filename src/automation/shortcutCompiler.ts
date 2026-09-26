@@ -83,7 +83,7 @@ function extractActions(q:string,e:ExtractedEntities):ShortcutStep[]{const out:S
 export function resolveStrategy(steps:ShortcutStep[]):Strategy {
   const caps=steps.map(s=>capabilityV2(s.capabilityId)); if(caps.some(c=>!c))return "UNSUPPORTED";
   if(caps.some(c=>c!.executionModes.includes("THIRD_PARTY_API")))return "THIRD_PARTY_API";
-  if(caps.some(c=>c!.role==="trigger"&&c!.executionModes.includes("PERSONAL_AUTOMATION")))return "PERSONAL_AUTOMATION";
+  if(caps.some(c=>c!.role==="trigger"&&!c!.executionModes.includes("DIRECT_PUBLIC_API")&&c!.executionModes.includes("PERSONAL_AUTOMATION")))return "PERSONAL_AUTOMATION";
   if(caps.every(c=>c!.executionModes.includes("DIRECT_PUBLIC_API")))return "DIRECT_PUBLIC_API";
   if(caps.every(c=>c!.executionModes.some(m=>m==="APP_INTENT"||m==="DIRECT_PUBLIC_API")))return "APP_INTENT";
   if(caps.every(c=>c!.executionModes.some(m=>m==="SHORTCUT"||m==="APP_INTENT"||m==="DIRECT_PUBLIC_API")))return "SHORTCUT";
