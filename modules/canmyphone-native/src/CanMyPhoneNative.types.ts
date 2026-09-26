@@ -51,6 +51,12 @@ export type HomeKitActionResult = {
   message: string;
 };
 
+export type TeslaNativeExecutionResult = {
+  success: boolean;
+  code?: string;
+  message: string;
+};
+
 export type HomematicActionResult = {
   success: boolean;
   code?: string;
@@ -130,6 +136,8 @@ export type NativeModuleShape = {
   homematicSnapshot(): Promise<HomematicActionResult>;
   homematicExecute(path: string, bodyJson: string): Promise<HomematicActionResult>;
   homematicDisconnect(): Promise<HomematicActionResult>;
+  configureTeslaExecutionGrant(endpoint: string, token: string): Promise<TeslaNativeExecutionResult>;
+  clearTeslaExecutionGrant(): Promise<TeslaNativeExecutionResult>;
   locationAuthorizationStatus(): Promise<LocationAuthorizationResult>;
   requestLocationAutomationPermission(): Promise<LocationAuthorizationResult>;
   saveCurrentLocationAs(name: string, radius: number): Promise<LocationActionResult>;
