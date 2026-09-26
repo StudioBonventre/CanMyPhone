@@ -52,8 +52,7 @@ struct CanMyPhoneAutomationEntity: AppEntity {
 
   let id: String
 
-  @Property
-  var name: String
+  let name: String
 
   init(id: String, name: String) {
     self.id = id
