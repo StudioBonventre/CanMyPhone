@@ -1176,20 +1176,36 @@ export default function App() {
                   <View style={styles.noResultArea}><ContentSurface style={styles.noResultCard}><Text style={styles.noResultTitle}>Sichere Planung nicht möglich.</Text><Text style={styles.noResultText}>{plannerResponse.message}</Text></ContentSurface><LiquidButton style={styles.primaryAction} label="Erneut versuchen" onPress={() => runAsk(submittedQuery).catch(() => undefined)} /></View>
                 ) : automationPlan ? (
                   <View style={styles.answerArea}>
-                    <AutomationPlanPreview
-                      plan={automationPlan}
-                      pro={entitlements.pro}
-                      providerConnected={connectedProviderIds(connectorConnections).has("tesla")}
-                      onCreate={() => createAutomation().catch(() => undefined)}
-                      onConnect={() => {
-                        if (!entitlements.pro) {
-                          setPaywallMessage("Tesla-Integrationen gehören zu CanMyPhone Pro. Die Planvorschau bleibt kostenlos.");
-                          setPaywallVisible(true);
-                          return;
-                        }
-                        connectProvider("tesla").catch(() => undefined);
-                      }}
-                    />
+                    {installingAutomation ? (
+                      <AutomationInstallationCard
+                        automation={installingAutomation}
+                        connectedProviderIds={[...connectedProviderIds(connectorConnections)]}
+                        locationAlways={locationAuthorization?.always===true}
+                        namedLocationNames={namedLocations.map((item)=>item.name)}
+                        onRequestLocationPermission={()=>requestLocationAutomationPermission().catch(()=>undefined)}
+                        onSaveNamedLocation={(name)=>saveNamedLocationHere(name).catch(()=>undefined)}
+                        onApprove={()=>approveAutomation().catch(()=>undefined)}
+                        onLaunchWithCanMyPhone={()=>launchAutomationThroughCanMyPhone().catch(()=>undefined)}
+                        onHandoff={()=>handoffAutomation().catch(()=>undefined)}
+                        onConfirm={()=>confirmAutomation().catch(()=>undefined)}
+                        onCancel={()=>cancelSetup().catch(()=>undefined)}
+                      />
+                    ) : (
+                      <AutomationPlanPreview
+                        plan={automationPlan}
+                        pro={entitlements.pro}
+                        providerConnected={connectedProviderIds(connectorConnections).has("tesla")}
+                        onCreate={() => createAutomation().catch(() => undefined)}
+                        onConnect={() => {
+                          if (!entitlements.pro) {
+                            setPaywallMessage("Tesla-Integrationen gehören zu CanMyPhone Pro. Die Planvorschau bleibt kostenlos.");
+                            setPaywallVisible(true);
+                            return;
+                          }
+                          connectProvider("tesla").catch(() => undefined);
+                        }}
+                      />
+                    )}
                     {actionResult ? <ContentSurface emphasis="active" style={styles.resultBanner}><Text style={styles.resultTitle}>Status</Text><Text style={styles.resultText}>{actionResult.message}</Text></ContentSurface> : null}
                     <Pressable onPress={resetQuestion} style={styles.textAction}><Text style={styles.textActionText}>Neue Automation</Text></Pressable>
                   </View>
