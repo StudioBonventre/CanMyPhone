@@ -19,7 +19,8 @@ export type {
   StoreEntitlementResult,
   StoreProductInfo,
   StorePurchaseResult,
-  StorePurchaseStatus
+  StorePurchaseStatus,
+  TeslaNativeExecutionResult
 } from "./src/CanMyPhoneNative.types";
 
 function loadNativeModule(): NativeModuleShape | null {
