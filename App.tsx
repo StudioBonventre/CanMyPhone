@@ -326,9 +326,34 @@ export default function App() {
     if (!shortcutDefinition) return;
     trackProductEvent("automation_materialization_started", { strategy: shortcutDefinition.executionStrategy });
     try {
-      const stored = await automationRepository.save(materializeShortcutDefinition(shortcutDefinition));
+      let stored = await automationRepository.save(materializeShortcutDefinition(shortcutDefinition));
       setInstallingAutomation(stored);
       setAutomations(await automationRepository.list());
+
+      if (stored.personalSetup) {
+        const opened = await CanMyPhoneNative?.openShortcuts("app");
+        if (!opened) {
+          setActionResult({
+            handled: true,
+            succeeded: false,
+            message: "Kurzbefehle konnte nicht geöffnet werden. Öffne die Apple-App „Kurzbefehle“ und wähle dort „Automation“."
+          });
+          return;
+        }
+
+        stored = await automationRepository.save({
+          ...stored,
+          personalSetup: {
+            ...stored.personalSetup,
+            setupState: "HANDED_OFF",
+            handedOffAt: new Date().toISOString()
+          }
+        });
+        await automationRepository.setPendingSetup(stored.id);
+        setInstallingAutomation(stored);
+        setAutomations(await automationRepository.list());
+        trackProductEvent("automation_handoff_opened", { trigger: stored.definition.trigger.capabilityId });
+      }
     } catch {
       setActionResult({ handled: true, succeeded: false, message: "Diese Automation kann ich noch nicht sicher erstellen." });
     }
@@ -336,7 +361,7 @@ export default function App() {
 
   const handoffAutomation = async () => {
     if (!installingAutomation?.personalSetup) return;
-    const opened = await CanMyPhoneNative?.openShortcuts("create");
+    const opened = await CanMyPhoneNative?.openShortcuts("app");
     if (!opened) { setActionResult({ handled:true,succeeded:false,message:"Kurzbefehle konnte nicht geöffnet werden." }); return; }
     const updated: StoredAutomation = { ...installingAutomation, personalSetup: { ...installingAutomation.personalSetup, setupState:"HANDED_OFF", handedOffAt:new Date().toISOString() } };
     await automationRepository.save(updated); await automationRepository.setPendingSetup(updated.id);
@@ -731,7 +756,7 @@ export default function App() {
                 {shortcutDefinition && shortcutDefinition.confidence >= 0.8 && !automationPlan ? (
                   <View style={styles.answerArea}>
                     <ShortcutDefinitionPreview definition={shortcutDefinition} />
-                    {installingAutomation ? <AutomationInstallationCard automation={installingAutomation} onApprove={()=>approveAutomation().catch(()=>undefined)} onHandoff={()=>handoffAutomation().catch(()=>undefined)} onConfirm={()=>confirmAutomation().catch(()=>undefined)} onCancel={()=>cancelSetup().catch(()=>undefined)} /> : <LiquidButton style={styles.primaryAction} label="Automation erstellen" onPress={()=>createAutomation().catch(()=>undefined)} />}
+                    {installingAutomation ? <AutomationInstallationCard automation={installingAutomation} onApprove={()=>approveAutomation().catch(()=>undefined)} onHandoff={()=>handoffAutomation().catch(()=>undefined)} onConfirm={()=>confirmAutomation().catch(()=>undefined)} onCancel={()=>cancelSetup().catch(()=>undefined)} /> : <LiquidButton style={styles.primaryAction} label="Automation einrichten" onPress={()=>createAutomation().catch(()=>undefined)} />}
                     {actionResult ? <ContentSurface style={styles.resultBanner}><Text style={styles.resultTitle}>Status</Text><Text style={styles.resultText}>{actionResult.message}</Text></ContentSurface> : null}
                   </View>
                 ) : plannerResponse && !plannerResponse.ok && plannerResponse.code === "needs-clarification" ? (

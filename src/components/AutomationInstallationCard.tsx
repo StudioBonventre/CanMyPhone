@@ -18,7 +18,7 @@ export function AutomationInstallationCard({ automation, onHandoff, onConfirm, o
       <Text style={styles.question}>Hast du die Automation in Kurzbefehle fertiggestellt?</Text>
       <LiquidButton label="Ja, fertig" onPress={onConfirm}/>
       <Pressable onPress={onCancel} style={styles.cancel}><Text style={styles.cancelText}>Noch nicht</Text></Pressable>
-    </> : <LiquidButton label={direct?"Jetzt aktivieren":"In Kurzbefehle fertigstellen"} onPress={direct?onConfirm:onHandoff}/>}</>}
+    </> : <LiquidButton label={direct?"Jetzt aktivieren":setup?.setupState === "HANDED_OFF" ? "Kurzbefehle erneut öffnen" : "Kurzbefehle öffnen"} onPress={direct?onConfirm:onHandoff}/>}</>}
   </ContentSurface>;
 }
 

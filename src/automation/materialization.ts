@@ -148,7 +148,7 @@ export function createPersonalAutomationSetup(automationId: string, trigger: Sho
     runnerIntentName: "CanMyPhone Automation ausführen",
     automationId,
     setupSteps: [
-      `In Kurzbefehle „Automation“ und anschließend „Neue Automation“ wählen.`,
+      `CanMyPhone öffnet Kurzbefehle. Dort „Automation“ und anschließend „Neue Automation“ wählen.`,
       `${selector} als Auslöser auswählen.`,
       ...actionSteps,
       "Apples Zusammenfassung prüfen und die Automation sichern."
