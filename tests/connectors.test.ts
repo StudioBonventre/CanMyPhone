@@ -15,11 +15,11 @@ test("connector catalogue has stable unique ids and explicit implementation stat
   }
 });
 
-test("connector setup plans never claim unfinished connectors are executable",()=>{
+test("connector setup plans only claim implemented connectors are executable",()=>{
   for(const provider of PROVIDER_REGISTRY){
     const plan=connectorSetupPlan(provider.id);
     assert.ok(plan);
-    assert.equal(plan?.executableToday,false);
+    assert.equal(plan?.executableToday,provider.implementation==="READY");
     assert.ok(plan?.steps.length);
   }
 });
