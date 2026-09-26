@@ -36,6 +36,11 @@ function fromBase64(value:string):Uint8Array {
   return Uint8Array.from(binary,(char)=>char.charCodeAt(0));
 }
 
+async function sha256Hex(value:string):Promise<string>{
+  const digest=new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(value)));
+  return Array.from(digest).map((byte)=>byte.toString(16).padStart(2,"0")).join("");
+}
+
 async function hmacKey(){
   return crypto.subtle.importKey("raw",new TextEncoder().encode(env("TESLA_OAUTH_STATE_SECRET")),{name:"HMAC",hash:"SHA-256"},false,["sign","verify"]);
 }
@@ -111,6 +116,40 @@ async function authenticatedUser(request:Request):Promise<string|null>{
   });
   const {data,error}=await scoped.auth.getUser();
   return error?null:data.user?.id??null;
+}
+
+async function nativeExecutionUser(request:Request):Promise<string|null>{
+  const token=request.headers.get("x-canmyphone-execution-token")?.trim();
+  if(!token||token.length<32)return null;
+  const hash=await sha256Hex(token);
+  const {data,error}=await admin().from("native_execution_grants")
+    .select("user_id,expires_at")
+    .eq("token_hash",hash)
+    .eq("provider","tesla")
+    .gt("expires_at",new Date().toISOString())
+    .maybeSingle();
+  if(error||!data||typeof data.user_id!=="string")return null;
+  return data.user_id;
+}
+
+async function issueNativeExecutionGrant(userId:string){
+  const token=base64url(crypto.getRandomValues(new Uint8Array(32)));
+  const tokenHash=await sha256Hex(token);
+  const expiresAt=new Date(Date.now()+30*24*60*60*1000).toISOString();
+  const db=admin();
+  await db.from("native_execution_grants").delete().eq("user_id",userId).eq("provider","tesla");
+  const {error}=await db.from("native_execution_grants").insert({
+    token_hash:tokenHash,
+    user_id:userId,
+    provider:"tesla",
+    expires_at:expiresAt
+  });
+  if(error)throw new Error("native_grant_store_failed");
+  return {
+    token,
+    expiresAt,
+    endpoint:`${env("SUPABASE_URL").replace(/\/$/,"")}/functions/v1/tesla-connector`
+  };
 }
 
 async function storeTokens(userId:string,tokens:TeslaTokens){
@@ -245,7 +284,7 @@ function errorCode(error:unknown){
   const value=error instanceof Error?error.message:"tesla_connector_failed";
   const known=new Set([
     "tesla_vehicle_not_found","tesla_vehicle_required","tesla_vehicle_list_failed","tesla_fleet_status_failed",
-    "tesla_code_exchange_failed","tesla_refresh_failed","credential_store_failed","credential_load_failed"
+    "tesla_code_exchange_failed","tesla_refresh_failed","credential_store_failed","credential_load_failed","native_grant_store_failed"
   ]);
   return known.has(value)?value.toUpperCase():"TESLA_CONNECTOR_FAILED";
 }
@@ -273,9 +312,10 @@ async function handleCallback(request:Request){
 Deno.serve(async(request)=>{
   if(request.method==="GET")return handleCallback(request);
   if(request.method!=="POST")return json({ok:false,code:"METHOD_NOT_ALLOWED",message:"Nur POST ist erlaubt."},405);
-  const userId=await authenticatedUser(request);
-  if(!userId)return json({ok:false,code:"UNAUTHORIZED",message:"Bitte melde dich erneut an."},401);
   let body:any; try{body=await request.json();}catch{return json({ok:false,code:"INVALID_REQUEST",message:"Ungültige Anfrage."},400);}
+  const nativeRequest=body?.action==="execute-native";
+  const userId=nativeRequest ? await nativeExecutionUser(request) : await authenticatedUser(request);
+  if(!userId)return json({ok:false,code:"UNAUTHORIZED",message:"Bitte verbinde Tesla erneut."},401);
   try{
     if(body?.action==="authorize"){
       const state=await signState(userId);
@@ -291,9 +331,16 @@ Deno.serve(async(request)=>{
       return json({ok:true,url:url.toString()});
     }
 
+    if(body?.action==="native-grant"){
+      const grant=await issueNativeExecutionGrant(userId);
+      return json({ok:true,...grant});
+    }
+
     if(body?.action==="disconnect"){
-      const {error}=await admin().from("provider_credentials").delete().eq("user_id",userId).eq("provider","tesla");
+      const db=admin();
+      const {error}=await db.from("provider_credentials").delete().eq("user_id",userId).eq("provider","tesla");
       if(error)throw new Error("credential_store_failed");
+      await db.from("native_execution_grants").delete().eq("user_id",userId).eq("provider","tesla");
       return json({ok:true,message:"Tesla-Verbindung wurde entfernt."});
     }
 
@@ -322,7 +369,7 @@ Deno.serve(async(request)=>{
       });
     }
 
-    if(body?.action==="execute"){
+    if(body?.action==="execute"||body?.action==="execute-native"){
       const operation=String(body.operation??"");
       if(!["vehicle.lock","vehicle.unlock","vehicle.rear-trunk.close"].includes(operation)){
         return json({ok:false,code:"UNSUPPORTED_OPERATION",message:"Diese Tesla-Aktion ist nicht freigegeben."},422);
