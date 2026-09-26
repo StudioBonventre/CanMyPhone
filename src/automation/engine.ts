@@ -1,5 +1,5 @@
 import { capabilityV2 } from "./capabilityCatalogV2";
-import type { ShortcutDefinition } from "./shortcutCompiler";
+import type { ShortcutDefinition, ShortcutStep } from "./shortcutCompiler";
 
 export type TriggerDriver =
   | "CANMYPHONE_MANUAL"
@@ -35,10 +35,12 @@ function triggerDriver(definition: ShortcutDefinition): TriggerDriver {
   return "UNSUPPORTED";
 }
 
-function actionDriver(capabilityId: string): ActionDriver {
-  const cap = capabilityV2(capabilityId);
+function actionDriver(step: ShortcutStep): ActionDriver {
+  const cap = capabilityV2(step.capabilityId);
   if (!cap || cap.role !== "action") return "UNSUPPORTED";
   if (cap.executionModes.includes("DIRECT_PUBLIC_API")) return "CANMYPHONE_NATIVE";
+  const provider = typeof step.parameters.provider === "string" ? step.parameters.provider.trim().toLowerCase() : "";
+  if (step.capabilityId.startsWith("smart-home.") && ["apple-home","apple home","homekit","home"].includes(provider)) return "CANMYPHONE_NATIVE";
   if (cap.integration || cap.executionModes.includes("THIRD_PARTY_API")) return "PROVIDER";
   if (cap.executionModes.includes("SHORTCUT") || cap.executionModes.includes("PERSONAL_AUTOMATION")) return "APPLE_SHORTCUTS_ACTION";
   if (cap.executionModes.includes("APP_INTENT")) return "CANMYPHONE_APP_INTENT";
@@ -48,7 +50,7 @@ function actionDriver(capabilityId: string): ActionDriver {
 
 export function compileAutomationRuntime(definition: ShortcutDefinition): AutomationRuntimePlan {
   const trigger = triggerDriver(definition);
-  const actions = definition.actions.map((action) => actionDriver(action.capabilityId));
+  const actions = definition.actions.map((action) => actionDriver(action));
   const hasAppleActions = actions.includes("APPLE_SHORTCUTS_ACTION");
   const bridgeForTrigger = trigger === "APPLE_SHORTCUTS_BRIDGE";
   const appleBridgeRequired = bridgeForTrigger || hasAppleActions;
