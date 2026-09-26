@@ -182,3 +182,29 @@ test("Tesla connector service fails closed without a user session",async()=>{
   if(!result.ok)assert.equal(result.code,"NOT_AUTHENTICATED");
   assert.equal(calls,0);
 });
+
+
+test("Tesla connector provisions a native execution grant without exposing provider tokens",async()=>{
+  let sent:Record<string,unknown>|null=null;
+  const service=createTeslaConnectorService({
+    supabaseUrl:"https://example.supabase.co",
+    publishableKey:"public",
+    getAccessToken:async()=>"user.jwt",
+    fetcher:async(_url,init)=>{
+      sent=JSON.parse(String(init?.body??"{}"));
+      return new Response(JSON.stringify({
+        ok:true,
+        endpoint:"https://example.supabase.co/functions/v1/tesla-connector",
+        token:"x".repeat(43),
+        expiresAt:"2026-10-26T12:00:00.000Z"
+      }),{status:200});
+    }
+  });
+  const grant=await service.nativeExecutionGrant();
+  assert.deepEqual(sent,{action:"native-grant"});
+  assert.equal(grant.ok,true);
+  if(grant.ok){
+    assert.match(grant.endpoint,/\/functions\/v1\/tesla-connector$/);
+    assert.equal(grant.token.length,43);
+  }
+});
