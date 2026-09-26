@@ -2,6 +2,7 @@ import { CAPABILITY_CATALOG_V2, capabilityV2 } from "./capabilityCatalogV2";
 import { resolveStrategy, type ShortcutDefinition, type ShortcutStep } from "./shortcutCompiler";
 import { validateShortcutDefinition } from "./shortcutValidation";
 import { compactProviderCatalogue } from "./providerRegistry";
+import { connectorFallbackSuggestion } from "./connectorSuggestions";
 
 export type AutomationSuggestion = {
   title: string;
@@ -197,13 +198,15 @@ export function acceptSemanticAutomationOutput(goal: string, raw: string): Seman
   const definition = buildDefinition(goal, envelope);
   if (!definition) return { kind: "unavailable" };
 
-  const suggestion = envelope.suggestion?.title && envelope.suggestion.message
+  const modelSuggestion = envelope.suggestion?.title && envelope.suggestion.message
     ? {
         title: envelope.suggestion.title,
         message: envelope.suggestion.message,
         ...(envelope.suggestion.proposedGoal ? { proposedGoal: envelope.suggestion.proposedGoal } : {})
       }
     : undefined;
+  const connectorSuggestion = connectorFallbackSuggestion(definition);
+  const suggestion = modelSuggestion ?? (connectorSuggestion ? { ...connectorSuggestion } : undefined);
 
   return { kind: "understood", definition, ...(suggestion ? { suggestion } : {}) };
 }
