@@ -19,6 +19,8 @@ export type SemanticAutomationResult =
 
 export type SemanticAutomationContext = {
   connectedProviderIds?: string[];
+  localNow?: string;
+  timeZone?: string;
 };
 
 type ModelStep = {
@@ -254,6 +256,9 @@ export async function interpretAutomationWithOnDeviceAI(goal: string, context: S
       compactProviderCatalogue(),
       `Bereits verbundene Connectoren: ${context.connectedProviderIds?.length ? context.connectedProviderIds.join(", ") : "keine"}`,
       "Wenn der Nutzer keinen Hersteller nennt und genau ein verbundener Connector die gewünschte Aktion sicher unterstützt, darfst du diesen Anbieter bevorzugen. Bei mehreren plausiblen Anbietern frage nach.",
+      `Aktueller Zeitpunkt: ${context.localNow ?? new Date().toISOString()}`,
+      `Zeitzone: ${context.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "unknown"}`,
+      "Relative Datumsangaben wie heute/morgen/nächsten Montag nur dann in ISO-8601 umwandeln, wenn sie mit diesem Zeitpunkt eindeutig auflösbar sind. Sonst kurz nachfragen.",
       "Wichtige Plattformgrenzen:",
       compactPlatformLimitations(),
       "Wenn ein Wunsch sprachlich weiter reicht als eine Capability, tue nicht so, als sei eine schwächere Aktion exakt gleichwertig. Frage nach dem eigentlichen Ziel oder schlage eine klar gekennzeichnete Alternative vor.",
