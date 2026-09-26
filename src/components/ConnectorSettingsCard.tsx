@@ -85,10 +85,10 @@ export function ConnectorSettingsCard({profile,onConnect}:{profile:ConnectorConn
             </View>:null}
             {plan.executableToday&&connection?.status!=="CONNECTED"
               ?<Pressable
-                  disabled={connection?.status==="CONNECTING"||(provider.id==="homematic-ip"&&(hcuSuffix.length!==4||!activationKey.trim()))}
+                  disabled={(connection?.status==="CONNECTING"&&provider.id!=="tesla")||(provider.id==="homematic-ip"&&(hcuSuffix.length!==4||!activationKey.trim()))}
                   onPress={()=>onConnect?.(provider.id,provider.id==="homematic-ip"?{hcuSuffix,activationKey}:undefined)}
-                  style={[styles.connectButton,(connection?.status==="CONNECTING"||(provider.id==="homematic-ip"&&(hcuSuffix.length!==4||!activationKey.trim())))&&styles.connectButtonDisabled]}
-                ><Text style={styles.connectButtonText}>{connection?.status==="CONNECTING"?"Verbindung läuft …":"Verbinden"}</Text></Pressable>
+                  style={[styles.connectButton,((connection?.status==="CONNECTING"&&provider.id!=="tesla")||(provider.id==="homematic-ip"&&(hcuSuffix.length!==4||!activationKey.trim())))&&styles.connectButtonDisabled]}
+                ><Text style={styles.connectButtonText}>{connection?.status==="CONNECTING"?(provider.id==="tesla"?"Kopplung fortsetzen":"Verbindung läuft …"):"Verbinden"}</Text></Pressable>
               :null}
           </View>:null}
         </View>;
