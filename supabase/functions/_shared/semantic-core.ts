@@ -24,8 +24,11 @@ export const semanticCapabilityIds = new Set([
 
 export const semanticCapabilitySummary = [
   "Triggers: manual, time/weekday/alarm/sleep, location enter/exit, CarPlay, email/message/transaction, Wi-Fi, Bluetooth, Apple Watch workout, NFC, app opened/closed, airplane mode, focus, low-power mode, battery, charger, sound recognition.",
-  "System actions: brightness, volume, low-power mode, flashlight, focus, app/url open, clipboard.",
-  "Media/navigation/communication/productivity actions are available only through their allow-listed ids.",
+  "Direct system actions: system.brightness.set {percent}; system.flashlight.set {value:on|off}; system.clipboard.set {value}; system.url.open {url}; navigation.route.start {destination}.",
+  "Communication actions: communication.message.compose/mail.compose/call.start {recipient}. They open the system communication UI and do not silently send messages or place calls.",
+  "EventKit actions: productivity.calendar.create {title,start ISO-8601,end? ISO-8601,notes?}; productivity.reminder.create {title,due? ISO-8601,notes?}.",
+  "Apple Home: smart-home.scene.run {scene,home?}; provider-neutral smart-home.cover.open/close {provider?,room,device?}; smart-home.light.set/climate.set {provider?,room,value}.",
+  "Apple-owned actions such as focus and low-power mode remain system-orchestrated unless a direct public API is explicitly listed.",
   "Provider-neutral actions: vehicle.lock, vehicle.unlock, smart-home.cover.open/close, smart-home.light.set, smart-home.climate.set.",
   "Named providers currently known to routing: Tesla, Homematic IP, Apple Home, Matter, Home Assistant."
 ].join("\n");
