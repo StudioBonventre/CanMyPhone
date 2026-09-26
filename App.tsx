@@ -482,7 +482,7 @@ export default function App() {
       let semanticHandled = false;
 
       if (preferences.useOnDeviceAI) {
-        const semantic = await interpretAutomationWithOnDeviceAI(normalized);
+        const semantic = await interpretAutomationWithOnDeviceAI(normalized, { connectedProviderIds: [...connectedProviderIds(connectorConnections)] });
         if (semantic.kind === "understood") {
           setSemanticDefinition(semantic.definition);
           setSemanticSuggestion(semantic.suggestion ?? null);
