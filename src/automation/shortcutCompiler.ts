@@ -74,7 +74,7 @@ function extractActions(q:string,e:ExtractedEntities):ShortcutStep[]{const out:S
   if(e.playlist)out.push({capabilityId:"media.playlist.play",parameters:{value:e.playlist}});
   else if(/spotify/.test(q))out.push({capabilityId:"media.spotify.open",parameters:{value:"open"}});
   else if(/apple music|musik/.test(q)&&/(start|spiel|losgeh)/.test(q))out.push({capabilityId:"media.apple-music.play",parameters:{value:""}});
-  if(/erinnerung/.test(q))out.push({capabilityId:"productivity.reminder.create",parameters:{value:q.match(/erinnerung(?:\s+für)?\s+(.+)/)?.[1]??""}});
+  if(/erinnerung/.test(q)){const raw=q.match(/erinnerung(?:\s+für)?\s+(.+)/)?.[1]?.replace(/\b(erstellen|anlegen|machen)\b[.!?]*$/,"").trim();out.push({capabilityId:"productivity.reminder.create",parameters:{title:raw||"Erinnerung"}});}
   if(/app öffnen|öffne app|öffne .+ app/.test(q)&&e.app)out.push({capabilityId:"system.app.open",parameters:{value:e.app}});
   if(/tesla/.test(q)&&/(heck|kofferraum)/.test(q))out.push({capabilityId:"tesla.rear-trunk.close",parameters:{expectedState:"open"}});
   return out;
