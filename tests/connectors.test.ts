@@ -6,6 +6,7 @@ import { connectorRequirementForStep } from "../src/automation/connectorPlanning
 import { ConnectorRuntime } from "../src/automation/connectorRuntime";
 import { createTeslaConnectorAdapter, createHomematicIPConnectorAdapter } from "../src/automation/connectorAdapters";
 import { buildTeslaAuthorizationURL, buildTeslaVirtualKeyPairingURL, TESLA_DEFAULT_SCOPES } from "../src/automation/teslaAuth";
+import { createTeslaConnectorService } from "../src/automation/teslaConnectorService";
 
 test("connector catalogue has stable unique ids and explicit implementation state",()=>{
   assert.equal(new Set(PROVIDER_REGISTRY.map((item)=>item.id)).size,PROVIDER_REGISTRY.length);
@@ -140,4 +141,44 @@ test("Tesla rear-trunk routing never aliases to vehicle lock",async()=>{
   assert.equal(result.ok,true);
   assert.equal(trunkClosed,1);
   assert.equal(locked,0);
+});
+
+
+test("Tesla connector service keeps OAuth and commands behind authenticated backend",async()=>{
+  const calls:{url:string;body:any;authorization:string|null}[]=[];
+  const service=createTeslaConnectorService({
+    supabaseUrl:"https://example.supabase.co",
+    publishableKey:"public",
+    getAccessToken:async()=>"user.jwt",
+    fetcher:async(url,init)=>{
+      const body=JSON.parse(String(init?.body??"{}"));
+      calls.push({url:String(url),body,authorization:new Headers(init?.headers).get("Authorization")});
+      if(body.action==="authorize")return new Response(JSON.stringify({ok:true,url:"https://auth.tesla.com/oauth2/v3/authorize?state=x"}),{status:200});
+      if(body.action==="status")return new Response(JSON.stringify({ok:true,connected:true,ready:false,vehicleCount:1,pairedVehicleCount:0,pairingUrl:"https://www.tesla.com/_ak/example.com?vin=VIN"}),{status:200});
+      return new Response(JSON.stringify({ok:true,message:"confirmed"}),{status:200});
+    }
+  });
+  const auth=await service.authorizationUrl();
+  assert.equal(auth.ok,true);
+  const status=await service.status();
+  assert.equal(status.ok,true);
+  if(status.ok)assert.equal(status.ready,false);
+  const trunk=await service.closeRearTrunk("VIN");
+  assert.equal(trunk.ok,true);
+  assert.equal(calls.at(-1)?.body.operation,"vehicle.rear-trunk.close");
+  assert.equal(calls.every((call)=>call.authorization==="Bearer user.jwt"),true);
+});
+
+test("Tesla connector service fails closed without a user session",async()=>{
+  let calls=0;
+  const service=createTeslaConnectorService({
+    supabaseUrl:"https://example.supabase.co",
+    publishableKey:"public",
+    getAccessToken:async()=>null,
+    fetcher:async()=>{calls+=1;return new Response("{}",{status:200});}
+  });
+  const result=await service.lockVehicle();
+  assert.equal(result.ok,false);
+  if(!result.ok)assert.equal(result.code,"NOT_AUTHENTICATED");
+  assert.equal(calls,0);
 });
