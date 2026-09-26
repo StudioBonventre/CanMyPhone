@@ -9,6 +9,7 @@ import { compileAutomationRuntime } from "../src/automation/engine";
 import { ConnectorRuntime } from "../src/automation/connectorRuntime";
 import { createTeslaConnectorAdapter, createHomematicIPConnectorAdapter } from "../src/automation/connectorAdapters";
 import { acceptSemanticAutomationOutput } from "../src/automation/semanticInterpreter";
+import { launcherPlanForDefinition } from "../src/automation/appLauncher";
 
 class MemoryStorage implements KeyValueStorage {
   data = new Map<string, string>();
@@ -146,4 +147,20 @@ test("connector failures are reported as real automation failures",async()=>{
   assert.equal(result.status,"FAILED");
   assert.equal(result.errorCode,"vehicle_offline");
   assert.match(result.humanMessage,/nicht erreichbar/i);
+});
+
+
+test("TikTok brightness automation has a zero-Shortcuts CanMyPhone launcher route",()=>{
+  const d=compileShortcutGoal("Wenn TikTok geöffnet wird, Helligkeit auf 0 %.");
+  const plan=launcherPlanForDefinition(d);
+  assert.equal(plan.available,true);
+  if(plan.available){
+    assert.equal(plan.target.id,"tiktok");
+    assert.equal(plan.target.universalUrl,"https://www.tiktok.com/");
+  }
+});
+
+test("launcher route is not offered when an action still belongs to Apple Shortcuts",()=>{
+  const d=compileShortcutGoal("Wenn Akku unter 20 %, Stromsparmodus an.");
+  assert.equal(launcherPlanForDefinition(d).available,false);
 });
