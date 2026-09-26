@@ -10,6 +10,7 @@ import { ConnectorRuntime } from "../src/automation/connectorRuntime";
 import { createTeslaConnectorAdapter, createHomematicIPConnectorAdapter } from "../src/automation/connectorAdapters";
 import { acceptSemanticAutomationOutput } from "../src/automation/semanticInterpreter";
 import { launcherPlanForDefinition } from "../src/automation/appLauncher";
+import { solveAutomationRoutes } from "../src/automation/automationSolver";
 
 class MemoryStorage implements KeyValueStorage {
   data = new Map<string, string>();
@@ -163,4 +164,20 @@ test("TikTok brightness automation has a zero-Shortcuts CanMyPhone launcher rout
 test("launcher route is not offered when an action still belongs to Apple Shortcuts",()=>{
   const d=compileShortcutGoal("Wenn Akku unter 20 %, Stromsparmodus an.");
   assert.equal(launcherPlanForDefinition(d).available,false);
+});
+
+
+test("route solver prefers CanMyPhone launcher over Apple bridge when actions are owned",()=>{
+  const d=compileShortcutGoal("Wenn Instagram geöffnet wird, Helligkeit auf 35 %.");
+  const routes=solveAutomationRoutes(d);
+  assert.equal(routes[0]?.kind,"CANMYPHONE_LAUNCHER");
+  assert.equal(routes[0]?.automatic,true);
+  assert.ok(routes.some((route)=>route.kind==="APPLE_SYSTEM_BRIDGE"));
+});
+
+test("route solver keeps Apple-owned actions below direct routes",()=>{
+  const d=compileShortcutGoal("Wenn Akku unter 20 %, Stromsparmodus an.");
+  const routes=solveAutomationRoutes(d);
+  assert.equal(routes[0]?.kind,"APPLE_SYSTEM_BRIDGE");
+  assert.equal(routes[0]?.automatic,false);
 });
