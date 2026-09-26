@@ -5,6 +5,7 @@ import {
   AppStateStatus,
   Keyboard,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   SafeAreaView,
@@ -24,6 +25,7 @@ import { compileShortcutGoal } from "./src/automation/shortcutCompiler";
 import { interpretAutomationWithOnDeviceAI, type AutomationSuggestion } from "./src/automation/semanticInterpreter";
 import { buildAppleIntelligenceAutomationDescription } from "./src/automation/appleShortcutsHandoff";
 import { compileAutomationRuntime } from "./src/automation/engine";
+import { launcherPlanForDefinition } from "./src/automation/appLauncher";
 import { approveSensitiveAutomation, materializeShortcutDefinition, type StoredAutomation } from "./src/automation/materialization";
 import { automationRepository, syncNativeRunnerResults } from "./src/automation/automationRepository";
 import { loadConnectorConnections } from "./src/automation/connectorConnectionRepository";
@@ -435,6 +437,61 @@ export default function App() {
     if(!installingAutomation)return;
     const saved=await automationRepository.save(approveSensitiveAutomation(installingAutomation));
     setInstallingAutomation(saved);setAutomations(await automationRepository.list());
+  };
+
+  const launchAutomationThroughCanMyPhone = async () => {
+    if (!installingAutomation) return;
+    const launcher = launcherPlanForDefinition(installingAutomation.definition);
+    if (!launcher.available) {
+      setActionResult({ handled:true, succeeded:false, message:"Für diese App gibt es noch keinen direkten CanMyPhone-Launcher." });
+      return;
+    }
+
+    try {
+      const runnable: StoredAutomation = {
+        ...installingAutomation,
+        enabled:true,
+        materializationState:"ACTIVE",
+        personalSetup: installingAutomation.personalSetup
+          ? { ...installingAutomation.personalSetup, setupState:"NOT_STARTED" }
+          : undefined
+      };
+      const saved=await automationRepository.save(runnable);
+      setInstallingAutomation(saved);
+      setAutomations(await automationRepository.list());
+
+      const runResult=await CanMyPhoneNative?.runStoredAutomation(saved.id);
+      if(runResult?.status!=="SUCCESS"){
+        setActionResult({
+          handled:true,
+          succeeded:false,
+          message:typeof runResult?.humanMessage==="string"
+            ?runResult.humanMessage
+            :"Die gespeicherten Aktionen konnten nicht sicher ausgeführt werden."
+        });
+        return;
+      }
+
+      const opened=await Linking.openURL(launcher.target.universalUrl).then(()=>true).catch(()=>false);
+      if(!opened){
+        setActionResult({
+          handled:true,
+          succeeded:false,
+          message:`Die Automation wurde ausgeführt, aber ${launcher.target.displayName} konnte nicht geöffnet werden.`
+        });
+        return;
+      }
+
+      setActionResult({
+        handled:true,
+        succeeded:true,
+        message:`Automation ausgeführt · ${launcher.target.displayName} wurde geöffnet.`
+      });
+      trackProductEvent("automation_run_success",{status:"LAUNCHER"});
+    } catch {
+      setActionResult({ handled:true, succeeded:false, message:"Der CanMyPhone-Launcher konnte die Automation gerade nicht ausführen." });
+      trackProductEvent("automation_run_failed",{status:"LAUNCHER_ERROR"});
+    }
   };
 
   const confirmAutomation = async () => {
@@ -855,7 +912,7 @@ export default function App() {
                   <View style={styles.answerArea}>
                     <ShortcutDefinitionPreview definition={shortcutDefinition} />
                     {semanticSuggestion ? <ContentSurface style={styles.resultBanner}><Text style={styles.resultTitle}>{semanticSuggestion.title}</Text><Text style={styles.resultText}>{semanticSuggestion.message}</Text>{semanticSuggestion.proposedGoal ? <Pressable onPress={()=>runAsk(semanticSuggestion.proposedGoal!).catch(()=>undefined)} style={styles.textAction}><Text style={styles.textActionText}>Vorschlag verwenden</Text></Pressable> : null}</ContentSurface> : null}
-                    {installingAutomation ? <AutomationInstallationCard automation={installingAutomation} connectedProviderIds={[...connectedProviderIds(connectorConnections)]} onApprove={()=>approveAutomation().catch(()=>undefined)} onHandoff={()=>handoffAutomation().catch(()=>undefined)} onConfirm={()=>confirmAutomation().catch(()=>undefined)} onCancel={()=>cancelSetup().catch(()=>undefined)} /> : <LiquidButton style={styles.primaryAction} label="Automation einrichten" onPress={()=>createAutomation().catch(()=>undefined)} />}
+                    {installingAutomation ? <AutomationInstallationCard automation={installingAutomation} connectedProviderIds={[...connectedProviderIds(connectorConnections)]} onApprove={()=>approveAutomation().catch(()=>undefined)} onLaunchWithCanMyPhone={()=>launchAutomationThroughCanMyPhone().catch(()=>undefined)} onHandoff={()=>handoffAutomation().catch(()=>undefined)} onConfirm={()=>confirmAutomation().catch(()=>undefined)} onCancel={()=>cancelSetup().catch(()=>undefined)} /> : <LiquidButton style={styles.primaryAction} label="Automation einrichten" onPress={()=>createAutomation().catch(()=>undefined)} />}
                     {actionResult ? <ContentSurface style={styles.resultBanner}><Text style={styles.resultTitle}>Status</Text><Text style={styles.resultText}>{actionResult.message}</Text></ContentSurface> : null}
                   </View>
                 ) : semanticClarification ? (
