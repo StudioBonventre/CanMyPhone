@@ -5,7 +5,7 @@ import { liquidIce } from "../theme/liquidIce";
 import { ContentSurface } from "./ContentSurface";
 import { LiquidButton } from "./LiquidButton";
 
-type Props = { plan: AutomationPlan; pro: boolean; onConnect: () => void };
+type Props = { plan: AutomationPlan; pro: boolean; providerConnected?: boolean; onConnect: () => void; onCreate?: () => void };
 
 const execution = {
   "on-device": "Auf deinem iPhone",
@@ -31,12 +31,13 @@ function actionText(plan: AutomationPlan): string {
   return "Die gewünschte Aktion ausführen";
 }
 
-export function AutomationPlanPreview({ plan, pro, onConnect }: Props) {
+export function AutomationPlanPreview({ plan, pro, providerConnected = false, onConnect, onCreate }: Props) {
   const [detailsVisible, setDetailsVisible] = useState(false);
   const setupNeeded = plan.authorizations.length > 0;
-  const providerPending =
+  const providerRequired =
     plan.actions.some((action) => action.kind === "tesla-command") ||
     plan.authorizations.some((item) => item.provider === "tesla");
+  const providerPending = providerRequired && !providerConnected;
 
   return (
     <ContentSurface style={styles.card}>
@@ -71,7 +72,7 @@ export function AutomationPlanPreview({ plan, pro, onConnect }: Props) {
         <Text style={styles.metaDot}>·</Text>
         <Text style={styles.metaText}>
           {providerPending
-            ? "Noch nicht verfügbar"
+            ? "Verbindung nötig"
             : plan.confirmationRequired
               ? "Bestätigung nötig"
               : setupNeeded
@@ -82,9 +83,9 @@ export function AutomationPlanPreview({ plan, pro, onConnect }: Props) {
 
       {providerPending ? (
         <View style={styles.pendingNotice}>
-          <Text style={styles.pendingTitle}>Noch nicht ausführbar</Text>
+          <Text style={styles.pendingTitle}>Tesla noch verbinden</Text>
           <Text style={styles.pendingText}>
-            Diese Integration ist als Vorschau sichtbar, aber der echte Provider-Zugang ist noch nicht verbunden.
+            Melde dein Tesla-Konto einmalig an und bestätige den virtuellen Fahrzeugschlüssel. Danach kann CanMyPhone die Automation sicher erstellen.
           </Text>
         </View>
       ) : null}
@@ -127,9 +128,8 @@ export function AutomationPlanPreview({ plan, pro, onConnect }: Props) {
 
       <LiquidButton
         style={styles.button}
-        label={providerPending ? "Integration noch nicht verfügbar" : setupNeeded ? "Einrichtung starten" : "Automation erstellen"}
-        onPress={onConnect}
-        disabled={providerPending}
+        label={providerPending ? "Tesla verbinden" : onCreate ? "Automation einrichten" : setupNeeded ? "Einrichtung starten" : "Automation erstellen"}
+        onPress={providerPending ? onConnect : (onCreate ?? onConnect)}
       />
     </ContentSurface>
   );
