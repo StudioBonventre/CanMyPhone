@@ -82,7 +82,7 @@ function extractActions(q:string,e:ExtractedEntities):ShortcutStep[]{const out:S
 
 export function resolveStrategy(steps:ShortcutStep[]):Strategy {
   const caps=steps.map(s=>capabilityV2(s.capabilityId)); if(caps.some(c=>!c))return "UNSUPPORTED";
-  if(caps.some(c=>c!.integration&&c!.executionModes.includes("THIRD_PARTY_API")))return "THIRD_PARTY_API";
+  if(caps.some(c=>c!.executionModes.includes("THIRD_PARTY_API")))return "THIRD_PARTY_API";
   if(caps.some(c=>c!.role==="trigger"&&c!.executionModes.includes("PERSONAL_AUTOMATION")))return "PERSONAL_AUTOMATION";
   if(caps.every(c=>c!.executionModes.includes("DIRECT_PUBLIC_API")))return "DIRECT_PUBLIC_API";
   if(caps.every(c=>c!.executionModes.some(m=>m==="APP_INTENT"||m==="DIRECT_PUBLIC_API")))return "APP_INTENT";
@@ -92,7 +92,7 @@ export function resolveStrategy(steps:ShortcutStep[]):Strategy {
 
 function assess(steps:ShortcutStep[],strategy:Strategy){const caps=steps.map(s=>capabilityV2(s.capabilityId)).filter((c):c is CapabilityV2=>Boolean(c));const reasons:string[]=[];
   if(strategy==="UNSUPPORTED")return {feasibility:"UNSUPPORTED" as Feasibility,reasons:["Mindestens ein Schritt wird nicht unterstützt."]};
-  if(caps.some(c=>c.integration)){reasons.push("Eine externe Integration muss verbunden werden.");return {feasibility:"REQUIRES_THIRD_PARTY" as Feasibility,reasons};}
+  if(strategy==="THIRD_PARTY_API"||caps.some(c=>c.integration)){reasons.push("Ein externer Anbieter oder lokaler Geräte-Connector muss verbunden werden.");return {feasibility:"REQUIRES_THIRD_PARTY" as Feasibility,reasons};}
   if(strategy==="GUIDED_HANDOFF"){reasons.push("iOS verlangt einen geführten Schritt.");return {feasibility:"GUIDED_ONLY" as Feasibility,reasons};}
   if(caps.some(c=>!c.background||c.confirmation)){reasons.push("Mindestens ein Schritt benötigt Nutzerinteraktion oder Vordergrund.");return {feasibility:"PARTIALLY_AUTOMATIC" as Feasibility,reasons};}
   if(strategy==="PERSONAL_AUTOMATION"||caps.some(c=>c.permissions.length)){reasons.push("Die persönliche Automation oder Berechtigung muss einmalig eingerichtet werden.");return {feasibility:"ONE_TIME_SETUP" as Feasibility,reasons};}

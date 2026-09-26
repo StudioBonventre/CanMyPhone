@@ -4,6 +4,7 @@ import { compileShortcutGoal, relevantCatalogForGoal } from "../src/automation/s
 import { validateShortcutDefinition } from "../src/automation/shortcutValidation";
 import { acceptSemanticAutomationOutput } from "../src/automation/semanticInterpreter";
 import { shortcutsParitySummary } from "../src/automation/shortcutsParity";
+import { bindProvider } from "../src/automation/providerRegistry";
 const cases=[
  ["Wenn ich zuhause ankomme, schalte Fokus Arbeit aus.","trigger.location-enter",["system.focus.set"]],
  ["Wenn meine AirPods verbunden werden, starte Spotify.","trigger.bluetooth-connected",["media.spotify.open"]],
@@ -137,4 +138,34 @@ test("Shortcuts parity catalog covers the documented personal-automation trigger
   const parity=shortcutsParitySummary();
   assert.ok(parity.appleOrchestrated.some((cap)=>cap.id==="trigger.app-opened"));
   assert.ok(parity.direct.some((cap)=>cap.id==="system.brightness.set"));
+});
+
+test("semantic AI can express one automation across Tesla and Homematic IP without Shortcuts actions",()=>{
+  const raw=JSON.stringify({
+    kind:"automation",
+    confidence:0.97,
+    trigger:{capabilityId:"trigger.location-enter",parameters:{value:"home"}},
+    actions:[
+      {capabilityId:"vehicle.lock",parameters:{brand:"Tesla"}},
+      {capabilityId:"smart-home.cover.open",parameters:{provider:"Homematic IP",room:"Wohnzimmer"}}
+    ],
+    clarificationQuestion:null,
+    suggestion:null
+  });
+  const result=acceptSemanticAutomationOutput("Wenn ich heim komme, Tesla zusperren und Homematic IP Rolläden im Wohnzimmer hoch",raw);
+  assert.equal(result.kind,"understood");
+  if(result.kind==="understood"){
+    assert.equal(result.definition.actions.length,2);
+    assert.equal(result.definition.executionStrategy,"THIRD_PARTY_API");
+    assert.equal(result.definition.actions[0]?.capabilityId,"vehicle.lock");
+    assert.equal(result.definition.actions[1]?.capabilityId,"smart-home.cover.open");
+  }
+});
+test("provider router binds brands semantically and asks for connection instead of inventing APIs",()=>{
+  const tesla=bindProvider("vehicle.lock",{brand:"Tesla"});
+  assert.equal(tesla.status,"CONNECTION_REQUIRED");
+  if(tesla.status==="CONNECTION_REQUIRED")assert.equal(tesla.provider.id,"tesla");
+  const hmip=bindProvider("smart-home.cover.open",{provider:"Homematic IP",room:"Wohnzimmer"});
+  assert.equal(hmip.status,"CONNECTION_REQUIRED");
+  if(hmip.status==="CONNECTION_REQUIRED")assert.equal(hmip.provider.id,"homematic-ip");
 });

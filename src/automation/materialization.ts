@@ -101,7 +101,7 @@ export function actionExecutionMode(step: ShortcutStep): ActionExecutionMode {
   const cap = capabilityV2(step.capabilityId);
   if (!cap || cap.role !== "action") return "UNSUPPORTED";
   if (step.capabilityId === "system.brightness.set") return "EXECUTABLE_DIRECT";
-  if (cap.integration) return "REQUIRES_PROVIDER";
+  if (cap.integration || cap.executionModes.includes("THIRD_PARTY_API")) return "REQUIRES_PROVIDER";
   if (cap.executionModes.includes("SHORTCUT") || cap.executionModes.includes("PERSONAL_AUTOMATION")) return "REQUIRES_SHORTCUT_ACTION";
   if (cap.executionModes.includes("APP_INTENT")) return "EXECUTABLE_APP_INTENT";
   if (cap.fallback === "GUIDED_HANDOFF") return "GUIDED_ONLY";
@@ -118,7 +118,7 @@ export function materializeShortcutDefinition(definition: ShortcutDefinition, no
   const runtime = compileAutomationRuntime(definition);
   const modes = definition.actions.map(actionExecutionMode);
   let materializationState: MaterializationState = "READY_TO_INSTALL";
-  if (definition.integrations.length) materializationState = "INTEGRATION_REQUIRED";
+  if (definition.integrations.length || definition.executionStrategy === "THIRD_PARTY_API") materializationState = "INTEGRATION_REQUIRED";
   else if (definition.requiredSetup.length) materializationState = "PERMISSION_REQUIRED";
   else if (runtime.appleBridgeRequired) materializationState = "APPLE_SETUP_REQUIRED";
 

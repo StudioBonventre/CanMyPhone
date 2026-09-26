@@ -39,7 +39,7 @@ function actionDriver(capabilityId: string): ActionDriver {
   const cap = capabilityV2(capabilityId);
   if (!cap || cap.role !== "action") return "UNSUPPORTED";
   if (capabilityId === "system.brightness.set") return "CANMYPHONE_NATIVE";
-  if (cap.integration) return "PROVIDER";
+  if (cap.integration || cap.executionModes.includes("THIRD_PARTY_API")) return "PROVIDER";
   if (cap.executionModes.includes("SHORTCUT") || cap.executionModes.includes("PERSONAL_AUTOMATION")) return "APPLE_SHORTCUTS_ACTION";
   if (cap.executionModes.includes("APP_INTENT")) return "CANMYPHONE_APP_INTENT";
   if (cap.fallback === "GUIDED_HANDOFF") return "GUIDED";
