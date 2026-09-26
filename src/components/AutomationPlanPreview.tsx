@@ -34,6 +34,9 @@ function actionText(plan: AutomationPlan): string {
 export function AutomationPlanPreview({ plan, pro, onConnect }: Props) {
   const [detailsVisible, setDetailsVisible] = useState(false);
   const setupNeeded = plan.authorizations.length > 0;
+  const providerPending =
+    plan.actions.some((action) => action.kind === "tesla-command") ||
+    plan.authorizations.some((item) => item.provider === "tesla");
 
   return (
     <ContentSurface style={styles.card}>
@@ -67,9 +70,24 @@ export function AutomationPlanPreview({ plan, pro, onConnect }: Props) {
         <Text style={styles.metaText}>{execution[plan.executionMode]}</Text>
         <Text style={styles.metaDot}>·</Text>
         <Text style={styles.metaText}>
-          {plan.confirmationRequired ? "Bestätigung nötig" : setupNeeded ? "Einmal einrichten" : "Bereit"}
+          {providerPending
+            ? "Noch nicht verfügbar"
+            : plan.confirmationRequired
+              ? "Bestätigung nötig"
+              : setupNeeded
+                ? "Einmal einrichten"
+                : "Bereit"}
         </Text>
       </View>
+
+      {providerPending ? (
+        <View style={styles.pendingNotice}>
+          <Text style={styles.pendingTitle}>Noch nicht ausführbar</Text>
+          <Text style={styles.pendingText}>
+            Diese Integration ist als Vorschau sichtbar, aber der echte Provider-Zugang ist noch nicht verbunden.
+          </Text>
+        </View>
+      ) : null}
 
       {detailsVisible ? (
         <View style={styles.details}>
@@ -109,8 +127,9 @@ export function AutomationPlanPreview({ plan, pro, onConnect }: Props) {
 
       <LiquidButton
         style={styles.button}
-        label={setupNeeded ? "Einrichtung starten" : "Automation erstellen"}
+        label={providerPending ? "Integration noch nicht verfügbar" : setupNeeded ? "Einrichtung starten" : "Automation erstellen"}
         onPress={onConnect}
+        disabled={providerPending}
       />
     </ContentSurface>
   );
@@ -199,6 +218,23 @@ const styles = StyleSheet.create({
   metaDot: {
     marginHorizontal: 7,
     color: liquidIce.color.textTertiary
+  },
+  pendingNotice: {
+    marginTop: 16,
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: "#F4F4F4"
+  },
+  pendingTitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "700",
+    color: liquidIce.color.textPrimary
+  },
+  pendingText: {
+    marginTop: 4,
+    ...liquidIce.type.caption,
+    color: liquidIce.color.textSecondary
   },
   details: {
     marginTop: 18,
