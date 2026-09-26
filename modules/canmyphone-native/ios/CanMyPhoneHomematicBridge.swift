@@ -140,9 +140,208 @@ final class CanMyPhoneHomematicBridge: NSObject, URLSessionDelegate {
     }
   }
 
+  func setCover(room: String, device: String?, open: Bool) async -> [String: Any] {
+    do {
+      let state = try await currentState()
+      let targets = deviceTargets(state: state, room: room, device: device, channelPattern: #"(?i)(SHUTTER|BLIND|SHADING|JALOUSIE)"#)
+      guard !targets.isEmpty else {
+        return failure("HOMEMATIC_TARGET_NOT_FOUND", "In diesem Raum wurde kein steuerbarer Homematic-IP-Rollladen gefunden.")
+      }
+      return await executeMany(
+        targets.map { target in
+          (
+            path: "/hmip/device/control/setShutterLevel",
+            body: [
+              "deviceId": target.deviceID,
+              "channelIndex": target.channelIndex,
+              "shutterLevel": open ? 0.0 : 1.0
+            ] as [String: Any]
+          )
+        },
+        successMessage: open ? "Homematic-IP-Rollläden wurden geöffnet." : "Homematic-IP-Rollläden wurden geschlossen."
+      )
+    } catch {
+      return failure("HOMEMATIC_STATE_FAILED", "Homematic IP konnte die Rollläden nicht zuordnen: \(safeError(error))")
+    }
+  }
+
+  func setLight(room: String, device: String?, value: String) async -> [String: Any] {
+    do {
+      let state = try await currentState()
+      let targets = deviceTargets(state: state, room: room, device: device, channelPattern: #"(?i)(DIMMER|SWITCH|LIGHT)"#)
+      guard !targets.isEmpty else {
+        return failure("HOMEMATIC_TARGET_NOT_FOUND", "In diesem Raum wurde kein steuerbares Homematic-IP-Licht gefunden.")
+      }
+
+      let normalized = normalize(value)
+      let commands: [(path: String, body: [String: Any])]
+      if ["on", "an", "ein", "true"].contains(normalized) {
+        commands = targets.map { ("/hmip/device/control/setSwitchState", ["deviceId": $0.deviceID, "channelIndex": $0.channelIndex, "on": true]) }
+      } else if ["off", "aus", "false"].contains(normalized) {
+        commands = targets.map { ("/hmip/device/control/setSwitchState", ["deviceId": $0.deviceID, "channelIndex": $0.channelIndex, "on": false]) }
+      } else {
+        let cleaned = normalized.replacingOccurrences(of: "%", with: "").replacingOccurrences(of: ",", with: ".")
+        guard let percent = Double(cleaned), (0.0...100.0).contains(percent) else {
+          return failure("HOMEMATIC_LIGHT_VALUE_INVALID", "Für Homematic-IP-Licht werden an, aus oder 0–100 % unterstützt.")
+        }
+        commands = targets.map { ("/hmip/device/control/setDimLevel", ["deviceId": $0.deviceID, "channelIndex": $0.channelIndex, "dimLevel": percent / 100.0]) }
+      }
+      return await executeMany(commands, successMessage: "Homematic-IP-Licht wurde gesetzt.")
+    } catch {
+      return failure("HOMEMATIC_STATE_FAILED", "Homematic IP konnte das Licht nicht zuordnen: \(safeError(error))")
+    }
+  }
+
+  func setClimate(room: String, value: String) async -> [String: Any] {
+    let cleaned = normalize(value)
+      .replacingOccurrences(of: "°c", with: "")
+      .replacingOccurrences(of: "grad", with: "")
+      .replacingOccurrences(of: ",", with: ".")
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let temperature = Double(cleaned), (5.0...30.0).contains(temperature) else {
+      return failure("HOMEMATIC_TEMPERATURE_INVALID", "Die gewünschte Homematic-IP-Temperatur ist ungültig.")
+    }
+
+    do {
+      let state = try await currentState()
+      guard let groupID = heatingGroupID(state: state, room: room) else {
+        return failure("HOMEMATIC_TARGET_NOT_FOUND", "Für diesen Raum wurde keine eindeutige Homematic-IP-Heizungsgruppe gefunden.")
+      }
+      return await executeMany(
+        [(
+          path: "/hmip/group/heating/setSetPointTemperature",
+          body: ["groupId": groupID, "setPointTemperature": temperature]
+        )],
+        successMessage: "Homematic-IP-Temperatur wurde gesetzt."
+      )
+    } catch {
+      return failure("HOMEMATIC_STATE_FAILED", "Homematic IP konnte die Heizungsgruppe nicht zuordnen: \(safeError(error))")
+    }
+  }
+
   func disconnect() -> [String: Any] {
     clearCredentials()
     return ["success": true, "message": "Homematic IP HCU wurde getrennt."]
+  }
+
+  private struct DeviceTarget {
+    let deviceID: String
+    let channelIndex: Int
+  }
+
+  private func currentState() async throws -> [String: Any] {
+    let response = try await systemRequest(path: "/hmip/home/getStateForClient", body: [:])
+    guard let payload = responsePayload(response) else {
+      throw bridgeError("Die HCU hat keinen verwertbaren Systemstatus geliefert.")
+    }
+    return payload
+  }
+
+  private func objectValues(_ value: Any?) -> [[String: Any]] {
+    if let array = value as? [[String: Any]] { return array }
+    if let dictionary = value as? [String: [String: Any]] { return Array(dictionary.values) }
+    if let dictionary = value as? [String: Any] {
+      return dictionary.values.compactMap { $0 as? [String: Any] }
+    }
+    return []
+  }
+
+  private func normalize(_ value: String?) -> String {
+    (value ?? "")
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+      .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "de_DE"))
+      .lowercased()
+  }
+
+  private func roomGroup(state: [String: Any], room: String) -> [String: Any]? {
+    let query = normalize(room)
+    let exact = objectValues(state["groups"]).filter { normalize($0["label"] as? String) == query }
+    let meta = exact.filter { normalize($0["type"] as? String) == "meta" }
+    if meta.count == 1 { return meta[0] }
+    if exact.count == 1 { return exact[0] }
+    return nil
+  }
+
+  private func deviceTargets(
+    state: [String: Any],
+    room: String,
+    device: String?,
+    channelPattern: String
+  ) -> [DeviceTarget] {
+    guard let group = roomGroup(state: state, room: room) else { return [] }
+    let groupChannels = objectValues(group["channels"])
+    let deviceIDs = Set(groupChannels.compactMap { $0["deviceId"] as? String })
+    guard !deviceIDs.isEmpty else { return [] }
+
+    let deviceQuery = device.map(normalize) ?? ""
+    let regex = try? NSRegularExpression(pattern: channelPattern)
+    var targets: [DeviceTarget] = []
+
+    for item in objectValues(state["devices"]) {
+      guard let deviceID = item["id"] as? String, deviceIDs.contains(deviceID) else { continue }
+      let label = normalize(item["label"] as? String)
+      if !deviceQuery.isEmpty && label != deviceQuery && !label.contains(deviceQuery) { continue }
+
+      for channel in objectValues(item["functionalChannels"]) {
+        guard let index = number(channel["index"]).map({ Int($0) }) else { continue }
+        let type = channel["functionalChannelType"] as? String ?? ""
+        let range = NSRange(type.startIndex..<type.endIndex, in: type)
+        if regex?.firstMatch(in: type, range: range) != nil {
+          targets.append(DeviceTarget(deviceID: deviceID, channelIndex: index))
+        }
+      }
+    }
+    return targets
+  }
+
+  private func heatingGroupID(state: [String: Any], room: String) -> String? {
+    guard let meta = roomGroup(state: state, room: room), let metaID = meta["id"] as? String else { return nil }
+    let query = normalize(room)
+    let heating = objectValues(state["groups"]).filter { group in
+      guard normalize(group["type"] as? String) == "heating" else { return false }
+      if group["metaGroupId"] as? String == metaID { return true }
+      return normalize(group["label"] as? String).contains(query)
+    }
+    guard heating.count == 1 else { return nil }
+    return heating[0]["id"] as? String
+  }
+
+  private func number(_ value: Any?) -> Double? {
+    (value as? NSNumber)?.doubleValue
+  }
+
+  private func executeMany(
+    _ commands: [(path: String, body: [String: Any])],
+    successMessage: String
+  ) async -> [String: Any] {
+    var confirmed = 0
+    for command in commands {
+      do {
+        let response = try await systemRequest(path: command.path, body: command.body)
+        if responseSucceeded(response) {
+          confirmed += 1
+        }
+      } catch {
+        continue
+      }
+    }
+    guard confirmed == commands.count else {
+      return [
+        "success": false,
+        "code": "HOMEMATIC_PARTIAL_FAILURE",
+        "changed": confirmed,
+        "matched": commands.count,
+        "message": confirmed == 0
+          ? "Homematic IP hat den Befehl nicht bestätigt."
+          : "\(confirmed) von \(commands.count) Homematic-IP-Zielen wurden bestätigt."
+      ]
+    }
+    return [
+      "success": true,
+      "changed": confirmed,
+      "matched": commands.count,
+      "message": successMessage
+    ]
   }
 
   private func postPairing(host: String, path: String, body: [String: Any]) async throws -> [String: Any] {
