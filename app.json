@@ -29,13 +29,16 @@
       "entitlements": {
         "com.apple.security.application-groups": [
           "group.com.studiobonventre.canmyphone"
-        ]
+        ],
+        "com.apple.developer.homekit": true
       },
       "infoPlist": {
         "NSSupportsLiveActivities": true,
         "NSCameraUsageDescription": "CanMyPhone nutzt die Kamera nur, wenn du eine Funktion ausdrücklich startest, die Kamerazugriff benötigt.",
         "NSMicrophoneUsageDescription": "CanMyPhone nutzt das Mikrofon nur, wenn du eine Funktion ausdrücklich startest, die Mikrofonzugriff benötigt.",
-        "NSPhotoLibraryUsageDescription": "CanMyPhone greift nur auf deine Fotomediathek zu, wenn du eine Funktion ausdrücklich startest, die Fotos benötigt."
+        "NSPhotoLibraryUsageDescription": "CanMyPhone greift nur auf deine Fotomediathek zu, wenn du eine Funktion ausdrücklich startest, die Fotos benötigt.",
+        "NSHomeKitUsageDescription": "CanMyPhone nutzt Apple Home nur, um von dir gewählte Räume und Geräte in Automationen zu erkennen und zu steuern.",
+        "NSLocalNetworkUsageDescription": "CanMyPhone nutzt dein lokales Netzwerk nur, um von dir verbundene Smart-Home-Systeme und Geräte zu erreichen."
       }
     },
     "android": {
