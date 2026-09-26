@@ -24,7 +24,7 @@ test("time condition and multi-step composition are preserved",()=>{assert.equal
 test("ambiguous car music asks one concrete question",()=>{const d=compileShortcutGoal("Starte Musik wenn ich ins Auto steige");assert.match(d.clarification??"",/CarPlay, Bluetooth oder Standort/);assert.equal(d.feasibility,"UNSUPPORTED");});
 test("candidate selection is smaller than catalog and relevant",()=>{const selected=relevantCatalogForGoal("AirPods verbunden Spotify starten");assert.ok(selected.length<CAPABILITY_CATALOG_V2.length);assert.ok(selected.some(c=>c.id==="media.spotify.open"));});
 test("catalog IDs are unique and safety metadata is complete",()=>{assert.equal(new Set(CAPABILITY_CATALOG_V2.map(c=>c.id)).size,CAPABILITY_CATALOG_V2.length);for(const c of CAPABILITY_CATALOG_V2){assert.ok(c.executionModes.length);assert.ok(c.fallback);assert.ok(c.availability);}});
-test("URL capability allow-lists documented schemes and foreground execution",()=>{const c=capabilityV2("system.url.open")!;assert.deepEqual(c.parameters.scheme.values,["https","http","maps"]);assert.equal(c.background,false);assert.equal(c.confirmation,true);});
+test("URL capability accepts a full URL but remains foreground and confirmation-gated",()=>{const c=capabilityV2("system.url.open")!;assert.equal(c.parameters.url.required,true);assert.equal(c.background,false);assert.equal(c.confirmation,true);assert.ok(c.executionModes.includes("DIRECT_PUBLIC_API"));});
 test("third-party and multi-condition plans cannot masquerade as free fully automatic work",()=>{const tesla=compileShortcutGoal(cases[7][0]);const conditioned=compileShortcutGoal(cases[8][0]);assert.equal(tesla.feasibility,"REQUIRES_THIRD_PARTY");assert.equal(tesla.variables.entitlement,"pro");assert.notEqual(conditioned.feasibility,"FULLY_AUTOMATIC");assert.equal(conditioned.variables.entitlement,"pro");});
 
 const paraphrases=[
@@ -62,11 +62,11 @@ test("definition validator rejects structural, role and safety lies",()=>{const 
  {...valid,actions:[{capabilityId:"system.brightness.set",parameters:{percent:"35"}}]},
  {...valid,actions:[{capabilityId:"system.brightness.set",parameters:{percent:101}}]},
  {...valid,actions:[{capabilityId:"system.brightness.set",parameters:{percent:-1}}]},
- {...valid,actions:[{capabilityId:"system.url.open",parameters:{scheme:"App-Prefs"}}]},
+ {...valid,actions:[{capabilityId:"system.url.open",parameters:{url:"App-Prefs://root=General"}}]},
  {...valid,trigger:{capabilityId:"system.brightness.set",parameters:{percent:35}}},
  {...valid,actions:[{capabilityId:"trigger.app-opened",parameters:{value:"YouTube"}}]},
  {...valid,actions:[{capabilityId:"system.brightness.set",parameters:{}}]},
- {...valid,background:true,actions:[{capabilityId:"system.url.open",parameters:{scheme:"https"}}]},
+ {...valid,background:true,actions:[{capabilityId:"system.url.open",parameters:{url:"https://example.com"}}]},
  {...valid,feasibility:"FULLY_AUTOMATIC",requiredSetup:["location"]},
  {...compileShortcutGoal(cases[7][0]),integrations:[]},
  {...compileShortcutGoal(cases[7][0]),confirmationRequired:false},
