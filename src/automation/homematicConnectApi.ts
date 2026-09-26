@@ -1,6 +1,6 @@
 export const HOMEMATIC_CONNECT_API_VERSION = "12";
 export const HOMEMATIC_PLUGIN_ID = "com.studiobonventre.canmyphone";
-export const HOMEMATIC_PLUGIN_NAME = "CanMyPhone";
+export const HOMEMATIC_PLUGIN_NAME = { de: "CanMyPhone", en: "CanMyPhone" } as const;
 
 export const HMIP_PATHS = {
   stateForClient: "/hmip/home/getStateForClient",
@@ -57,7 +57,7 @@ export type HomematicTarget =
 export function homematicHcuHost(lastFourSgtinDigits: string): string {
   const suffix = lastFourSgtinDigits.trim();
   if (!/^\d{4}$/.test(suffix)) throw new Error("HOMEMATIC_SGTIN_SUFFIX_INVALID");
-  return `hcu1-${suffix}.local`;
+  return `hcu1-${suffix.toUpperCase()}.local`;
 }
 
 export function homematicPairingURL(host: string, action: "request" | "confirm"): string {
@@ -77,7 +77,7 @@ export function homematicPairingHeaders(): Record<string, string> {
 
 export function homematicRequestTokenBody(
   activationKey: string,
-  friendlyName = HOMEMATIC_PLUGIN_NAME,
+  friendlyName: { de: string; en: string } = HOMEMATIC_PLUGIN_NAME,
   pluginId = HOMEMATIC_PLUGIN_ID
 ) {
   const key = activationKey.trim();
