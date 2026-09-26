@@ -63,10 +63,14 @@ function cleanName(value: string): string {
   return value.replace(/[„“]/g, '"').replace(/\s+/g, " ").trim().slice(0, 120);
 }
 
-export function buildAppleIntelligenceAutomationDescription(definition: ShortcutDefinition): string {
-  const name = cleanName(definition.name);
-  const trigger = triggerDescription(definition.trigger);
-  const actions = definition.actions.map(actionDescription).join(" und ");
+export function buildAppleIntelligenceAutomationDescriptionFromSteps(
+  nameValue: string,
+  triggerStep: ShortcutStep,
+  actionSteps: ShortcutStep[]
+): string {
+  const name = cleanName(nameValue);
+  const trigger = triggerDescription(triggerStep);
+  const actions = actionSteps.map(actionDescription).join(" und ");
 
   return [
     "Erstelle eine persönliche Automation in Kurzbefehle, nicht nur einen normalen Kurzbefehl.",
@@ -75,4 +79,12 @@ export function buildAppleIntelligenceAutomationDescription(definition: Shortcut
     `Verwende als auszuführende Aktion die App-Aktion „CanMyPhone Automation ausführen“ und wähle die gespeicherte CanMyPhone-Automation „${name}“.`,
     "Übernimm Trigger und Parameter aus dieser Beschreibung, prüfe die Zusammenfassung und erstelle die Automation so, dass sie ohne zusätzliche Nachfrage läuft, sofern iOS diesen Trigger dafür zulässt."
   ].join(" ");
+}
+
+export function buildAppleIntelligenceAutomationDescription(definition: ShortcutDefinition): string {
+  return buildAppleIntelligenceAutomationDescriptionFromSteps(
+    definition.name,
+    definition.trigger,
+    definition.actions
+  );
 }
