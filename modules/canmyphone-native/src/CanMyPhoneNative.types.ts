@@ -51,6 +51,30 @@ export type HomeKitActionResult = {
   message: string;
 };
 
+export type LocationAuthorizationResult = {
+  status: "always" | "whenInUse" | "denied" | "restricted" | "notDetermined" | "unknown";
+  always: boolean;
+  whenInUse: boolean;
+  servicesEnabled: boolean;
+};
+
+export type NamedLocation = {
+  name: string;
+  latitude: number;
+  longitude: number;
+  radius: number;
+  updatedAt: string;
+};
+
+export type LocationActionResult = {
+  success: boolean;
+  code?: string;
+  name?: string;
+  radius?: number;
+  active?: number;
+  message: string;
+};
+
 export type ShortcutsDestination = "app" | "create";
 
 export type ShortcutDescriptionHandoffResult = {
@@ -93,6 +117,11 @@ export type NativeModuleShape = {
   homeKitSetCover(room: string, device: string | null, position: number): Promise<HomeKitActionResult>;
   homeKitSetLight(room: string, device: string | null, value: string): Promise<HomeKitActionResult>;
   homeKitSetClimate(room: string, device: string | null, value: string): Promise<HomeKitActionResult>;
+  locationAuthorizationStatus(): Promise<LocationAuthorizationResult>;
+  requestLocationAutomationPermission(): Promise<LocationAuthorizationResult>;
+  saveCurrentLocationAs(name: string, radius: number): Promise<LocationActionResult>;
+  namedLocationsSnapshot(): Promise<NamedLocation[]>;
+  syncLocationAutomations(): Promise<LocationActionResult>;
   setPremiumEntitlement(enabled: boolean): Promise<void>;
   openAppSettings(): Promise<boolean>;
   openNotificationSettings(): Promise<boolean>;
