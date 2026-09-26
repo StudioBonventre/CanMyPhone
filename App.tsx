@@ -25,6 +25,8 @@ import { buildAppleIntelligenceAutomationDescription } from "./src/automation/ap
 import { compileAutomationRuntime } from "./src/automation/engine";
 import { approveSensitiveAutomation, materializeShortcutDefinition, type StoredAutomation } from "./src/automation/materialization";
 import { automationRepository, syncNativeRunnerResults } from "./src/automation/automationRepository";
+import { loadConnectorConnections } from "./src/automation/connectorConnectionRepository";
+import { connectedProviderIds, EMPTY_CONNECTOR_CONNECTION_PROFILE, type ConnectorConnectionProfile } from "./src/automation/connectorConnectionState";
 import { CanMyPhoneNative } from "./modules/canmyphone-native";
 import { trackProductEvent } from "./src/lib/analytics";
 import { AuraV2 } from "./src/components/AuraV2";
@@ -168,6 +170,7 @@ export default function App() {
   const [semanticDefinition, setSemanticDefinition] = useState<ReturnType<typeof compileShortcutGoal> | null>(null);
   const [semanticSuggestion, setSemanticSuggestion] = useState<AutomationSuggestion | null>(null);
   const [semanticClarification, setSemanticClarification] = useState<string | null>(null);
+  const [connectorConnections, setConnectorConnections] = useState<ConnectorConnectionProfile>(EMPTY_CONNECTOR_CONNECTION_PROFILE);
   const [automations, setAutomations] = useState<StoredAutomation[]>([]);
   const [installingAutomation, setInstallingAutomation] = useState<StoredAutomation | null>(null);
 
@@ -192,6 +195,9 @@ export default function App() {
 
   useEffect(() => {
     let alive = true;
+    loadConnectorConnections().then((profile) => {
+      if (alive) setConnectorConnections(profile);
+    }).catch(() => undefined);
     Promise.all([loadNeedRadarProfile(), loadGuideSession(), loadUserPreferences(), syncNativeRunnerResults()])
       .then(([savedProfile, savedGuide, savedPreferences, savedAutomations]) => {
         if (!alive) return;
@@ -830,7 +836,7 @@ export default function App() {
                   <View style={styles.answerArea}>
                     <ShortcutDefinitionPreview definition={shortcutDefinition} />
                     {semanticSuggestion ? <ContentSurface style={styles.resultBanner}><Text style={styles.resultTitle}>{semanticSuggestion.title}</Text><Text style={styles.resultText}>{semanticSuggestion.message}</Text>{semanticSuggestion.proposedGoal ? <Pressable onPress={()=>runAsk(semanticSuggestion.proposedGoal!).catch(()=>undefined)} style={styles.textAction}><Text style={styles.textActionText}>Vorschlag verwenden</Text></Pressable> : null}</ContentSurface> : null}
-                    {installingAutomation ? <AutomationInstallationCard automation={installingAutomation} onApprove={()=>approveAutomation().catch(()=>undefined)} onHandoff={()=>handoffAutomation().catch(()=>undefined)} onConfirm={()=>confirmAutomation().catch(()=>undefined)} onCancel={()=>cancelSetup().catch(()=>undefined)} /> : <LiquidButton style={styles.primaryAction} label="Automation einrichten" onPress={()=>createAutomation().catch(()=>undefined)} />}
+                    {installingAutomation ? <AutomationInstallationCard automation={installingAutomation} connectedProviderIds={[...connectedProviderIds(connectorConnections)]} onApprove={()=>approveAutomation().catch(()=>undefined)} onHandoff={()=>handoffAutomation().catch(()=>undefined)} onConfirm={()=>confirmAutomation().catch(()=>undefined)} onCancel={()=>cancelSetup().catch(()=>undefined)} /> : <LiquidButton style={styles.primaryAction} label="Automation einrichten" onPress={()=>createAutomation().catch(()=>undefined)} />}
                     {actionResult ? <ContentSurface style={styles.resultBanner}><Text style={styles.resultTitle}>Status</Text><Text style={styles.resultText}>{actionResult.message}</Text></ContentSurface> : null}
                   </View>
                 ) : semanticClarification ? (
