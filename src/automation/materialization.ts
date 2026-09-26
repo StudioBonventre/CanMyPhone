@@ -1,7 +1,6 @@
 import { capabilityV2 } from "./capabilityCatalogV2";
 import type { ShortcutDefinition, ShortcutStep } from "./shortcutCompiler";
 import { validateShortcutDefinition } from "./shortcutValidation";
-import { buildAppleIntelligenceAutomationDescription } from "./appleShortcutsHandoff";
 
 export const STORED_AUTOMATION_SCHEMA_VERSION = 2 as const;
 
