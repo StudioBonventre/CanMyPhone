@@ -36,7 +36,7 @@ function json(body:unknown,status=200){
   return Response.json(body,{status,headers:{"Cache-Control":"no-store"}});
 }
 
-async function callModel(goal:string,locale:string,connectedProviderIds:string[],signal:AbortSignal){
+async function callModel(goal:string,locale:string,connectedProviderIds:string[],localNow:string,timeZone:string,signal:AbortSignal){
   const key=Deno.env.get("OPENAI_API_KEY");
   if(!key)throw new Error("missing_ai_secret");
   const model=Deno.env.get("AI_PLANNER_MODEL_FAST")||"gpt-5-mini";
@@ -56,7 +56,10 @@ async function callModel(goal:string,locale:string,connectedProviderIds:string[]
           "Ask one short clarification only when a necessary trigger, target or value is genuinely ambiguous.",
           "Optional suggestions may improve the automation but must never silently alter the request.",
           semanticCapabilitySummary,
-          `Connected providers: ${connectedProviderIds.length?connectedProviderIds.join(", "):"none"}`
+          `Connected providers: ${connectedProviderIds.length?connectedProviderIds.join(", "):"none"}`,
+          `Current local timestamp: ${localNow}`,
+          `Time zone: ${timeZone}`,
+          "Resolve relative dates only when this context makes them unambiguous; otherwise ask one concise clarification."
         ].join("\n")},
         {role:"user",content:JSON.stringify({goal,locale})}
       ],
@@ -77,13 +80,15 @@ Deno.serve(async(request)=>{
   let input:unknown;
   try{input=await request.json();}catch{return json({ok:false,code:"invalid_request"},400);}
   if(!input||typeof input!=="object")return json({ok:false,code:"invalid_request"},400);
-  const {goal,locale="de",connectedProviderIds=[]}=input as {goal?:unknown;locale?:unknown;connectedProviderIds?:unknown};
-  if(typeof goal!=="string"||!goal.trim()||goal.length>800||typeof locale!=="string"||!Array.isArray(connectedProviderIds)||connectedProviderIds.length>20||connectedProviderIds.some((id)=>typeof id!=="string"||id.length>80))return json({ok:false,code:"invalid_request"},400);
+  const {goal,locale="de",connectedProviderIds=[],localNow="",timeZone=""}=input as {goal?:unknown;locale?:unknown;connectedProviderIds?:unknown;localNow?:unknown;timeZone?:unknown};
+  if(typeof goal!=="string"||!goal.trim()||goal.length>800||typeof locale!=="string"||!Array.isArray(connectedProviderIds)||connectedProviderIds.length>20||connectedProviderIds.some((id)=>typeof id!=="string"||id.length>80)||typeof localNow!=="string"||localNow.length>80||typeof timeZone!=="string"||timeZone.length>80)return json({ok:false,code:"invalid_request"},400);
 
   const controller=new AbortController();
   const timer=setTimeout(()=>controller.abort(),timeoutMs);
   try{
-    const proposal=await callModel(goal.trim(),locale.slice(0,10),connectedProviderIds as string[],controller.signal);
+    const nowValue=localNow||new Date().toISOString();
+    const timeZoneValue=timeZone||"unknown";
+    const proposal=await callModel(goal.trim(),locale.slice(0,10),connectedProviderIds as string[],nowValue,timeZoneValue,controller.signal);
     const validated=validateSemanticEnvelope(proposal);
     if(!validated.ok){
       console.warn(safeSemanticLogFields(requestId,"error",validated.code));
