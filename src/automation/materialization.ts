@@ -2,6 +2,7 @@ import { capabilityV2 } from "./capabilityCatalogV2";
 import type { ShortcutDefinition, ShortcutStep } from "./shortcutCompiler";
 import { validateShortcutDefinition } from "./shortcutValidation";
 import { compileAutomationRuntime } from "./engine";
+import { automationDisplayName } from "./displayName";
 
 export const STORED_AUTOMATION_SCHEMA_VERSION = 2 as const;
 
@@ -124,7 +125,7 @@ export function materializeShortcutDefinition(definition: ShortcutDefinition, no
 
   const personalSetup = runtime.appleBridgeRequired ? createPersonalAutomationSetup(id, definition.trigger, definition.actions, definition.name) : undefined;
   return {
-    id, name: definition.name, version: STORED_AUTOMATION_SCHEMA_VERSION,
+    id, name: automationDisplayName(definition), version: STORED_AUTOMATION_SCHEMA_VERSION,
     originalIntentSummary: definition.name.slice(0, 120), definition, enabled: false,
     createdAt: stamp, updatedAt: stamp, executionCount: 0, requiresPro,
     riskLevel: definition.risk, confirmationRequired: definition.confirmationRequired,
