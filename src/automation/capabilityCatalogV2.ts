@@ -26,10 +26,10 @@ export const CAPABILITY_CATALOG_V2: readonly CapabilityV2[] = [
   ].map((name)=>cap({
     id:`trigger.${name}`,
     category:"trigger",
-    provider:"apple-shortcuts",
+    provider:name.startsWith("location")?"ios":"apple-shortcuts",
     role:"trigger",
     description:name,
-    executionModes:["PERSONAL_AUTOMATION"],
+    executionModes:name.startsWith("location")?["DIRECT_PUBLIC_API","PERSONAL_AUTOMATION"]:["PERSONAL_AUTOMATION"],
     risk:name.startsWith("location")||name==="transaction"||name==="email-received"||name==="message-received"?"medium":"low",
     requiresPro:false,
     publicApi:true,
