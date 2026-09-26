@@ -72,6 +72,12 @@ test("arbitrary app names are preserved for app-open triggers",()=>{
   assert.equal(compileShortcutGoal("Wenn TikTok geöffnet wird, Helligkeit auf 30 %.").trigger.parameters.value,"TikTok");
   assert.equal(compileShortcutGoal("Wenn ich Threads öffne, Helligkeit auf 40 %.").trigger.parameters.value,"Threads");
   assert.equal(compileShortcutGoal("Sobald Lightroom gestartet wird, Helligkeit auf 55 %.").trigger.parameters.value,"Lightroom");
+  const shorthand=compileShortcutGoal("wenn tiktok öffnen, dann helligkeit auf 100%.");
+  assert.equal(shorthand.trigger.capabilityId,"trigger.app-opened");
+  assert.equal(shorthand.trigger.parameters.value,"tiktok");
+  assert.equal(shorthand.actions[0]?.capabilityId,"system.brightness.set");
+  assert.equal(shorthand.actions[0]?.parameters.percent,100);
+  assert.ok(shorthand.confidence>=0.8);
 });
 test("opening a known app manually is not mistaken for an app-open trigger",()=>{
   const d=compileShortcutGoal("Öffne Spotify.");

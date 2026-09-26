@@ -16,6 +16,7 @@ function extractAppTriggerName(goal:string):string|undefined {
   const patterns=[
     /(?:wenn|sobald|falls|immer\s+wenn)\s+ich\s+(?:die\s+app\s+)?([\p{L}\p{N}][\p{L}\p{N} .+&'_-]{0,60}?)\s+(?:öffne|starte)\b/iu,
     /(?:wenn|sobald|falls|immer\s+wenn)\s+(?:die\s+app\s+)?([\p{L}\p{N}][\p{L}\p{N} .+&'_-]{0,60}?)\s+(?:geöffnet|gestartet)\s+wird\b/iu,
+    /(?:wenn|sobald|falls|immer\s+wenn)\s+(?:die\s+app\s+)?([\p{L}\p{N}][\p{L}\p{N} .+&'_-]{0,60}?)\s+(?:öffnet|öffnen|startet|starten)\b/iu,
     /beim\s+öffnen\s+(?:der\s+app\s+)?(?:von\s+)?([\p{L}\p{N}][\p{L}\p{N} .+&'_-]{0,60}?)(?:\s*,|\s+dann\b|\s+soll\b|$)/iu
   ];
   for(const pattern of patterns){
@@ -26,7 +27,7 @@ function extractAppTriggerName(goal:string):string|undefined {
 }
 
 function hasAppTriggerLanguage(q:string):boolean {
-  return /(?:wenn|sobald|falls|immer wenn).{0,90}(?:öffne|geöffnet wird|starte|gestartet wird)/.test(q) || /beim öffnen/.test(q);
+  return /(?:wenn|sobald|falls|immer wenn).{0,90}(?:öffne|öffnet|öffnen|geöffnet wird|starte|startet|starten|gestartet wird)/.test(q) || /beim öffnen/.test(q);
 }
 const riskRank={low:0,medium:1,high:2} as const;
 const riskByRank=["low","medium","high"] as const;
