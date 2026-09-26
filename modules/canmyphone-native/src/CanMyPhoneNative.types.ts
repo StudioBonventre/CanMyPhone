@@ -23,6 +23,12 @@ export type BrightnessResult = {
 
 export type ShortcutsDestination = "app" | "create";
 
+export type ShortcutDescriptionHandoffResult = {
+  opened: boolean;
+  copied: boolean;
+  message: string;
+};
+
 export type StoreProductInfo = {
   id: string;
   displayName: string;
@@ -57,6 +63,7 @@ export type NativeModuleShape = {
   openAppSettings(): Promise<boolean>;
   openNotificationSettings(): Promise<boolean>;
   openShortcuts(destination: ShortcutsDestination): Promise<boolean>;
+  prepareShortcutDescription(description: string): Promise<ShortcutDescriptionHandoffResult>;
   syncAutomationDefinition(json: string): Promise<boolean>;
   deleteAutomationDefinition(automationId: string): Promise<void>;
   runStoredAutomation(automationId: string): Promise<Record<string, unknown>>;
