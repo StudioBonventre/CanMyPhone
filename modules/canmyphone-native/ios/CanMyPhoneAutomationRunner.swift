@@ -1,6 +1,7 @@
 import Foundation
 import StoreKit
 import UIKit
+import AVFoundation
 
 enum CanMyPhoneAutomationStore {
   static let suiteName = "group.com.studiobonventre.canmyphone"
@@ -33,7 +34,7 @@ enum CanMyPhoneAutomationStore {
 
 enum CanMyPhoneAutomationRunner {
   private static let proProductIDs = Set(["com.studiobonventre.canmyphone.pro.monthly", "com.studiobonventre.canmyphone.pro.yearly"])
-  private static let allowedCapabilities = Set(["system.brightness.set", "system.volume.set", "system.low-power.set", "system.flashlight.set", "system.focus.set", "system.app.open", "system.url.open", "media.play-pause", "media.playlist.play", "media.apple-music.play", "media.spotify.open", "navigation.route.start", "productivity.reminder.create", "smart-home.scene.run", "tesla.rear-trunk.close"])
+  private static let allowedCapabilities = Set(["system.brightness.set", "system.volume.set", "system.low-power.set", "system.flashlight.set", "system.focus.set", "system.app.open", "system.clipboard.set", "system.url.open", "media.play-pause", "media.playlist.play", "media.apple-music.play", "media.spotify.open", "navigation.route.start", "productivity.reminder.create", "smart-home.scene.run", "tesla.rear-trunk.close"])
 
   static func run(id: String) async -> [String: Any] {
     guard CanMyPhoneAutomationStore.validID(id), var item = CanMyPhoneAutomationStore.load(id: id) else { return result(id, "INVALID_DEFINITION", "Die Automation wurde nicht gefunden oder ist ungültig.", [], nil, "INVALID_DEFINITION") }
@@ -53,11 +54,56 @@ enum CanMyPhoneAutomationRunner {
       case "system.brightness.set":
         guard Set(parameters.keys) == Set(["percent"]), let percent = number(parameters["percent"]), (0.0...100.0).contains(percent) else { return finish(&item, id, "INVALID_DEFINITION", "Der Helligkeitswert ist ungültig.", executed, capability, "INVALID_PARAMETER") }
         let applied = await MainActor.run { UIScreen.main.brightness = CGFloat(percent / 100); return abs(Double(UIScreen.main.brightness) * 100 - percent) < 2 }
-        guard applied else { return finish(&item, id, "FAILED", "Die Helligkeit konnte nicht bestätigt werden.", executed, capability, "ACTION_FAILED") }; executed.append(capability)
+        guard applied else { return finish(&item, id, "FAILED", "Die Helligkeit konnte nicht bestätigt werden.", executed, capability, "ACTION_FAILED") }
+        executed.append(capability)
+
+      case "system.flashlight.set":
+        guard Set(parameters.keys) == Set(["value"]), let value = parameters["value"] as? String, ["on","off"].contains(value) else { return finish(&item, id, "INVALID_DEFINITION", "Der Taschenlampenwert ist ungültig.", executed, capability, "INVALID_PARAMETER") }
+        guard let device = AVCaptureDevice.default(for: .video), device.hasTorch else { return finish(&item, id, "FAILED", "Auf diesem Gerät ist keine Taschenlampe verfügbar.", executed, capability, "TORCH_UNAVAILABLE") }
+        do {
+          try device.lockForConfiguration()
+          defer { device.unlockForConfiguration() }
+          let mode: AVCaptureDevice.TorchMode = value == "on" ? .on : .off
+          guard device.isTorchModeSupported(mode) else { return finish(&item, id, "FAILED", "Dieser Taschenlampenmodus wird nicht unterstützt.", executed, capability, "TORCH_MODE_UNSUPPORTED") }
+          device.torchMode = mode
+          executed.append(capability)
+        } catch {
+          return finish(&item, id, "FAILED", "Die Taschenlampe konnte nicht geändert werden.", executed, capability, "TORCH_FAILED")
+        }
+
+      case "system.clipboard.set":
+        guard Set(parameters.keys) == Set(["value"]), let text = parameters["value"] as? String else { return finish(&item, id, "INVALID_DEFINITION", "Der Text für die Zwischenablage ist ungültig.", executed, capability, "INVALID_PARAMETER") }
+        let copied = await MainActor.run { UIPasteboard.general.string = text; return UIPasteboard.general.string == text }
+        guard copied else { return finish(&item, id, "FAILED", "Die Zwischenablage konnte nicht gesetzt werden.", executed, capability, "CLIPBOARD_FAILED") }
+        executed.append(capability)
+
+      case "system.url.open":
+        guard Set(parameters.keys) == Set(["url"]), let raw = parameters["url"] as? String, let url = URL(string: raw), let scheme = url.scheme?.lowercased(), ["https","http","maps"].contains(scheme) else { return finish(&item, id, "INVALID_DEFINITION", "Die URL ist ungültig oder nicht freigegeben.", executed, capability, "INVALID_URL") }
+        let opened = await openExternal(url)
+        guard opened else { return finish(&item, id, "FAILED", "Die URL konnte nicht geöffnet werden.", executed, capability, "URL_OPEN_FAILED") }
+        executed.append(capability)
+
+      case "navigation.route.start":
+        guard Set(parameters.keys) == Set(["destination"]), let destination = parameters["destination"] as? String, !destination.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return finish(&item, id, "INVALID_DEFINITION", "Das Navigationsziel ist ungültig.", executed, capability, "INVALID_PARAMETER") }
+        var components = URLComponents(string: "https://maps.apple.com/")
+        components?.queryItems = [URLQueryItem(name: "daddr", value: destination), URLQueryItem(name: "dirflg", value: "d")]
+        guard let url = components?.url, await openExternal(url) else { return finish(&item, id, "FAILED", "Die Navigation konnte nicht geöffnet werden.", executed, capability, "NAVIGATION_OPEN_FAILED") }
+        executed.append(capability)
+
       default: return finish(&item, id, "UNSUPPORTED_ACTION", "Diese Aktion muss in Apples Kurzbefehle-App oder über einen verbundenen Dienst ausgeführt werden.", executed, capability, "ACTION_NOT_EXECUTABLE")
       }
     }
     return finish(&item, id, "SUCCESS", "Alle Aktionen wurden erfolgreich ausgeführt.", executed, nil, nil)
+  }
+
+  private static func openExternal(_ url: URL) async -> Bool {
+    await withCheckedContinuation { continuation in
+      Task { @MainActor in
+        UIApplication.shared.open(url, options: [:]) { success in
+          continuation.resume(returning: success)
+        }
+      }
+    }
   }
 
   private static func hasActiveProEntitlement() async -> Bool {
