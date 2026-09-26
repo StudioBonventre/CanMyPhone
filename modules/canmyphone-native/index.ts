@@ -6,6 +6,7 @@ export type {
   FoundationModelStatus,
   HomeKitActionResult,
   HomeKitSnapshotResult,
+  HomematicActionResult,
   LocationActionResult,
   LocationAuthorizationResult,
   NamedLocation,
