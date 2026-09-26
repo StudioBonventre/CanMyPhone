@@ -59,14 +59,14 @@ const state = parseHomematicState({
 });
 
 test("Homematic pairing uses the documented local HCU endpoints and VERSION header",()=>{
-  const host=homematicHcuHost("1234");
-  assert.equal(host,"hcu1-1234.local");
-  assert.equal(homematicPairingURL(host,"request"),"https://hcu1-1234.local:6969/hmip/auth/requestConnectApiAuthToken");
-  assert.equal(homematicPairingURL(host,"confirm"),"https://hcu1-1234.local:6969/hmip/auth/confirmConnectApiAuthToken");
+  const host=homematicHcuHost("aB1d");
+  assert.equal(host,"hcu1-AB1D.local");
+  assert.equal(homematicPairingURL(host,"request"),"https://hcu1-AB1D.local:6969/hmip/auth/requestConnectApiAuthToken");
+  assert.equal(homematicPairingURL(host,"confirm"),"https://hcu1-AB1D.local:6969/hmip/auth/confirmConnectApiAuthToken");
   assert.deepEqual(homematicPairingHeaders(),{"Content-Type":"application/json",VERSION:HOMEMATIC_CONNECT_API_VERSION});
-  assert.deepEqual(homematicRequestTokenBody("key"),{activationKey:"key",pluginId:HOMEMATIC_PLUGIN_ID,friendlyName:"CanMyPhone"});
+  assert.deepEqual(homematicRequestTokenBody("key"),{activationKey:"key",pluginId:HOMEMATIC_PLUGIN_ID,friendlyName:{de:"CanMyPhone",en:"CanMyPhone"}});
   assert.deepEqual(homematicConfirmTokenBody("key","token"),{activationKey:"key",authToken:"token"});
-  assert.throws(()=>homematicHcuHost("12ab"),/INVALID/);
+  assert.throws(()=>homematicHcuHost("12-!"),/INVALID/);
 });
 
 test("Homematic websocket configuration stays local and sends only official auth headers",()=>{
