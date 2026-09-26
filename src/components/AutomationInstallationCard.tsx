@@ -11,16 +11,16 @@ export function AutomationInstallationCard({ automation, onHandoff, onConfirm, o
   const direct=!setup;
   const runtime=compileAutomationRuntime(automation.definition);
   return <ContentSurface emphasis="active" style={styles.card}>
-    <Text style={styles.eyebrow}>{direct?"BEREIT":"FAST FERTIG"}</Text>
+    <Text style={styles.eyebrow}>{direct?"BEREIT":runtime.appleBridgePurpose === "TRIGGER_ONLY" ? "CANMYPHONE IST BEREIT" : "FAST FERTIG"}</Text>
     <Text style={styles.title}>{automation.name}</Text>
-    <Text style={styles.status}>{automation.materializationState === "ACTIVE" ? "AKTIV · Wartet auf Trigger" : runtime.summary}</Text>
-    {runtime.appleBridgePurpose === "TRIGGER_ONLY" ? <Text style={styles.engineNote}>CanMyPhone Engine · Kurzbefehle nur als Trigger-Brücke</Text> : null}
+    <Text style={styles.status}>{automation.materializationState === "ACTIVE" ? "AKTIV · Wartet auf Trigger" : runtime.appleBridgePurpose === "TRIGGER_ONLY" ? "Die Automation ist bereits in CanMyPhone gespeichert. Apple muss nur noch den iOS-Trigger verbinden." : runtime.summary}</Text>
+    {runtime.appleBridgePurpose === "TRIGGER_ONLY" ? <Text style={styles.engineNote}>Kein Text zum Kopieren oder Einfügen · Kurzbefehle dient nur als Trigger-Brücke</Text> : null}
     {automation.requiredSetup.length ? <Text style={styles.requirements}>Benötigt: {automation.requiredSetup.join(" · ")}</Text> : null}
     {automation.safetyApproval.required&&!hasValidSafetyApproval(automation)?<><Text style={styles.warning}>Sensible Aktion: Prüfe Trigger, Bedingungen und Aktion genau. Deine Freigabe gilt nur für diese konkrete Version.</Text><LiquidButton label="Diese Automation ausdrücklich freigeben" onPress={onApprove}/></>:<>{setup ? <View style={styles.steps}>{(runtime.appleBridgePurpose === "TRIGGER_ONLY" ? [
-      "In Kurzbefehle „Automation“ → „Neue Automation“ öffnen.",
-      setup.setupSteps[1] ?? "Den gewünschten Apple-Trigger auswählen.",
-      "„CanMyPhone Automation ausführen“ hinzufügen und die eben erstellte Automation auswählen. Kein Text und keine ID nötig.",
-      "Auf „Fertig“ tippen."
+      "Tippe unten auf „Apple-Trigger verbinden“. Erst dann öffnet CanMyPhone Kurzbefehle.",
+      "Dort „Automation“ → „Neue Automation“ öffnen und " + (setup.setupSteps[1] ?? "den gewünschten Trigger auswählen") + ".",
+      "Als Aktion „CanMyPhone Automation ausführen“ wählen und die bereits gespeicherte Automation antippen. Kein Text und keine ID nötig.",
+      "Mit „Fertig“ sichern und zu CanMyPhone zurückkehren."
     ] : setup.handoffMode === "APPLE_INTELLIGENCE" ? [
       "CanMyPhone hat die komplette Automation beschrieben und in die Zwischenablage gelegt.",
       "Füge die Beschreibung in Kurzbefehle bei „Beschreibe einen Kurzbefehl“ ein. Kurzbefehle baut Trigger und Aktionen.",
@@ -30,7 +30,7 @@ export function AutomationInstallationCard({ automation, onHandoff, onConfirm, o
       <Text style={styles.question}>Hast du die Automation in Kurzbefehle fertiggestellt?</Text>
       <LiquidButton label="Ja, fertig" onPress={onConfirm}/>
       <Pressable onPress={onCancel} style={styles.cancel}><Text style={styles.cancelText}>Noch nicht</Text></Pressable>
-    </> : <LiquidButton label={direct?"Jetzt aktivieren":runtime.appleBridgePurpose === "TRIGGER_ONLY" ? "Apple-Trigger verbinden" : setup?.setupState === "HANDED_OFF" ? "Kurzbefehle erneut öffnen" : "Kurzbefehle öffnen"} onPress={direct?onConfirm:onHandoff}/>}</>}
+    </> : <LiquidButton label={direct?"Jetzt aktivieren":runtime.appleBridgePurpose === "TRIGGER_ONLY" ? (setup?.setupState === "HANDED_OFF" ? "Apple-Trigger erneut öffnen" : "Apple-Trigger verbinden") : setup?.setupState === "HANDED_OFF" ? "Kurzbefehle erneut öffnen" : "Kurzbefehle öffnen"} onPress={direct?onConfirm:onHandoff}/>}</>}
   </ContentSurface>;
 }
 

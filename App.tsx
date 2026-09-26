@@ -393,12 +393,26 @@ export default function App() {
     if (!shortcutDefinition) return;
     trackProductEvent("automation_materialization_started", { strategy: shortcutDefinition.executionStrategy });
     try {
-      let stored = await automationRepository.save(materializeShortcutDefinition(shortcutDefinition));
+      const stored = await automationRepository.save(materializeShortcutDefinition(shortcutDefinition));
       setInstallingAutomation(stored);
       setAutomations(await automationRepository.list());
 
+      // Do not throw the person out of CanMyPhone immediately. First show what
+      // CanMyPhone already created and which Apple-owned trigger still needs a
+      // one-time connection. Shortcuts opens only after an explicit tap.
       if (stored.personalSetup) {
-        await openPersonalAutomationInShortcuts(stored);
+        const runtime = compileAutomationRuntime(stored.definition);
+        setActionResult({
+          handled: true,
+          succeeded: true,
+          message: runtime.appleBridgePurpose === "TRIGGER_ONLY"
+            ? "CanMyPhone ist fertig. iOS muss nur noch den Trigger mit der gespeicherten Automation verbinden."
+            : "Die Automation ist vorbereitet. Ein Apple-Schritt muss noch verbunden werden."
+        });
+        trackProductEvent("automation_saved_waiting_for_apple_setup", {
+          bridge_purpose: runtime.appleBridgePurpose,
+          trigger: stored.definition.trigger.capabilityId
+        });
       }
     } catch {
       setActionResult({ handled: true, succeeded: false, message: "Diese Automation kann ich noch nicht sicher erstellen." });
