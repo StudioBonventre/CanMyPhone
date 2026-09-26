@@ -44,7 +44,8 @@ export function AutomationInstallationCard({
     ?namedLocationNames.some((name)=>name.localeCompare(locationValue,undefined,{sensitivity:"accent"})===0)
     :false;
   const waitingForLocation=locationTrigger&&(!locationAlways||!locationConfigured);
-  const waitingForConnector=automation.materializationState==="INTEGRATION_REQUIRED"||connectorPlan.requirements.length>0;
+  const waitingForConnector=connectorPlan.requirements.length>0&&!connectorPlan.ready;
+  const locationLabel=locationValue==="parked-vehicle-location"?"Standort bei deinem Tesla":locationValue;
   const heading=automation.materializationState==="ACTIVE"
     ?"AKTIV"
     :waitingForConnector
@@ -115,9 +116,9 @@ export function AutomationInstallationCard({
           ?<LiquidButton label="Standort für Automationen erlauben" onPress={()=>onRequestLocationPermission?.()}/>
           :<Text style={styles.locationReady}>Standortzugriff „Immer“ ist aktiv.</Text>}
         {!locationConfigured&&locationValue
-          ?<LiquidButton variant="glass" label={`„${locationValue}“ hier speichern`} onPress={()=>onSaveNamedLocation?.(locationValue)}/>
+          ?<><Text style={styles.locationHint}>{locationValue==="parked-vehicle-location"?"Richte die Automation einmal ein, während du bei deinem geparkten Tesla bist.":`Speichere den Ort „${locationLabel}“ an der gewünschten Position.`}</Text><LiquidButton variant="glass" label={`„${locationLabel}“ hier speichern`} onPress={()=>onSaveNamedLocation?.(locationValue)}/></>
           :locationConfigured
-            ?<Text style={styles.locationReady}>Ort „{locationValue}“ ist gespeichert.</Text>
+            ?<Text style={styles.locationReady}>Ort „{locationLabel}“ ist gespeichert.</Text>
             :null}
       </View>
       :null}
@@ -185,6 +186,7 @@ const styles=StyleSheet.create({
   secondaryActionText:{fontSize:12,lineHeight:18,fontWeight:"700",textAlign:"center",color:liquidIce.color.textSecondary},
   locationBox:{marginTop:14,padding:14,borderRadius:16,backgroundColor:"rgba(255,255,255,0.62)",borderWidth:StyleSheet.hairlineWidth,borderColor:"rgba(79,94,110,0.14)",gap:10},
   locationReady:{fontSize:12,fontWeight:"700",color:liquidIce.color.textSecondary},
+  locationHint:{fontSize:11,lineHeight:16,color:liquidIce.color.textSecondary},
   connectorList:{marginTop:14,gap:8},
   connectorRow:{padding:12,borderRadius:14,backgroundColor:"rgba(255,255,255,0.58)",borderWidth:StyleSheet.hairlineWidth,borderColor:"rgba(79,94,110,0.14)"},
   connectorName:{fontSize:13,fontWeight:"700",color:liquidIce.color.textPrimary},
