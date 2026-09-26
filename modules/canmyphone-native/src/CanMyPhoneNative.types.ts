@@ -51,6 +51,15 @@ export type HomeKitActionResult = {
   message: string;
 };
 
+export type HomematicActionResult = {
+  success: boolean;
+  code?: string;
+  host?: string;
+  clientId?: string;
+  state?: Record<string, unknown>;
+  message: string;
+};
+
 export type LocationAuthorizationResult = {
   status: "always" | "whenInUse" | "denied" | "restricted" | "notDetermined" | "unknown";
   always: boolean;
@@ -117,6 +126,10 @@ export type NativeModuleShape = {
   homeKitSetCover(room: string, device: string | null, position: number): Promise<HomeKitActionResult>;
   homeKitSetLight(room: string, device: string | null, value: string): Promise<HomeKitActionResult>;
   homeKitSetClimate(room: string, device: string | null, value: string): Promise<HomeKitActionResult>;
+  homematicPair(lastFourSgtin: string, activationKey: string): Promise<HomematicActionResult>;
+  homematicSnapshot(): Promise<HomematicActionResult>;
+  homematicExecute(path: string, bodyJson: string): Promise<HomematicActionResult>;
+  homematicDisconnect(): Promise<HomematicActionResult>;
   locationAuthorizationStatus(): Promise<LocationAuthorizationResult>;
   requestLocationAutomationPermission(): Promise<LocationAuthorizationResult>;
   saveCurrentLocationAs(name: string, radius: number): Promise<LocationActionResult>;
