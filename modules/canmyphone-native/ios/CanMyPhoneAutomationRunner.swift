@@ -113,6 +113,31 @@ enum CanMyPhoneAutomationRunner {
         guard reminderResult["success"] as? Bool == true else { return finish(&item, id, "FAILED", reminderResult["message"] as? String ?? "Die Erinnerung konnte nicht erstellt werden.", executed, capability, reminderResult["code"] as? String ?? "REMINDER_FAILED") }
         executed.append(capability)
 
+      case "tesla.rear-trunk.close":
+        let allowed = Set(["expectedState", "vehicle"])
+        guard
+          Set(parameters.keys).isSubset(of: allowed),
+          parameters["expectedState"] as? String == "open"
+        else {
+          return finish(&item, id, "INVALID_DEFINITION", "Die Tesla-Heckklappen-Aktion ist ungültig.", executed, capability, "INVALID_PARAMETER")
+        }
+        let teslaResult = await CanMyPhoneTeslaBridge.shared.execute(
+          operation: "vehicle.rear-trunk.close",
+          vehicle: parameters["vehicle"] as? String
+        )
+        guard teslaResult["success"] as? Bool == true else {
+          return finish(
+            &item,
+            id,
+            "FAILED",
+            teslaResult["message"] as? String ?? "Tesla hat den Heckklappen-Befehl nicht bestätigt.",
+            executed,
+            capability,
+            teslaResult["code"] as? String ?? "TESLA_COMMAND_FAILED"
+          )
+        }
+        executed.append(capability)
+
       case "smart-home.scene.run":
         let allowed = Set(["scene", "home"])
         guard Set(parameters.keys).isSubset(of: allowed), let scene = parameters["scene"] as? String else { return finish(&item, id, "INVALID_DEFINITION", "Der Szenenname fehlt.", executed, capability, "INVALID_PARAMETER") }
