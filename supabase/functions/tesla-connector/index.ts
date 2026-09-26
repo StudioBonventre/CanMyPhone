@@ -257,12 +257,22 @@ function pairingUrl(vin?:string){
 }
 
 async function fleetStatus(tokens:TeslaTokens,vins:string[]){
-  if(!vins.length)return {paired:[] as string[]};
+  if(!vins.length)return {paired:[] as string[],commandReady:[] as string[]};
   const response=await teslaFetch(tokens,"/api/1/vehicles/fleet_status",{method:"POST",body:JSON.stringify({vins})});
   const payload=await response.json().catch(()=>null) as any;
   if(!response.ok)throw new Error("tesla_fleet_status_failed");
-  const paired=Array.isArray(payload?.response?.key_paired_vins)?payload.response.key_paired_vins.filter((x:any)=>typeof x==="string"):[];
-  return {paired};
+  const paired=Array.isArray(payload?.response?.key_paired_vins)
+    ?payload.response.key_paired_vins.filter((x:any)=>typeof x==="string")
+    :[];
+  const pairedSet=new Set<string>(paired);
+  const vehicleInfo=(payload?.response?.vehicle_info&&typeof payload.response.vehicle_info==="object")
+    ?payload.response.vehicle_info as Record<string,Record<string,unknown>>
+    :{};
+  const commandReady=vins.filter((vin)=>{
+    const requiresProtocol=vehicleInfo[vin]?.vehicle_command_protocol_required;
+    return requiresProtocol===false||pairedSet.has(vin);
+  });
+  return {paired,commandReady};
 }
 
 async function command(tokens:TeslaTokens,vin:string,path:string,body:Record<string,unknown>){
@@ -353,18 +363,20 @@ Deno.serve(async(request)=>{
       const vins=list.map(vinOf).filter((vin):vin is string=>Boolean(vin));
       const status=await fleetStatus(tokens,vins);
       const proxyConfigured=Boolean(optionalEnv("TESLA_COMMAND_PROXY_URL"));
-      const ready=proxyConfigured&&status.paired.length>0;
+      const readyVehicleCount=status.commandReady.length;
+      const ready=proxyConfigured&&readyVehicleCount>0;
       return json({
         ok:true,
         connected:true,
         ready,
         vehicleCount:vins.length,
         pairedVehicleCount:status.paired.length,
+        readyVehicleCount,
         ...(!ready?{pairingUrl:pairingUrl(vins.length===1?vins[0]:undefined)}:{}),
         message:ready
           ?"Tesla ist für sichere Fahrzeugbefehle bereit."
           :proxyConfigured
-            ?"Tesla ist angemeldet. Der virtuelle Fahrzeugschlüssel muss noch gekoppelt werden."
+            ?"Tesla ist angemeldet. Fahrzeuge mit Vehicle Command Protocol benötigen noch den virtuellen Fahrzeugschlüssel."
             :"Tesla ist angemeldet; der signierende Vehicle-Command-Proxy ist serverseitig noch nicht konfiguriert."
       });
     }
