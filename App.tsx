@@ -553,7 +553,11 @@ export default function App() {
       let semanticHandled = false;
 
       if (preferences.useOnDeviceAI) {
-        const semantic = await interpretAutomationWithOnDeviceAI(normalized, { connectedProviderIds: [...connectedProviderIds(connectorConnections)] });
+        const semantic = await interpretAutomationWithOnDeviceAI(normalized, {
+          connectedProviderIds: [...connectedProviderIds(connectorConnections)],
+          localNow: new Date().toISOString(),
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+        });
         if (semantic.kind === "understood") {
           setSemanticDefinition(semantic.definition);
           setSemanticSuggestion(semantic.suggestion ?? null);
@@ -569,7 +573,9 @@ export default function App() {
         if (serverSemantic) {
           const semantic = await serverSemantic.interpret(normalized, {
             locale: "de",
-            connectedProviderIds: [...connectedProviderIds(connectorConnections)]
+            connectedProviderIds: [...connectedProviderIds(connectorConnections)],
+            localNow: new Date().toISOString(),
+            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
           });
           if (semantic.kind === "understood") {
             setSemanticDefinition(semantic.definition);
