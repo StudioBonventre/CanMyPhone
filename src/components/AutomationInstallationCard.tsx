@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { hasValidSafetyApproval, type StoredAutomation } from "../automation/materialization";
 import { compileAutomationRuntime } from "../automation/engine";
 import { connectorPlanForDefinition } from "../automation/connectorPlanning";
+import { launcherPlanForDefinition } from "../automation/appLauncher";
 import { liquidIce } from "../theme/liquidIce";
 import { ContentSurface } from "./ContentSurface";
 import { LiquidButton } from "./LiquidButton";
@@ -13,6 +14,7 @@ export function AutomationInstallationCard({
   onConfirm,
   onCancel,
   onApprove,
+  onLaunchWithCanMyPhone,
   connectedProviderIds = []
 }:{
   automation:StoredAutomation;
@@ -20,12 +22,14 @@ export function AutomationInstallationCard({
   onConfirm:()=>void;
   onCancel:()=>void;
   onApprove:()=>void;
+  onLaunchWithCanMyPhone?:()=>void;
   connectedProviderIds?:string[];
 }) {
   const setup=automation.personalSetup;
   const direct=!setup;
   const runtime=compileAutomationRuntime(automation.definition);
   const connectorPlan=connectorPlanForDefinition(automation.definition,new Set(connectedProviderIds));
+  const launcherPlan=launcherPlanForDefinition(automation.definition);
   const waitingForConnector=automation.materializationState==="INTEGRATION_REQUIRED"||connectorPlan.requirements.length>0;
   const heading=automation.materializationState==="ACTIVE"
     ?"AKTIV"
@@ -46,6 +50,15 @@ export function AutomationInstallationCard({
     <Text style={styles.eyebrow}>{heading}</Text>
     <Text style={styles.title}>{automation.name}</Text>
     <Text style={styles.status}>{status}</Text>
+
+    {launcherPlan.available
+      ?<View style={styles.launcherBox}>
+        <Text style={styles.launcherEyebrow}>OHNE KURZBEFEHLE</Text>
+        <Text style={styles.launcherTitle}>{launcherPlan.target.displayName} über CanMyPhone öffnen</Text>
+        <Text style={styles.launcherText}>CanMyPhone führt die gespeicherten Aktionen zuerst aus und öffnet danach {launcherPlan.target.displayName}. So ist für diesen Weg kein Apple-Trigger nötig.</Text>
+        <LiquidButton label={`${launcherPlan.target.displayName} mit Automation öffnen`} onPress={()=>onLaunchWithCanMyPhone?.()}/>
+      </View>
+      :null}
 
     {runtime.appleBridgePurpose==="TRIGGER_ONLY"
       ?<Text style={styles.engineNote}>Kurzbefehle ist hier nur der letzte Trigger-Fallback — nicht die Automation selbst.</Text>
@@ -116,10 +129,12 @@ export function AutomationInstallationCard({
           </>
           :waitingForConnector
             ?null
-            :<LiquidButton
-              label={direct?"Jetzt aktivieren":runtime.appleBridgePurpose==="TRIGGER_ONLY"?"Apple-Trigger verbinden":setup?.setupState==="HANDED_OFF"?"Kurzbefehle erneut öffnen":"Kurzbefehle öffnen"}
-              onPress={direct?onConfirm:onHandoff}
-            />}
+            :launcherPlan.available&&runtime.appleBridgePurpose==="TRIGGER_ONLY"
+              ?<Pressable onPress={onHandoff} style={styles.secondaryAction}><Text style={styles.secondaryActionText}>Original-App-Icon verwenden → Apple-Trigger verbinden</Text></Pressable>
+              :<LiquidButton
+                label={direct?"Jetzt aktivieren":runtime.appleBridgePurpose==="TRIGGER_ONLY"?"Apple-Trigger verbinden":setup?.setupState==="HANDED_OFF"?"Kurzbefehle erneut öffnen":"Kurzbefehle öffnen"}
+                onPress={direct?onConfirm:onHandoff}
+              />}
       </>}
   </ContentSurface>;
 }
@@ -130,6 +145,12 @@ const styles=StyleSheet.create({
   title:{marginTop:8,fontSize:20,lineHeight:25,fontWeight:"800",color:liquidIce.color.textPrimary},
   status:{marginTop:7,fontSize:13,lineHeight:19,color:liquidIce.color.textSecondary},
   engineNote:{marginTop:7,fontSize:12,lineHeight:17,fontWeight:"700",color:liquidIce.color.accent},
+  launcherBox:{marginTop:16,padding:14,borderRadius:16,backgroundColor:"rgba(8,123,255,0.06)",borderWidth:StyleSheet.hairlineWidth,borderColor:"rgba(8,123,255,0.18)",gap:8},
+  launcherEyebrow:{fontSize:10,fontWeight:"900",letterSpacing:1.2,color:liquidIce.color.accent},
+  launcherTitle:{fontSize:15,fontWeight:"800",color:liquidIce.color.textPrimary},
+  launcherText:{fontSize:12,lineHeight:18,color:liquidIce.color.textSecondary},
+  secondaryAction:{alignItems:"center",paddingTop:14,paddingHorizontal:8},
+  secondaryActionText:{fontSize:12,lineHeight:18,fontWeight:"700",textAlign:"center",color:liquidIce.color.textSecondary},
   connectorList:{marginTop:14,gap:8},
   connectorRow:{padding:12,borderRadius:14,backgroundColor:"rgba(255,255,255,0.58)",borderWidth:StyleSheet.hairlineWidth,borderColor:"rgba(79,94,110,0.14)"},
   connectorName:{fontSize:13,fontWeight:"700",color:liquidIce.color.textPrimary},
