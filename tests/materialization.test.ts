@@ -4,6 +4,7 @@ import { AutomationPersistence, type KeyValueStorage } from "../src/automation/a
 import { actionExecutionMode, approveSensitiveAutomation, hasValidSafetyApproval, materializeShortcutDefinition, safetyDefinitionFingerprint, validateStoredAutomation } from "../src/automation/materialization";
 import { runStoredAutomation } from "../src/automation/runner";
 import { compileShortcutGoal } from "../src/automation/shortcutCompiler";
+import { buildAppleIntelligenceAutomationDescription } from "../src/automation/appleShortcutsHandoff";
 
 class MemoryStorage implements KeyValueStorage {
   data = new Map<string, string>();
@@ -27,6 +28,9 @@ const scenarios=[
 ] as const;
 for(const [goal,trigger,mode] of scenarios)test(`materializes honestly: ${goal}`,()=>{const item=materialize(goal);assert.equal(item.personalSetup?.appleTriggerType,trigger);assert.equal(actionExecutionMode(item.definition.actions[0]!),mode);assert.notEqual(item.materializationState,"ACTIVE");assert.equal(item.personalSetup?.setupState,"NOT_STARTED");});
 test("manual brightness is directly executable without Apple automation",()=>{const item=materialize("Setze Helligkeit auf 35 %.");assert.equal(item.definition.trigger.capabilityId,"trigger.manual");assert.equal(item.personalSetup,undefined);assert.equal(actionExecutionMode(item.definition.actions[0]!),"EXECUTABLE_DIRECT");});
+test("iOS 27 handoff description gives Shortcuts the trigger and CanMyPhone action",()=>{const definition=compileShortcutGoal("Wenn ich Instagram öffne, setze die Helligkeit auf 35 %.");const prompt=buildAppleIntelligenceAutomationDescription(definition);assert.match(prompt,/persönliche Automation/i);assert.match(prompt,/Instagram/);assert.match(prompt,/35 Prozent/);assert.match(prompt,/CanMyPhone Automation ausführen/);});
+test("materialized personal automations can track an Apple Intelligence handoff",()=>{const item=materialize("Wenn ich Instagram öffne, setze die Helligkeit auf 35 %.");assert.equal(item.personalSetup?.handoffMode,undefined);const updated={...item,personalSetup:item.personalSetup?{...item.personalSetup,handoffMode:"APPLE_INTELLIGENCE" as const}:undefined};assert.equal(updated.personalSetup?.handoffMode,"APPLE_INTELLIGENCE");});
+
 
 function runnable(goal="Setze Helligkeit auf 35 %."){const item=materialize(goal);return {...item,enabled:true,materializationState:"ACTIVE" as const};}
 const context={pro:true,grantedPermissions:new Set<string>(),connectedIntegrations:new Set<string>()};
