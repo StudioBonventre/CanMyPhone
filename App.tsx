@@ -47,7 +47,7 @@ import { liquidIce } from "./src/theme/liquidIce";
 import { solutions } from "./src/data/solutions";
 import { directActionPlan, runDirectAction, type DirectActionResult } from "./src/lib/actions";
 import { compileVerifiedGoal, planGoal, type PlannerResponse } from "./src/automation/planner";
-import { getSupabasePlannerClient, getSupabaseSemanticClient } from "./src/lib/supabasePlanner";
+import { getSupabasePlannerClient, getSupabaseSemanticClient, getTeslaConnectorService } from "./src/lib/supabasePlanner";
 import { resolveWithOnDeviceAI } from "./src/lib/aiResolver";
 import { resolveConversation } from "./src/lib/conversation";
 import { DEFAULT_ENTITLEMENTS, proFeatureAccess } from "./src/lib/entitlements";
@@ -826,6 +826,30 @@ export default function App() {
     setActionResult({ handled:true, succeeded:true, message:result.message });
   };
 
+  const refreshTeslaConnection = async () => {
+    const service = getTeslaConnectorService();
+    if (!service) return null;
+    const status = await service.status();
+    if (!status.ok) return status;
+    if (status.ready) {
+      const profile = await saveConnectorConnection({
+        providerId: "tesla",
+        status: "CONNECTED",
+        updatedAt: new Date().toISOString(),
+        connectedAt: new Date().toISOString()
+      });
+      setConnectorConnections(profile);
+    } else if (status.connected) {
+      const profile = await saveConnectorConnection({
+        providerId: "tesla",
+        status: "CONNECTING",
+        updatedAt: new Date().toISOString()
+      });
+      setConnectorConnections(profile);
+    }
+    return status;
+  };
+
   const connectProvider = async (providerId: string, input?: ConnectorConnectInput) => {
     const startedAt = new Date().toISOString();
     let profile = await saveConnectorConnection({
@@ -855,6 +879,63 @@ export default function App() {
         errorCode: snapshot?.restricted ? "HOMEKIT_RESTRICTED" : "HOMEKIT_NOT_AUTHORIZED"
       });
       setConnectorConnections(profile);
+      return;
+    }
+
+    if (providerId === "tesla") {
+      const service = getTeslaConnectorService();
+      if (!service) {
+        profile = await saveConnectorConnection({
+          providerId,
+          status: "ERROR",
+          updatedAt: new Date().toISOString(),
+          errorCode: "TESLA_BACKEND_NOT_CONFIGURED"
+        });
+        setConnectorConnections(profile);
+        setActionResult({ handled:true, succeeded:false, message:"Der sichere Tesla-Backend-Connector ist in diesem Build noch nicht konfiguriert." });
+        return;
+      }
+
+      const current = await service.status();
+      if (current.ok && current.ready) {
+        profile = await saveConnectorConnection({
+          providerId,
+          status: "CONNECTED",
+          updatedAt: new Date().toISOString(),
+          connectedAt: new Date().toISOString()
+        });
+        setConnectorConnections(profile);
+        setActionResult({ handled:true, succeeded:true, message:current.message });
+        return;
+      }
+
+      if (current.ok && current.connected && current.pairingUrl) {
+        const opened = await Linking.openURL(current.pairingUrl).then(()=>true).catch(()=>false);
+        if (!opened) {
+          profile = await saveConnectorConnection({providerId,status:"ERROR",updatedAt:new Date().toISOString(),errorCode:"TESLA_PAIRING_LINK_FAILED"});
+          setConnectorConnections(profile);
+          setActionResult({handled:true,succeeded:false,message:"Die Tesla-Schlüsselpaarung konnte nicht geöffnet werden."});
+          return;
+        }
+        setActionResult({ handled:true, succeeded:false, message:"Tesla ist angemeldet. Bestätige jetzt den virtuellen Schlüssel in der Tesla-App und tippe danach erneut auf „Kopplung fortsetzen“." });
+        return;
+      }
+
+      const authorization = await service.authorizationUrl();
+      if (!authorization.ok) {
+        profile = await saveConnectorConnection({providerId,status:"ERROR",updatedAt:new Date().toISOString(),errorCode:authorization.code});
+        setConnectorConnections(profile);
+        setActionResult({handled:true,succeeded:false,message:authorization.message});
+        return;
+      }
+      const opened = await Linking.openURL(authorization.url).then(()=>true).catch(()=>false);
+      if (!opened) {
+        profile = await saveConnectorConnection({providerId,status:"ERROR",updatedAt:new Date().toISOString(),errorCode:"TESLA_AUTH_LINK_FAILED"});
+        setConnectorConnections(profile);
+        setActionResult({handled:true,succeeded:false,message:"Die Tesla-Anmeldung konnte nicht geöffnet werden."});
+        return;
+      }
+      setActionResult({handled:true,succeeded:false,message:"Tesla-Anmeldung geöffnet. Nach der Freigabe kehrst du zu CanMyPhone zurück und schließt die Schlüsselpaarung ab."});
       return;
     }
 
@@ -898,6 +979,16 @@ export default function App() {
     });
     setConnectorConnections(profile);
   };
+
+  useEffect(() => {
+    refreshTeslaConnection().catch(() => undefined);
+    const subscription = Linking.addEventListener("url", ({ url }) => {
+      if (url.startsWith("canmyphone://connector/tesla")) {
+        refreshTeslaConnection().catch(() => undefined);
+      }
+    });
+    return () => subscription.remove();
+  }, []);
 
   const updatePreferences = (patch: Partial<UserPreferences>) => {
     setPreferences((current) => ({ ...current, ...patch }));
@@ -1068,11 +1159,7 @@ export default function App() {
                           setPaywallVisible(true);
                           return;
                         }
-                        setActionResult({
-                          handled: true,
-                          succeeded: false,
-                          message: "Die sichere Tesla-Verbindung wird im nächsten Integrationsblock ergänzt. Es wurde noch keine Automation erstellt."
-                        });
+                        connectProvider("tesla").catch(() => undefined);
                       }}
                     />
                     {actionResult ? <ContentSurface emphasis="active" style={styles.resultBanner}><Text style={styles.resultTitle}>Status</Text><Text style={styles.resultText}>{actionResult.message}</Text></ContentSurface> : null}
