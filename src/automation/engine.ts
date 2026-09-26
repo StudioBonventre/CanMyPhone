@@ -3,6 +3,7 @@ import type { ShortcutDefinition, ShortcutStep } from "./shortcutCompiler";
 
 export type TriggerDriver =
   | "CANMYPHONE_MANUAL"
+  | "CANMYPHONE_NATIVE"
   | "APPLE_SHORTCUTS_BRIDGE"
   | "PROVIDER"
   | "UNSUPPORTED";
@@ -30,6 +31,7 @@ function triggerDriver(definition: ShortcutDefinition): TriggerDriver {
   const trigger = capabilityV2(definition.trigger.capabilityId);
   if (!trigger || trigger.role !== "trigger") return "UNSUPPORTED";
   if (definition.trigger.capabilityId === "trigger.manual") return "CANMYPHONE_MANUAL";
+  if (trigger.executionModes.includes("DIRECT_PUBLIC_API")) return "CANMYPHONE_NATIVE";
   if (trigger.integration || trigger.executionModes.includes("THIRD_PARTY_API")) return "PROVIDER";
   if (trigger.executionModes.includes("PERSONAL_AUTOMATION")) return "APPLE_SHORTCUTS_BRIDGE";
   return "UNSUPPORTED";
