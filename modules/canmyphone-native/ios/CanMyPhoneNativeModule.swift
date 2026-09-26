@@ -230,6 +230,39 @@ public final class CanMyPhoneNativeModule: Module {
       return await self.open(url: url)
     }
 
+    AsyncFunction("prepareShortcutDescription") { (description: String) async -> [String: Any] in
+      let trimmed = description.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !trimmed.isEmpty else {
+        return [
+          "opened": false,
+          "copied": false,
+          "message": "Die Kurzbefehle-Beschreibung ist leer."
+        ]
+      }
+
+      let copied = await MainActor.run { () -> Bool in
+        UIPasteboard.general.string = trimmed
+        return UIPasteboard.general.string == trimmed
+      }
+
+      guard let url = URL(string: "shortcuts://create-shortcut") else {
+        return [
+          "opened": false,
+          "copied": copied,
+          "message": "Der Kurzbefehle-Editor konnte nicht vorbereitet werden."
+        ]
+      }
+
+      let opened = await self.open(url: url)
+      return [
+        "opened": opened,
+        "copied": copied,
+        "message": opened
+          ? "Kurzbefehle wurde geöffnet. Die fertige Beschreibung liegt in der Zwischenablage."
+          : "Kurzbefehle konnte nicht geöffnet werden."
+      ]
+    }
+
     AsyncFunction("syncAutomationDefinition") { (json: String) async -> Bool in
       return CanMyPhoneAutomationStore.save(json: json)
     }
