@@ -23,6 +23,7 @@ export type ConnectorPlan = {
 const universal = new Set<UniversalOperation>([
   "vehicle.lock",
   "vehicle.unlock",
+  "vehicle.rear-trunk.close",
   "smart-home.cover.open",
   "smart-home.cover.close",
   "smart-home.light.set",
@@ -47,7 +48,7 @@ export function connectorRequirementForStep(step: ShortcutStep, connected: Reado
   if (!cap?.integration && !cap?.executionModes.includes("THIRD_PARTY_API")) return null;
 
   if (step.capabilityId === "tesla.rear-trunk.close") {
-    return { capabilityId: step.capabilityId, binding: bindProvider("vehicle.lock", { brand: "Tesla" }, connected) };
+    return { capabilityId: step.capabilityId, binding: bindProvider("vehicle.rear-trunk.close", { brand: "Tesla" }, connected) };
   }
   return null;
 }

@@ -4,6 +4,7 @@ type TeslaClientResult = { ok: true } | { ok: false; code: string; message?: str
 export type TeslaConnectorClient = {
   lockVehicle(vehicle?: string): Promise<TeslaClientResult>;
   unlockVehicle(vehicle?: string): Promise<TeslaClientResult>;
+  closeRearTrunk(vehicle?: string): Promise<TeslaClientResult>;
 };
 
 export function createTeslaConnectorAdapter(client: TeslaConnectorClient): ConnectorAdapter {
@@ -14,6 +15,7 @@ export function createTeslaConnectorAdapter(client: TeslaConnectorClient): Conne
       let result: TeslaClientResult;
       if (request.capabilityId === "vehicle.lock") result = await client.lockVehicle(vehicle);
       else if (request.capabilityId === "vehicle.unlock") result = await client.unlockVehicle(vehicle);
+      else if (request.capabilityId === "tesla.rear-trunk.close" || request.capabilityId === "vehicle.rear-trunk.close") result = await client.closeRearTrunk(vehicle);
       else {
         return { ok:false, providerId:"tesla", code:"UNSUPPORTED_OPERATION", message:"Diese Tesla-Aktion unterstützt der Connector noch nicht." };
       }

@@ -1,6 +1,7 @@
 export type UniversalOperation =
   | "vehicle.lock"
   | "vehicle.unlock"
+  | "vehicle.rear-trunk.close"
   | "smart-home.cover.open"
   | "smart-home.cover.close"
   | "smart-home.light.set"
@@ -27,7 +28,7 @@ export const PROVIDER_REGISTRY: readonly ProviderDescriptor[] = [
     displayName: "Tesla",
     aliases: ["tesla"],
     transport: "cloud-api",
-    operations: ["vehicle.lock","vehicle.unlock"],
+    operations: ["vehicle.lock","vehicle.unlock","vehicle.rear-trunk.close"],
     implementation: "CONNECTOR_NEEDED",
     authKind: "oauth",
     requiresUserConnection: true,

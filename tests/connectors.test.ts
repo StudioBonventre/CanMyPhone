@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { bindProvider, PROVIDER_REGISTRY } from "../src/automation/providerRegistry";
 import { connectorSetupPlan } from "../src/automation/connectorSetup";
+import { connectorRequirementForStep } from "../src/automation/connectorPlanning";
 import { ConnectorRuntime } from "../src/automation/connectorRuntime";
 import { createTeslaConnectorAdapter, createHomematicIPConnectorAdapter } from "../src/automation/connectorAdapters";
 import { buildTeslaAuthorizationURL, buildTeslaVirtualKeyPairingURL, TESLA_DEFAULT_SCOPES } from "../src/automation/teslaAuth";
@@ -60,7 +61,8 @@ test("connector runtime dispatches only to the registered provider adapter",asyn
   const runtime=new ConnectorRuntime([
     createTeslaConnectorAdapter({
       lockVehicle:async()=>{locked+=1;return {ok:true as const};},
-      unlockVehicle:async()=>({ok:true as const})
+      unlockVehicle:async()=>({ok:true as const}),
+      closeRearTrunk:async()=>({ok:true as const})
     })
   ]);
   const ok=await runtime.execute({
@@ -105,4 +107,37 @@ test("provider routing prefers a single connected compatible provider",()=>{
   const binding=bindProvider("smart-home.cover.open",{room:"Wohnzimmer"},new Set(["homematic-ip"]));
   assert.equal(binding.status,"BOUND");
   if(binding.status==="BOUND")assert.equal(binding.provider.id,"homematic-ip");
+});
+
+
+test("Tesla rear-trunk routing never aliases to vehicle lock",async()=>{
+  const requirement=connectorRequirementForStep(
+    {capabilityId:"tesla.rear-trunk.close",parameters:{expectedState:"open"}},
+    new Set(["tesla"])
+  );
+  assert.ok(requirement);
+  assert.equal(requirement?.binding.status,"BOUND");
+  if(requirement?.binding.status==="BOUND"){
+    assert.equal(requirement.binding.provider.id,"tesla");
+    assert.equal(requirement.binding.operation,"vehicle.rear-trunk.close");
+  }
+
+  let locked=0;
+  let trunkClosed=0;
+  const runtime=new ConnectorRuntime([
+    createTeslaConnectorAdapter({
+      lockVehicle:async()=>{locked+=1;return {ok:true as const};},
+      unlockVehicle:async()=>({ok:true as const}),
+      closeRearTrunk:async()=>{trunkClosed+=1;return {ok:true as const};}
+    })
+  ]);
+  const result=await runtime.execute({
+    automationId:"cmp_auto_trunk",
+    providerId:"tesla",
+    capabilityId:"tesla.rear-trunk.close",
+    parameters:{expectedState:"open"}
+  });
+  assert.equal(result.ok,true);
+  assert.equal(trunkClosed,1);
+  assert.equal(locked,0);
 });
