@@ -1,6 +1,6 @@
 import type { ConnectorAdapter, ConnectorExecutionResult } from "./connectorRuntime";
 
-type TeslaClientResult = { ok: true } | { ok: false; code: string; message?: string };
+export type TeslaClientResult = { ok: true; message?: string } | { ok: false; code: string; message?: string };
 export type TeslaConnectorClient = {
   lockVehicle(vehicle?: string): Promise<TeslaClientResult>;
   unlockVehicle(vehicle?: string): Promise<TeslaClientResult>;
