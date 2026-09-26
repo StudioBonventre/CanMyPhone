@@ -71,6 +71,22 @@ public final class CanMyPhoneNativeModule: Module {
       return await self.requestPermission(kind: kind)
     }
 
+    AsyncFunction("homeKitSnapshot") { () async -> [String: Any] in
+      return await CanMyPhoneHomeKitBridge.shared.snapshot()
+    }
+
+    AsyncFunction("homeKitSetCover") { (room: String, device: String?, position: Int) async -> [String: Any] in
+      return await CanMyPhoneHomeKitBridge.shared.setCover(room: room, device: device, position: position)
+    }
+
+    AsyncFunction("homeKitSetLight") { (room: String, device: String?, value: String) async -> [String: Any] in
+      return await CanMyPhoneHomeKitBridge.shared.setLight(room: room, device: device, value: value)
+    }
+
+    AsyncFunction("homeKitSetClimate") { (room: String, device: String?, value: String) async -> [String: Any] in
+      return await CanMyPhoneHomeKitBridge.shared.setClimate(room: room, device: device, value: value)
+    }
+
     AsyncFunction("setBrightness") { (level: Double) async -> [String: Any] in
       guard level.isFinite, (0.0...1.0).contains(level) else {
         return [
