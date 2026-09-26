@@ -3,6 +3,7 @@ import { CAPABILITY_CATALOG_V2, capabilityV2 } from "../src/automation/capabilit
 import { compileShortcutGoal, relevantCatalogForGoal } from "../src/automation/shortcutCompiler";
 import { validateShortcutDefinition } from "../src/automation/shortcutValidation";
 import { acceptSemanticAutomationOutput } from "../src/automation/semanticInterpreter";
+import { shortcutsParitySummary } from "../src/automation/shortcutsParity";
 const cases=[
  ["Wenn ich zuhause ankomme, schalte Fokus Arbeit aus.","trigger.location-enter",["system.focus.set"]],
  ["Wenn meine AirPods verbunden werden, starte Spotify.","trigger.bluetooth-connected",["media.spotify.open"]],
@@ -121,4 +122,19 @@ test("semantic interpreter preserves model clarification instead of guessing",()
   const raw=JSON.stringify({kind:"clarification",confidence:0.5,trigger:null,actions:[],clarificationQuestion:"Welche App meinst du?",suggestion:null});
   const result=acceptSemanticAutomationOutput("mach das bei social media",raw);
   assert.equal(result.kind,"clarification");
+});
+
+test("Shortcuts parity catalog covers the documented personal-automation trigger families",()=>{
+  const required=[
+    "trigger.time","trigger.alarm","trigger.sleep","trigger.location-enter","trigger.location-exit",
+    "trigger.carplay-connected","trigger.email-received","trigger.message-received","trigger.transaction",
+    "trigger.wifi-connected","trigger.bluetooth-connected","trigger.apple-watch-workout","trigger.nfc",
+    "trigger.app-opened","trigger.app-closed","trigger.airplane-mode-changed","trigger.focus-changed",
+    "trigger.low-power-mode-changed","trigger.battery-level","trigger.charger-connected",
+    "trigger.charger-disconnected","trigger.sound-recognition"
+  ];
+  for(const id of required)assert.ok(capabilityV2(id),id);
+  const parity=shortcutsParitySummary();
+  assert.ok(parity.appleOrchestrated.some((cap)=>cap.id==="trigger.app-opened"));
+  assert.ok(parity.direct.some((cap)=>cap.id==="system.brightness.set"));
 });

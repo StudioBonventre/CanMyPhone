@@ -8,7 +8,47 @@ export type CapabilityV2 = { id:string; category:CapabilityCategory; provider:st
 const cap = (value:CapabilityV2) => value;
 export const CAPABILITY_CATALOG_V2: readonly CapabilityV2[] = [
   cap({id:"trigger.manual",category:"trigger",provider:"shortcuts",role:"trigger",description:"Manuell gestarteter Kurzbefehl",executionModes:["SHORTCUT","APP_INTENT"],risk:"low",requiresPro:false,publicApi:true,background:false,confirmation:false,permissions:[],parameters:{},inputs:[],outputs:["event"],fallback:"GUIDED_HANDOFF",availability:"ios"}),
-  ...["time","weekday","location-enter","location-exit","app-opened","app-closed","battery-level","charger-connected","charger-disconnected","bluetooth-connected","bluetooth-disconnected","nfc","focus-changed","app-intent"].map((name)=>cap({id:`trigger.${name}`,category:"trigger",provider:"apple-shortcuts",role:"trigger",description:name,executionModes:["PERSONAL_AUTOMATION"],risk:name.startsWith("location")?"medium":"low",requiresPro:false,publicApi:true,background:true,confirmation:false,permissions:name.startsWith("location")?["location"]:[],parameters:{value:{type:name.includes("battery")?"number":"string",required:true,min:name.includes("battery")?0:undefined,max:name.includes("battery")?100:undefined}},inputs:[],outputs:["event"],fallback:"GUIDED_HANDOFF",availability:"ios"})),
+  ...[
+    "time","weekday","alarm","sleep",
+    "location-enter","location-exit",
+    "carplay-connected","carplay-disconnected",
+    "email-received","message-received","transaction",
+    "wifi-connected",
+    "bluetooth-connected","bluetooth-disconnected",
+    "apple-watch-workout",
+    "nfc",
+    "app-opened","app-closed",
+    "airplane-mode-changed","focus-changed","low-power-mode-changed",
+    "battery-level",
+    "charger-connected","charger-disconnected",
+    "sound-recognition",
+    "app-intent"
+  ].map((name)=>cap({
+    id:`trigger.${name}`,
+    category:"trigger",
+    provider:"apple-shortcuts",
+    role:"trigger",
+    description:name,
+    executionModes:["PERSONAL_AUTOMATION"],
+    risk:name.startsWith("location")||name==="transaction"||name==="email-received"||name==="message-received"?"medium":"low",
+    requiresPro:false,
+    publicApi:true,
+    background:true,
+    confirmation:false,
+    permissions:name.startsWith("location")?["location"]:[],
+    parameters:{
+      value:{
+        type:name==="battery-level"?"number":"string",
+        required:true,
+        min:name==="battery-level"?0:undefined,
+        max:name==="battery-level"?100:undefined
+      }
+    },
+    inputs:[],
+    outputs:["event"],
+    fallback:"GUIDED_HANDOFF",
+    availability:"ios"
+  })),
   cap({id:"condition.time-window",category:"trigger",provider:"shortcuts",role:"condition",description:"Zeitfenster",executionModes:["SHORTCUT"],risk:"low",requiresPro:true,publicApi:true,background:true,confirmation:false,permissions:[],parameters:{after:{type:"string",required:true}},inputs:["date"],outputs:["boolean"],fallback:"GUIDED_HANDOFF",availability:"ios"}),
   cap({id:"system.brightness.set",category:"system",provider:"ios",role:"action",description:"Helligkeit setzen",executionModes:["DIRECT_PUBLIC_API","SHORTCUT"],risk:"low",requiresPro:false,publicApi:true,background:true,confirmation:false,permissions:[],parameters:{percent:{type:"number",required:true,min:0,max:100}},inputs:[],outputs:[],fallback:"SHORTCUT",availability:"ios"}),
   ...["volume.set","low-power.set","flashlight.set","focus.set","app.open","clipboard.set"].map((name)=>cap({id:`system.${name}`,category:"system",provider:"apple-shortcuts",role:"action",description:name,executionModes:["SHORTCUT","PERSONAL_AUTOMATION"],risk:"low",requiresPro:false,publicApi:true,background:!name.includes("app.open"),confirmation:false,permissions:[],parameters:{value:{type:"string",required:true}},inputs:[],outputs:[],fallback:"GUIDED_HANDOFF",availability:"ios"})),
