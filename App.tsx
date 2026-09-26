@@ -19,6 +19,7 @@ import { AutomationPlanPreview } from "./src/components/AutomationPlanPreview";
 import { ShortcutDefinitionPreview } from "./src/components/ShortcutDefinitionPreview";
 import { AutomationInstallationCard } from "./src/components/AutomationInstallationCard";
 import { MyAutomationsCard } from "./src/components/MyAutomationsCard";
+import { ConnectorSettingsCard } from "./src/components/ConnectorSettingsCard";
 import { compileShortcutGoal } from "./src/automation/shortcutCompiler";
 import { interpretAutomationWithOnDeviceAI, type AutomationSuggestion } from "./src/automation/semanticInterpreter";
 import { buildAppleIntelligenceAutomationDescription } from "./src/automation/appleShortcutsHandoff";
@@ -1112,6 +1113,8 @@ export default function App() {
 
                 <MyAutomationsCard items={automations} onToggle={(item)=>{const updated={...item,enabled:!item.enabled,materializationState:(!item.enabled?"ACTIVE":"DISABLED") as StoredAutomation["materializationState"]};automationRepository.save(updated).then(async()=>{setAutomations(await automationRepository.list());trackProductEvent(updated.enabled?"automation_enabled":"automation_disabled",{});}).catch(()=>undefined);}} onDelete={(id)=>automationRepository.remove(id).then(async()=>setAutomations(await automationRepository.list())).catch(()=>undefined)} />
 
+                <ConnectorSettingsCard profile={connectorConnections} />
+
                 <ContentSurface emphasis="active" style={styles.youCard}>
                   <View style={styles.youRow}>
                     <View style={styles.youTextWrap}>
@@ -1141,8 +1144,8 @@ export default function App() {
 
                   <View style={styles.youRow}>
                     <View style={styles.youTextWrap}>
-                      <Text style={styles.youTitle}>Lokale KI-Hilfe</Text>
-                      <Text style={styles.youText}>Nur als Fallback. Die KI darf ausschließlich eine bereits verifizierte Lösung auswählen — keine Schritte erfinden.</Text>
+                      <Text style={styles.youTitle}>KI-Verständnis</Text>
+                      <Text style={styles.youText}>Versteht freie Sprache, zerlegt Wünsche in Trigger und Aktionen und darf nur verifizierte Capabilities und Connectoren verwenden.</Text>
                     </View>
                     <Pressable onPress={() => updatePreferences({ useOnDeviceAI: !preferences.useOnDeviceAI })} style={[styles.toggle, preferences.useOnDeviceAI && styles.toggleOn]}>
                       <Text style={[styles.toggleText, preferences.useOnDeviceAI && styles.toggleTextOn]}>{preferences.useOnDeviceAI ? "AN" : "AUS"}</Text>
