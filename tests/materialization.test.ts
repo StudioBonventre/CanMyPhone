@@ -11,6 +11,7 @@ import { createTeslaConnectorAdapter, createHomematicIPConnectorAdapter } from "
 import { acceptSemanticAutomationOutput } from "../src/automation/semanticInterpreter";
 import { launcherPlanForDefinition } from "../src/automation/appLauncher";
 import { solveAutomationRoutes } from "../src/automation/automationSolver";
+import { resolveConnectedProviders } from "../src/automation/providerResolution";
 
 class MemoryStorage implements KeyValueStorage {
   data = new Map<string, string>();
@@ -180,4 +181,63 @@ test("route solver keeps Apple-owned actions below direct routes",()=>{
   const routes=solveAutomationRoutes(d);
   assert.equal(routes[0]?.kind,"APPLE_SYSTEM_BRIDGE");
   assert.equal(routes[0]?.automatic,false);
+});
+
+
+test("direct public iOS actions no longer require Apple Shortcuts",()=>{
+  const flashlight=acceptSemanticAutomationOutput("Taschenlampe an",JSON.stringify({
+    kind:"automation",confidence:0.99,
+    trigger:{capabilityId:"trigger.manual",parameters:{}},
+    actions:[{capabilityId:"system.flashlight.set",parameters:{value:"on"}}],
+    clarificationQuestion:null,suggestion:null
+  }));
+  assert.equal(flashlight.kind,"understood");
+  if(flashlight.kind==="understood"){
+    const runtime=compileAutomationRuntime(flashlight.definition);
+    assert.equal(runtime.appleBridgeRequired,false);
+    assert.deepEqual(runtime.actionDrivers,["CANMYPHONE_NATIVE"]);
+  }
+
+  const clipboard=acceptSemanticAutomationOutput("Kopiere hallo",JSON.stringify({
+    kind:"automation",confidence:0.99,
+    trigger:{capabilityId:"trigger.manual",parameters:{}},
+    actions:[{capabilityId:"system.clipboard.set",parameters:{value:"Hallo"}}],
+    clarificationQuestion:null,suggestion:null
+  }));
+  assert.equal(clipboard.kind,"understood");
+  if(clipboard.kind==="understood"){
+    assert.equal(compileAutomationRuntime(clipboard.definition).actionDrivers[0],"CANMYPHONE_NATIVE");
+  }
+});
+
+test("connected Apple Home provider is resolved before materialization and becomes native",()=>{
+  const semantic=acceptSemanticAutomationOutput("Rollläden im Wohnzimmer hoch",JSON.stringify({
+    kind:"automation",confidence:0.99,
+    trigger:{capabilityId:"trigger.manual",parameters:{}},
+    actions:[{capabilityId:"smart-home.cover.open",parameters:{room:"Wohnzimmer"}}],
+    clarificationQuestion:null,suggestion:null
+  }));
+  assert.equal(semantic.kind,"understood");
+  if(semantic.kind!=="understood")return;
+  const resolved=resolveConnectedProviders(semantic.definition,new Set(["apple-home"]));
+  assert.equal(resolved.actions[0]?.parameters.provider,"apple-home");
+  const runtime=compileAutomationRuntime(resolved);
+  assert.equal(runtime.actionDrivers[0],"CANMYPHONE_NATIVE");
+  const stored=materializeShortcutDefinition(resolved);
+  assert.notEqual(stored.materializationState,"INTEGRATION_REQUIRED");
+});
+
+test("location enter and exit are native triggers with Apple only as fallback",()=>{
+  const semantic=acceptSemanticAutomationOutput("Wenn ich zuhause ankomme, Licht an",JSON.stringify({
+    kind:"automation",confidence:0.99,
+    trigger:{capabilityId:"trigger.location-enter",parameters:{value:"home"}},
+    actions:[{capabilityId:"system.brightness.set",parameters:{percent:50}}],
+    clarificationQuestion:null,suggestion:null
+  }));
+  assert.equal(semantic.kind,"understood");
+  if(semantic.kind==="understood"){
+    const runtime=compileAutomationRuntime(semantic.definition);
+    assert.equal(runtime.triggerDriver,"CANMYPHONE_NATIVE");
+    assert.equal(runtime.appleBridgeRequired,false);
+  }
 });
