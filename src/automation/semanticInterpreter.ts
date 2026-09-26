@@ -239,6 +239,7 @@ export async function interpretAutomationWithOnDeviceAI(goal: string, context: S
       "App-Namen werden als freie Zeichenkette im Parameter value von trigger.app-opened übernommen. Erfinde aber keine konkrete installierte App.",
       "Der Nutzer darf mehrere Hersteller, Apps und Geräte in einer Automation kombinieren. Zerlege den Wunsch in EINEN Trigger und mehrere unabhängige Aktionen.",
       "Nutze provider-neutrale Capability-IDs für Herstellergeräte: vehicle.lock / vehicle.unlock sowie smart-home.cover.open / close, smart-home.light.set und smart-home.climate.set. Bewahre genannte Marken, Anbieter und Räume in den Parametern.",
+      "Wenn der Nutzer keinen Hersteller nennt, erfinde keinen. Lasse provider/brand weg; der Connector-Router wählt später einen eindeutig verbundenen Anbieter oder fragt bei Mehrdeutigkeit nach.",
       "Beispiel: 'Wenn ich heim komme, Tesla zusperren und Homematic-IP-Rollläden im Wohnzimmer hoch' => trigger.location-enter(home), vehicle.lock {brand:'Tesla'}, smart-home.cover.open {provider:'Homematic IP', room:'Wohnzimmer'}.",
       "Erfinde niemals eine API oder behaupte nicht, dass ein Anbieter schon verbunden ist. Du beschreibst nur die gewünschte Operation; der Provider-Router entscheidet später über die echte Schnittstelle.",
       "Optional darfst du EINEN sinnvollen Verbesserungsvorschlag machen. Ändere den Nutzerwunsch niemals heimlich.",
