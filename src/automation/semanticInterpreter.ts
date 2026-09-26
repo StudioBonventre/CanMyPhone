@@ -1,6 +1,7 @@
 import { CAPABILITY_CATALOG_V2, capabilityV2 } from "./capabilityCatalogV2";
 import { resolveStrategy, type ShortcutDefinition, type ShortcutStep } from "./shortcutCompiler";
 import { validateShortcutDefinition } from "./shortcutValidation";
+import { compactProviderCatalogue } from "./providerRegistry";
 
 export type AutomationSuggestion = {
   title: string;
@@ -227,7 +228,7 @@ export async function interpretAutomationWithOnDeviceAI(goal: string): Promise<S
       "CanMyPhone soll die gleiche Art von Automationswünschen verstehen, die Nutzer in Apple Kurzbefehle formulieren: Zeit, Alarm, Schlaf, Orte, CarPlay, Mail, Nachrichten, Transaktionen, WLAN, Bluetooth, Apple Watch, NFC, Apps, Flugmodus, Fokus, Stromsparmodus, Batterie, Ladegerät und Geräuscherkennung.",
       "Für Automationen darfst du ausschließlich Capability-IDs aus dem Katalog verwenden. Erfinde niemals IDs oder Parameter.",
       "Fehlt eine für die Ausführung notwendige Angabe, stelle genau eine kurze Rückfrage.",
-      "Bei Prozentangaben darfst du eindeutige natürliche Begriffe normalisieren: 'voll', 'ganz hoch', 'maximal' => 100; 'halb' => 50; 'aus' bei Helligkeit => 0.",
+      "Bei Prozentangaben darfst du eindeutige natürliche Begriffe normalisieren: 'voll', 'ganz hoch', 'maximal' => 100; 'halb' => 50; 'Minimum', 'minimal', 'ganz dunkel' oder 'aus' bei Helligkeit => 0.",
       "App-Namen werden als freie Zeichenkette im Parameter value von trigger.app-opened übernommen. Erfinde aber keine konkrete installierte App.",
       "Der Nutzer darf mehrere Hersteller, Apps und Geräte in einer Automation kombinieren. Zerlege den Wunsch in EINEN Trigger und mehrere unabhängige Aktionen.",
       "Nutze provider-neutrale Capability-IDs für Herstellergeräte: vehicle.lock / vehicle.unlock sowie smart-home.cover.open / close, smart-home.light.set und smart-home.climate.set. Bewahre genannte Marken, Anbieter und Räume in den Parametern.",
@@ -240,6 +241,8 @@ export async function interpretAutomationWithOnDeviceAI(goal: string): Promise<S
       "Bei clarification: trigger=null, actions=[], suggestion=null. Bei not_automation ebenso.",
       "Capability-Katalog:",
       compactCatalogue(),
+      "Bekannte Connectoren (Status ist nur Routing-Metadaten, niemals als bereits verbunden annehmen):",
+      compactProviderCatalogue(),
       `Nutzerwunsch: ${goal}`
     ].join("\n");
 
