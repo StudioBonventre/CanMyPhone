@@ -24,7 +24,7 @@ export function connectorSetupPlan(providerId: string): ConnectorSetupPlan | nul
   if(provider.id==="tesla"){
     return {
       provider,
-      executableToday:false,
+      executableToday:true,
       steps:[
         ...common,
         {id:"oauth",title:"Tesla-Konto verbinden",detail:"OAuth-Freigabe für die benötigten Fahrzeugdaten und Befehle.",userActionRequired:true},
