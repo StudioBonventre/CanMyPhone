@@ -5,6 +5,29 @@ export type ShortcutStep={capabilityId:string;parameters:Record<string,string|nu
 export type ShortcutDefinition={name:string;trigger:ShortcutStep;conditions:ShortcutStep[];actions:ShortcutStep[];variables:Record<string,string>;integrations:string[];requiredSetup:string[];executionStrategy:Strategy;feasibility:Feasibility;reasons:string[];confidence:number;risk:"low"|"medium"|"high";confirmationRequired:boolean;background:boolean;clarification?:string};
 
 const appAliases:Record<string,string>={spotify:"Spotify",instagram:"Instagram",youtube:"YouTube",maps:"Maps","apple music":"Apple Music",musik:"Apple Music"};
+
+function canonicalAppName(value:string):string {
+  const cleaned=value.replace(/^(?:die\s+)?app\s+/i,"").replace(/\s+/g," ").trim();
+  const known=appAliases[cleaned.toLowerCase()];
+  return known ?? cleaned;
+}
+
+function extractAppTriggerName(goal:string):string|undefined {
+  const patterns=[
+    /(?:wenn|sobald|falls|immer\s+wenn)\s+ich\s+(?:die\s+app\s+)?([\p{L}\p{N}][\p{L}\p{N} .+&'_-]{0,60}?)\s+(?:öffne|starte)\b/iu,
+    /(?:wenn|sobald|falls|immer\s+wenn)\s+(?:die\s+app\s+)?([\p{L}\p{N}][\p{L}\p{N} .+&'_-]{0,60}?)\s+(?:geöffnet|gestartet)\s+wird\b/iu,
+    /beim\s+öffnen\s+(?:der\s+app\s+)?(?:von\s+)?([\p{L}\p{N}][\p{L}\p{N} .+&'_-]{0,60}?)(?:\s*,|\s+dann\b|\s+soll\b|$)/iu
+  ];
+  for(const pattern of patterns){
+    const match=goal.match(pattern);
+    const candidate=match?.[1]?.trim();
+    if(candidate)return canonicalAppName(candidate);
+  }
+}
+
+function hasAppTriggerLanguage(q:string):boolean {
+  return /(?:wenn|sobald|falls|immer wenn).{0,90}(?:öffne|geöffnet wird|starte|gestartet wird)/.test(q) || /beim öffnen/.test(q);
+}
 const riskRank={low:0,medium:1,high:2} as const;
 const riskByRank=["low","medium","high"] as const;
 const normalize=(s:string)=>s.toLowerCase().replace(/[.,!?]/g," ").replace(/\s+/g," ").trim();
@@ -14,7 +37,9 @@ export function extractEntities(goal:string):ExtractedEntities {
   const percent=q.match(/(\d{1,3})\s*%/); if(percent)entities.percent=Number(percent[1]);
   const time=q.match(/(?:um|nach)\s*(\d{1,2})(?::(\d{2}))?\s*(?:uhr)?/); if(time)entities.time=`${time[1].padStart(2,"0")}:${time[2]??"00"}`;
   if(/montag bis freitag|werktag/.test(q))entities.weekdays="weekdays";
-  for(const [alias,name] of Object.entries(appAliases))if(q.includes(alias))entities.app=name;
+  const triggeredApp=extractAppTriggerName(goal);
+  if(triggeredApp)entities.app=triggeredApp;
+  else for(const [alias,name] of Object.entries(appAliases))if(q.includes(alias))entities.app=name;
   const device=q.match(/(?:mit\s+meine[mn]?|meine[nr]?)\s+([a-z0-9äöüß -]+?)\s+(?:per bluetooth\s+)?(?:verbind|verbunden|getrennt)/); if(device)entities.bluetoothDevice=device[1].trim();
   if(!entities.bluetoothDevice&&/airpods/.test(q))entities.bluetoothDevice="AirPods"; if(!entities.bluetoothDevice&&/bose/.test(q))entities.bluetoothDevice=q.includes("box")?"Bose Box":"Bose Kopfhörer"; if(!entities.bluetoothDevice&&/bluetooth.*auto|auto.*bluetooth/.test(q))entities.bluetoothDevice="car";
   if(/tesla/.test(q)&&/entfern|verlass/.test(q))entities.location="parked-vehicle-location"; else if(/zuhause|zu hause|daheim/.test(q))entities.location="home"; else if(/büro|arbeit verlasse/.test(q))entities.location="work"; else if(/fitnessstudio|studio betrete/.test(q))entities.location="fitnessstudio";
@@ -33,7 +58,7 @@ function extractTrigger(q:string,e:ExtractedEntities):ShortcutStep|undefined {
   if(/verbind|verbunden/.test(q)&&(/bluetooth|kopfhörer|airpods|bose|auto/.test(q)))return e.bluetoothDevice?{capabilityId:"trigger.bluetooth-connected",parameters:{value:e.bluetoothDevice}}:undefined;
   if(/akku|batter/.test(q)&&e.percent!==undefined)return {capabilityId:"trigger.battery-level",parameters:{value:e.percent}};
   if(/ladegerät|charger/.test(q))return {capabilityId:/trenn|abzieh/.test(q)?"trigger.charger-disconnected":"trigger.charger-connected",parameters:{value:/trenn|abzieh/.test(q)?"disconnected":"connected"}};
-  if(/öffne|geöffnet|starte/.test(q)&&e.app&&q.includes(e.app.toLowerCase()))return {capabilityId:"trigger.app-opened",parameters:{value:e.app}};
+  if(e.app&&hasAppTriggerLanguage(q))return {capabilityId:"trigger.app-opened",parameters:{value:e.app}};
   if(e.time)return {capabilityId:e.weekdays?"trigger.weekday":"trigger.time",parameters:{value:e.weekdays?`${e.weekdays}@${e.time}`:e.time}};
   if(/fokus|focus/.test(q)&&/aktiviert wird|geändert wird|eingeschaltet wird/.test(q)&&e.focus)return {capabilityId:"trigger.focus-changed",parameters:{value:`${e.focus}:on`}};
 }

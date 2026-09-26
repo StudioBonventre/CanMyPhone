@@ -44,7 +44,10 @@ const unseen=[
  ["Montag bis Freitag um 18:30 eine Erinnerung erstellen.","trigger.weekday","productivity.reminder.create"],
  ["Wenn ich zuhause ankomme, HomeKit Szene Abend starten.","trigger.location-enter","smart-home.scene.run"],
  ["Wenn meine Bose Box getrennt wird, öffne YouTube App.","trigger.bluetooth-disconnected","system.app.open"],
- ["Wenn Fokus Arbeit aktiviert wird, Lautstärke auf 30 %.","trigger.focus-changed","system.volume.set"]
+ ["Wenn Fokus Arbeit aktiviert wird, Lautstärke auf 30 %.","trigger.focus-changed","system.volume.set"],
+ ["Wenn TikTok geöffnet wird, Helligkeit auf 30 %.","trigger.app-opened","system.brightness.set"],
+ ["Wenn ich Threads öffne, setze die Helligkeit auf 40 %.","trigger.app-opened","system.brightness.set"],
+ ["Sobald Lightroom gestartet wird, Helligkeit auf 55 %.","trigger.app-opened","system.brightness.set"]
 ] as const;
 for(const [goal,t,a] of unseen)test(`unseen: ${goal}`,()=>{const d=compileShortcutGoal(goal);assert.equal(d.trigger.capabilityId,t);assert.ok(d.actions.some(x=>x.capabilityId===a));});
 
@@ -65,3 +68,12 @@ test("definition validator rejects structural, role and safety lies",()=>{const 
  {...compileShortcutGoal(cases[7][0]),risk:"low"}
  ];for(const item of invalid)assert.equal(validateShortcutDefinition(item).ok,false);});
 test("unknown app handoff is not invented",()=>{const d=compileShortcutGoal("Wenn meine Bose Box getrennt wird, öffne Fantasia App.");assert.equal(d.actions.length,0);assert.equal(d.confidence,0.3);assert.match(d.clarification??"",/Was soll/);});
+test("arbitrary app names are preserved for app-open triggers",()=>{
+  assert.equal(compileShortcutGoal("Wenn TikTok geöffnet wird, Helligkeit auf 30 %.").trigger.parameters.value,"TikTok");
+  assert.equal(compileShortcutGoal("Wenn ich Threads öffne, Helligkeit auf 40 %.").trigger.parameters.value,"Threads");
+  assert.equal(compileShortcutGoal("Sobald Lightroom gestartet wird, Helligkeit auf 55 %.").trigger.parameters.value,"Lightroom");
+});
+test("opening a known app manually is not mistaken for an app-open trigger",()=>{
+  const d=compileShortcutGoal("Öffne Spotify.");
+  assert.notEqual(d.trigger.capabilityId,"trigger.app-opened");
+});
