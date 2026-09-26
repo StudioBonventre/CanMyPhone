@@ -38,7 +38,9 @@
         "NSMicrophoneUsageDescription": "CanMyPhone nutzt das Mikrofon nur, wenn du eine Funktion ausdrücklich startest, die Mikrofonzugriff benötigt.",
         "NSPhotoLibraryUsageDescription": "CanMyPhone greift nur auf deine Fotomediathek zu, wenn du eine Funktion ausdrücklich startest, die Fotos benötigt.",
         "NSHomeKitUsageDescription": "CanMyPhone nutzt Apple Home nur, um von dir gewählte Räume und Geräte in Automationen zu erkennen und zu steuern.",
-        "NSLocalNetworkUsageDescription": "CanMyPhone nutzt dein lokales Netzwerk nur, um von dir verbundene Smart-Home-Systeme und Geräte zu erreichen."
+        "NSLocalNetworkUsageDescription": "CanMyPhone nutzt dein lokales Netzwerk nur, um von dir verbundene Smart-Home-Systeme und Geräte zu erreichen.",
+        "NSLocationWhenInUseUsageDescription": "CanMyPhone nutzt deinen Standort nur für von dir erstellte ortsbasierte Automationen und zum Speichern benannter Orte wie Zuhause.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "CanMyPhone benötigt Standortzugriff im Hintergrund nur für von dir aktivierte ortsbasierte Automationen, damit sie auch ohne geöffnete App reagieren können."
       }
     },
     "android": {
