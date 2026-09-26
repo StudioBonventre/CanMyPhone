@@ -29,7 +29,7 @@ export const PROVIDER_REGISTRY: readonly ProviderDescriptor[] = [
     aliases: ["tesla"],
     transport: "cloud-api",
     operations: ["vehicle.lock","vehicle.unlock","vehicle.rear-trunk.close"],
-    implementation: "CONNECTOR_NEEDED",
+    implementation: "READY",
     authKind: "oauth",
     requiresUserConnection: true,
     executionLocation: "cloud"
