@@ -1179,6 +1179,8 @@ export default function App() {
                     <AutomationPlanPreview
                       plan={automationPlan}
                       pro={entitlements.pro}
+                      providerConnected={connectedProviderIds(connectorConnections).has("tesla")}
+                      onCreate={() => createAutomation().catch(() => undefined)}
                       onConnect={() => {
                         if (!entitlements.pro) {
                           setPaywallMessage("Tesla-Integrationen gehören zu CanMyPhone Pro. Die Planvorschau bleibt kostenlos.");
