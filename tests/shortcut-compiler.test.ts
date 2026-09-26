@@ -208,3 +208,17 @@ test("stored automation titles are compact instead of repeating the whole user s
   const d=compileShortcutGoal("Wenn Instagram geöffnet wird, Helligkeit auf 100 %.");
   assert.equal(automationDisplayName(d),"Instagram → Helligkeit Maximum");
 });
+
+test("unknown smart-home vendors get standards-based fallback suggestions instead of invented APIs",()=>{
+  const raw=JSON.stringify({
+    kind:"automation",confidence:0.95,
+    trigger:{capabilityId:"trigger.manual",parameters:{}},
+    actions:[{capabilityId:"smart-home.cover.open",parameters:{provider:"Somfy",room:"Wohnzimmer"}}],
+    clarificationQuestion:null,suggestion:null
+  });
+  const result=acceptSemanticAutomationOutput("Somfy Rolladen im Wohnzimmer hoch",raw);
+  assert.equal(result.kind,"understood");
+  if(result.kind==="understood"){
+    assert.match(result.suggestion?.message??"",/Apple Home|Matter|Home Assistant/);
+  }
+});
