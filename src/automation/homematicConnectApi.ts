@@ -56,12 +56,12 @@ export type HomematicTarget =
 
 export function homematicHcuHost(lastFourSgtinDigits: string): string {
   const suffix = lastFourSgtinDigits.trim();
-  if (!/^\d{4}$/.test(suffix)) throw new Error("HOMEMATIC_SGTIN_SUFFIX_INVALID");
+  if (!/^[A-Za-z0-9]{4}$/.test(suffix)) throw new Error("HOMEMATIC_SGTIN_SUFFIX_INVALID");
   return `hcu1-${suffix.toUpperCase()}.local`;
 }
 
 export function homematicPairingURL(host: string, action: "request" | "confirm"): string {
-  if (!/^hcu1-\d{4}\.local$/i.test(host)) throw new Error("HOMEMATIC_HCU_HOST_INVALID");
+  if (!/^hcu1-[A-Za-z0-9]{4}\.local$/i.test(host)) throw new Error("HOMEMATIC_HCU_HOST_INVALID");
   const path = action === "request"
     ? "/hmip/auth/requestConnectApiAuthToken"
     : "/hmip/auth/confirmConnectApiAuthToken";
@@ -94,7 +94,7 @@ export function homematicConfirmTokenBody(activationKey: string, authToken: stri
 }
 
 export function homematicWebSocketURL(host: string): string {
-  if (!/^hcu1-\d{4}\.local$/i.test(host)) throw new Error("HOMEMATIC_HCU_HOST_INVALID");
+  if (!/^hcu1-[A-Za-z0-9]{4}\.local$/i.test(host)) throw new Error("HOMEMATIC_HCU_HOST_INVALID");
   return `wss://${host}:9001`;
 }
 
