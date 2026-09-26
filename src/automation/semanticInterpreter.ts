@@ -16,6 +16,10 @@ export type SemanticAutomationResult =
   | { kind: "not-automation" }
   | { kind: "unavailable" };
 
+export type SemanticAutomationContext = {
+  connectedProviderIds?: string[];
+};
+
 type ModelStep = {
   capabilityId: string;
   parameters: Record<string, string | number | boolean>;
@@ -211,7 +215,7 @@ export function acceptSemanticAutomationOutput(goal: string, raw: string): Seman
   return { kind: "understood", definition, ...(suggestion ? { suggestion } : {}) };
 }
 
-export async function interpretAutomationWithOnDeviceAI(goal: string): Promise<SemanticAutomationResult> {
+export async function interpretAutomationWithOnDeviceAI(goal: string, context: SemanticAutomationContext = {}): Promise<SemanticAutomationResult> {
   if (!goal.trim()) return { kind: "unavailable" };
 
   try {
@@ -246,6 +250,8 @@ export async function interpretAutomationWithOnDeviceAI(goal: string): Promise<S
       compactCatalogue(),
       "Bekannte Connectoren (Status ist nur Routing-Metadaten, niemals als bereits verbunden annehmen):",
       compactProviderCatalogue(),
+      `Bereits verbundene Connectoren: ${context.connectedProviderIds?.length ? context.connectedProviderIds.join(", ") : "keine"}`,
+      "Wenn der Nutzer keinen Hersteller nennt und genau ein verbundener Connector die gewünschte Aktion sicher unterstützt, darfst du diesen Anbieter bevorzugen. Bei mehreren plausiblen Anbietern frage nach.",
       `Nutzerwunsch: ${goal}`
     ].join("\n");
 
