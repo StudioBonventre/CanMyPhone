@@ -37,11 +37,11 @@ export function connectorSetupPlan(providerId: string): ConnectorSetupPlan | nul
   if(provider.id==="homematic-ip"){
     return {
       provider,
-      executableToday:false,
+      executableToday:true,
       steps:[
         ...common,
-        {id:"hcu",title:"Home Control Unit finden",detail:"CanMyPhone sucht die HCU im lokalen Netzwerk.",userActionRequired:false},
-        {id:"pair",title:"Lokale Verbindung autorisieren",detail:"Die externe Verbindung muss an der HCU freigegeben werden; Zugangsdaten bleiben lokal.",userActionRequired:true},
+        {id:"hcu",title:"Home Control Unit angeben",detail:"Gib die letzten vier Stellen der HCU-SGTIN ein. CanMyPhone verbindet sich danach ausschließlich lokal mit hcu1-XXXX.local.",userActionRequired:true},
+        {id:"pair",title:"Lokale Verbindung autorisieren",detail:"Aktiviere in der HCU den Entwickler-/WebSocket-Zugang und gib den einmaligen Aktivierungsschlüssel ein. Der dauerhafte Auth-Token landet nur im iOS-Keychain.",userActionRequired:true},
         {id:"discover",title:"Räume und Geräte einlesen",detail:"CanMyPhone ordnet Rollläden, Lichter und Klima den vorhandenen Räumen zu.",userActionRequired:false}
       ]
     };

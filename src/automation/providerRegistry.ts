@@ -40,7 +40,7 @@ export const PROVIDER_REGISTRY: readonly ProviderDescriptor[] = [
     aliases: ["homematic ip","homematic","hmip"],
     transport: "local-api",
     operations: ["smart-home.cover.open","smart-home.cover.close","smart-home.light.set","smart-home.climate.set"],
-    implementation: "CONNECTOR_NEEDED",
+    implementation: "READY",
     authKind: "local-pairing",
     requiresUserConnection: true,
     executionLocation: "local-network"

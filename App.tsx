@@ -20,7 +20,7 @@ import { AutomationPlanPreview } from "./src/components/AutomationPlanPreview";
 import { ShortcutDefinitionPreview } from "./src/components/ShortcutDefinitionPreview";
 import { AutomationInstallationCard } from "./src/components/AutomationInstallationCard";
 import { MyAutomationsCard } from "./src/components/MyAutomationsCard";
-import { ConnectorSettingsCard } from "./src/components/ConnectorSettingsCard";
+import { ConnectorSettingsCard, type ConnectorConnectInput } from "./src/components/ConnectorSettingsCard";
 import { compileShortcutGoal } from "./src/automation/shortcutCompiler";
 import { interpretAutomationWithOnDeviceAI, type AutomationSuggestion } from "./src/automation/semanticInterpreter";
 import { buildAppleIntelligenceAutomationDescription } from "./src/automation/appleShortcutsHandoff";
@@ -826,7 +826,7 @@ export default function App() {
     setActionResult({ handled:true, succeeded:true, message:result.message });
   };
 
-  const connectProvider = async (providerId: string) => {
+  const connectProvider = async (providerId: string, input?: ConnectorConnectInput) => {
     const startedAt = new Date().toISOString();
     let profile = await saveConnectorConnection({
       providerId,
@@ -835,26 +835,58 @@ export default function App() {
     });
     setConnectorConnections(profile);
 
-    if (providerId !== "apple-home") {
+    if (providerId === "apple-home") {
+      const snapshot = await CanMyPhoneNative?.homeKitSnapshot?.().catch(() => null);
+      if (snapshot?.authorized) {
+        profile = await saveConnectorConnection({
+          providerId,
+          status: "CONNECTED",
+          updatedAt: new Date().toISOString(),
+          connectedAt: new Date().toISOString()
+        });
+        setConnectorConnections(profile);
+        return;
+      }
+
       profile = await saveConnectorConnection({
         providerId,
         status: "ERROR",
         updatedAt: new Date().toISOString(),
-        errorCode: "CONNECTOR_NOT_LIVE_YET"
+        errorCode: snapshot?.restricted ? "HOMEKIT_RESTRICTED" : "HOMEKIT_NOT_AUTHORIZED"
       });
       setConnectorConnections(profile);
       return;
     }
 
-    const snapshot = await CanMyPhoneNative?.homeKitSnapshot?.().catch(() => null);
-    if (snapshot?.authorized) {
-      profile = await saveConnectorConnection({
+    if (providerId === "homematic-ip") {
+      const suffix=input?.hcuSuffix?.trim()??"";
+      const activationKey=input?.activationKey?.trim()??"";
+      if(suffix.length!==4||!activationKey){
+        profile=await saveConnectorConnection({providerId,status:"ERROR",updatedAt:new Date().toISOString(),errorCode:"HOMEMATIC_SETUP_REQUIRED"});
+        setConnectorConnections(profile);
+        setActionResult({handled:true,succeeded:false,message:"Für Homematic IP fehlen die letzten vier HCU-SGTIN-Stellen oder der Aktivierungsschlüssel."});
+        return;
+      }
+      const pairing=await CanMyPhoneNative?.homematicPair?.(suffix,activationKey).catch(()=>null);
+      if(pairing?.success){
+        profile=await saveConnectorConnection({
+          providerId,
+          status:"CONNECTED",
+          updatedAt:new Date().toISOString(),
+          connectedAt:new Date().toISOString()
+        });
+        setConnectorConnections(profile);
+        setActionResult({handled:true,succeeded:true,message:pairing.message});
+        return;
+      }
+      profile=await saveConnectorConnection({
         providerId,
-        status: "CONNECTED",
-        updatedAt: new Date().toISOString(),
-        connectedAt: new Date().toISOString()
+        status:"ERROR",
+        updatedAt:new Date().toISOString(),
+        errorCode:pairing?.code??"HOMEMATIC_PAIRING_FAILED"
       });
       setConnectorConnections(profile);
+      setActionResult({handled:true,succeeded:false,message:pairing?.message??"Dieser Development Build enthält die neue Homematic-HCU-Verbindung noch nicht."});
       return;
     }
 
@@ -862,7 +894,7 @@ export default function App() {
       providerId,
       status: "ERROR",
       updatedAt: new Date().toISOString(),
-      errorCode: snapshot?.restricted ? "HOMEKIT_RESTRICTED" : "HOMEKIT_NOT_AUTHORIZED"
+      errorCode: "CONNECTOR_NOT_LIVE_YET"
     });
     setConnectorConnections(profile);
   };
@@ -1278,7 +1310,7 @@ export default function App() {
 
                 <MyAutomationsCard items={automations} onToggle={(item)=>{const updated={...item,enabled:!item.enabled,materializationState:(!item.enabled?"ACTIVE":"DISABLED") as StoredAutomation["materializationState"]};automationRepository.save(updated).then(async()=>{setAutomations(await automationRepository.list());trackProductEvent(updated.enabled?"automation_enabled":"automation_disabled",{});}).catch(()=>undefined);}} onDelete={(id)=>automationRepository.remove(id).then(async()=>setAutomations(await automationRepository.list())).catch(()=>undefined)} />
 
-                <ConnectorSettingsCard profile={connectorConnections} onConnect={(providerId)=>connectProvider(providerId).catch(()=>undefined)} />
+                <ConnectorSettingsCard profile={connectorConnections} onConnect={(providerId,input)=>connectProvider(providerId,input).catch(()=>undefined)} />
 
                 <ContentSurface emphasis="active" style={styles.youCard}>
                   <View style={styles.youRow}>
