@@ -122,7 +122,7 @@ export function materializeShortcutDefinition(definition: ShortcutDefinition, no
   else if (definition.requiredSetup.length) materializationState = "PERMISSION_REQUIRED";
   else if (triggerIsPersonal) materializationState = "APPLE_SETUP_REQUIRED";
 
-  const personalSetup = triggerIsPersonal ? createPersonalAutomationSetup(id, definition.trigger, definition.actions) : undefined;
+  const personalSetup = triggerIsPersonal ? createPersonalAutomationSetup(id, definition.trigger, definition.actions, definition.name) : undefined;
   return {
     id, name: definition.name, version: STORED_AUTOMATION_SCHEMA_VERSION,
     originalIntentSummary: definition.name.slice(0, 120), definition, enabled: false,
@@ -135,7 +135,7 @@ export function materializeShortcutDefinition(definition: ShortcutDefinition, no
   };
 }
 
-export function createPersonalAutomationSetup(automationId: string, trigger: ShortcutStep, actions: ShortcutStep[] = []): PersonalAutomationSetup {
+export function createPersonalAutomationSetup(automationId: string, trigger: ShortcutStep, actions: ShortcutStep[] = [], automationName = "CanMyPhone Automation"): PersonalAutomationSetup {
   const triggerLabel = triggerNames[trigger.capabilityId] ?? "Persönliche Automation";
   const value = Object.values(trigger.parameters)[0];
   const selector = value === undefined ? triggerLabel : `${triggerLabel}: ${String(value)}`;
