@@ -4,6 +4,7 @@ export type ProductEvent =
   | "suggestion_shown" | "suggestion_accepted" | "suggestion_dismissed"
   | "paywall_opened" | "purchase_success" | "purchase_failed"
   | "automation_materialization_started" | "automation_handoff_opened"
+  | "automation_saved_waiting_for_apple_setup"
   | "automation_setup_confirmed" | "automation_setup_cancelled"
   | "automation_enabled" | "automation_disabled"
   | "automation_run_success" | "automation_run_failed";
