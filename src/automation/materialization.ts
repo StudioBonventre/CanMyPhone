@@ -21,6 +21,8 @@ export type PersonalAutomationSetup = {
   estimatedUserActions: number;
   setupState: SetupState;
   handedOffAt?: string;
+  handoffMode?: "GUIDED" | "APPLE_INTELLIGENCE";
+  shortcutsDescription?: string;
 };
 
 export type StoredAutomation = {
