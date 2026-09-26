@@ -121,30 +121,45 @@ enum CanMyPhoneAutomationRunner {
         executed.append(capability)
 
       case "smart-home.cover.open", "smart-home.cover.close":
-        guard validProvider(parameters["provider"]), let room = parameters["room"] as? String, !room.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return finish(&item, id, "INVALID_DEFINITION", "Apple Home oder der Raum fehlt.", executed, capability, "INVALID_PARAMETER") }
+        guard let provider = normalizedProvider(parameters["provider"]), validProvider(provider), let room = parameters["room"] as? String, !room.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return finish(&item, id, "INVALID_DEFINITION", "Smart-Home-Anbieter oder Raum fehlt.", executed, capability, "INVALID_PARAMETER") }
         let device = parameters["device"] as? String
-        let position = capability == "smart-home.cover.open" ? 100 : 0
-        let homeResult = await CanMyPhoneHomeKitBridge.shared.setCover(room: room, device: device, position: position)
+        let homeResult: [String: Any]
+        if isHomematicProvider(provider) {
+          homeResult = await CanMyPhoneHomematicBridge.shared.setCover(room: room, device: device, open: capability == "smart-home.cover.open")
+        } else {
+          let position = capability == "smart-home.cover.open" ? 100 : 0
+          homeResult = await CanMyPhoneHomeKitBridge.shared.setCover(room: room, device: device, position: position)
+        }
         guard homeResult["success"] as? Bool == true else {
-          return finish(&item, id, "FAILED", homeResult["message"] as? String ?? "Apple Home konnte die Rollläden nicht ändern.", executed, capability, homeResult["code"] as? String ?? "HOMEKIT_WRITE_FAILED")
+          return finish(&item, id, "FAILED", homeResult["message"] as? String ?? "Das Smart Home konnte die Rollläden nicht ändern.", executed, capability, homeResult["code"] as? String ?? "SMART_HOME_WRITE_FAILED")
         }
         executed.append(capability)
 
       case "smart-home.light.set":
-        guard validProvider(parameters["provider"]), let room = parameters["room"] as? String, let value = parameters["value"] as? String else { return finish(&item, id, "INVALID_DEFINITION", "Apple Home, Raum oder Lichtwert fehlt.", executed, capability, "INVALID_PARAMETER") }
+        guard let provider = normalizedProvider(parameters["provider"]), validProvider(provider), let room = parameters["room"] as? String, let value = parameters["value"] as? String else { return finish(&item, id, "INVALID_DEFINITION", "Smart-Home-Anbieter, Raum oder Lichtwert fehlt.", executed, capability, "INVALID_PARAMETER") }
         let device = parameters["device"] as? String
-        let homeResult = await CanMyPhoneHomeKitBridge.shared.setLight(room: room, device: device, value: value)
+        let homeResult: [String: Any]
+        if isHomematicProvider(provider) {
+          homeResult = await CanMyPhoneHomematicBridge.shared.setLight(room: room, device: device, value: value)
+        } else {
+          homeResult = await CanMyPhoneHomeKitBridge.shared.setLight(room: room, device: device, value: value)
+        }
         guard homeResult["success"] as? Bool == true else {
-          return finish(&item, id, "FAILED", homeResult["message"] as? String ?? "Apple Home konnte das Licht nicht ändern.", executed, capability, homeResult["code"] as? String ?? "HOMEKIT_WRITE_FAILED")
+          return finish(&item, id, "FAILED", homeResult["message"] as? String ?? "Das Smart Home konnte das Licht nicht ändern.", executed, capability, homeResult["code"] as? String ?? "SMART_HOME_WRITE_FAILED")
         }
         executed.append(capability)
 
       case "smart-home.climate.set":
-        guard validProvider(parameters["provider"]), let room = parameters["room"] as? String, let value = parameters["value"] as? String else { return finish(&item, id, "INVALID_DEFINITION", "Apple Home, Raum oder Temperatur fehlt.", executed, capability, "INVALID_PARAMETER") }
+        guard let provider = normalizedProvider(parameters["provider"]), validProvider(provider), let room = parameters["room"] as? String, let value = parameters["value"] as? String else { return finish(&item, id, "INVALID_DEFINITION", "Smart-Home-Anbieter, Raum oder Temperatur fehlt.", executed, capability, "INVALID_PARAMETER") }
         let device = parameters["device"] as? String
-        let homeResult = await CanMyPhoneHomeKitBridge.shared.setClimate(room: room, device: device, value: value)
+        let homeResult: [String: Any]
+        if isHomematicProvider(provider) {
+          homeResult = await CanMyPhoneHomematicBridge.shared.setClimate(room: room, value: value)
+        } else {
+          homeResult = await CanMyPhoneHomeKitBridge.shared.setClimate(room: room, device: device, value: value)
+        }
         guard homeResult["success"] as? Bool == true else {
-          return finish(&item, id, "FAILED", homeResult["message"] as? String ?? "Apple Home konnte die Temperatur nicht ändern.", executed, capability, homeResult["code"] as? String ?? "HOMEKIT_WRITE_FAILED")
+          return finish(&item, id, "FAILED", homeResult["message"] as? String ?? "Das Smart Home konnte die Temperatur nicht ändern.", executed, capability, homeResult["code"] as? String ?? "SMART_HOME_WRITE_FAILED")
         }
         executed.append(capability)
 
@@ -154,9 +169,18 @@ enum CanMyPhoneAutomationRunner {
     return finish(&item, id, "SUCCESS", "Alle Aktionen wurden erfolgreich ausgeführt.", executed, nil, nil)
   }
 
-  private static func validProvider(_ raw: Any?) -> Bool {
-    guard let value = raw as? String else { return false }
-    return ["apple-home", "apple home", "homekit", "home"].contains(value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
+  private static func normalizedProvider(_ raw: Any?) -> String? {
+    guard let value = raw as? String else { return nil }
+    let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    return normalized.isEmpty ? nil : normalized
+  }
+
+  private static func isHomematicProvider(_ value: String) -> Bool {
+    ["homematic-ip", "homematic ip", "homematic", "hmip"].contains(value)
+  }
+
+  private static func validProvider(_ value: String) -> Bool {
+    ["apple-home", "apple home", "homekit", "home"].contains(value) || isHomematicProvider(value)
   }
 
   private static func openExternal(_ url: URL) async -> Bool {
