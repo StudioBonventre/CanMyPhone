@@ -5,6 +5,8 @@ import { validateShortcutDefinition } from "../src/automation/shortcutValidation
 import { acceptSemanticAutomationOutput } from "../src/automation/semanticInterpreter";
 import { shortcutsParitySummary } from "../src/automation/shortcutsParity";
 import { bindProvider } from "../src/automation/providerRegistry";
+import { connectorPlanForDefinition } from "../src/automation/connectorPlanning";
+import { automationDisplayName } from "../src/automation/displayName";
 const cases=[
  ["Wenn ich zuhause ankomme, schalte Fokus Arbeit aus.","trigger.location-enter",["system.focus.set"]],
  ["Wenn meine AirPods verbunden werden, starte Spotify.","trigger.bluetooth-connected",["media.spotify.open"]],
@@ -168,4 +170,41 @@ test("provider router binds brands semantically and asks for connection instead 
   const hmip=bindProvider("smart-home.cover.open",{provider:"Homematic IP",room:"Wohnzimmer"});
   assert.equal(hmip.status,"CONNECTION_REQUIRED");
   if(hmip.status==="CONNECTION_REQUIRED")assert.equal(hmip.provider.id,"homematic-ip");
+});
+
+test("provider router stays truthful about unknown vendors and offers standards as fallback",()=>{
+  const unknown=bindProvider("smart-home.cover.open",{provider:"UnknownBrand",room:"Wohnzimmer"});
+  assert.equal(unknown.status,"UNSUPPORTED");
+  if(unknown.status==="UNSUPPORTED")assert.ok(unknown.fallbackCandidates.some((item)=>item.id==="matter"));
+});
+
+test("connected providers become bound without changing the AI plan",()=>{
+  const tesla=bindProvider("vehicle.lock",{brand:"Tesla"},new Set(["tesla"]));
+  assert.equal(tesla.status,"BOUND");
+});
+
+test("connector planning composes Tesla and Homematic IP in one automation",()=>{
+  const raw=JSON.stringify({
+    kind:"automation",confidence:0.98,
+    trigger:{capabilityId:"trigger.location-enter",parameters:{value:"home"}},
+    actions:[
+      {capabilityId:"vehicle.lock",parameters:{brand:"Tesla"}},
+      {capabilityId:"smart-home.cover.open",parameters:{provider:"Homematic IP",room:"Wohnzimmer"}}
+    ],
+    clarificationQuestion:null,suggestion:null
+  });
+  const result=acceptSemanticAutomationOutput("Wenn ich heimkomme, Tesla zu und Rollläden hoch",raw);
+  assert.equal(result.kind,"understood");
+  if(result.kind==="understood"){
+    const plan=connectorPlanForDefinition(result.definition,new Set());
+    assert.equal(plan.requirements.length,2);
+    assert.equal(plan.connectionRequired,true);
+    const connected=connectorPlanForDefinition(result.definition,new Set(["tesla","homematic-ip"]));
+    assert.equal(connected.ready,true);
+  }
+});
+
+test("stored automation titles are compact instead of repeating the whole user sentence",()=>{
+  const d=compileShortcutGoal("Wenn Instagram geöffnet wird, Helligkeit auf 100 %.");
+  assert.equal(automationDisplayName(d),"Instagram → Helligkeit Maximum");
 });
