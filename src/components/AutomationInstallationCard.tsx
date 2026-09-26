@@ -11,9 +11,13 @@ export function AutomationInstallationCard({ automation, onHandoff, onConfirm, o
   return <ContentSurface emphasis="active" style={styles.card}>
     <Text style={styles.eyebrow}>{direct?"BEREIT":"FAST FERTIG"}</Text>
     <Text style={styles.title}>{automation.name}</Text>
-    <Text style={styles.status}>{automation.materializationState === "ACTIVE" ? "AKTIV · Wartet auf Trigger" : direct ? "CanMyPhone kann diese Aktion direkt ausführen." : "Ein Apple-Schritt fehlt noch."}</Text>
+    <Text style={styles.status}>{automation.materializationState === "ACTIVE" ? "AKTIV · Wartet auf Trigger" : direct ? "CanMyPhone kann diese Aktion direkt ausführen." : setup?.handoffMode === "APPLE_INTELLIGENCE" ? "Kurzbefehle erstellt die Automation aus der vorbereiteten Beschreibung." : "Ein Apple-Schritt fehlt noch."}</Text>
     {automation.requiredSetup.length ? <Text style={styles.requirements}>Benötigt: {automation.requiredSetup.join(" · ")}</Text> : null}
-    {automation.safetyApproval.required&&!hasValidSafetyApproval(automation)?<><Text style={styles.warning}>Sensible Aktion: Prüfe Trigger, Bedingungen und Aktion genau. Deine Freigabe gilt nur für diese konkrete Version.</Text><LiquidButton label="Diese Automation ausdrücklich freigeben" onPress={onApprove}/></>:<>{setup ? <View style={styles.steps}>{setup.setupSteps.map((step,index)=><View key={`${index}-${step}`} style={styles.step}><Text style={styles.number}>{index+1}</Text><Text style={styles.stepText}>{step}</Text></View>)}</View> : null}
+    {automation.safetyApproval.required&&!hasValidSafetyApproval(automation)?<><Text style={styles.warning}>Sensible Aktion: Prüfe Trigger, Bedingungen und Aktion genau. Deine Freigabe gilt nur für diese konkrete Version.</Text><LiquidButton label="Diese Automation ausdrücklich freigeben" onPress={onApprove}/></>:<>{setup ? <View style={styles.steps}>{(setup.handoffMode === "APPLE_INTELLIGENCE" ? [
+      "CanMyPhone hat die komplette Automation beschrieben und in die Zwischenablage gelegt.",
+      "Füge die Beschreibung in Kurzbefehle bei „Beschreibe einen Kurzbefehl“ ein. Kurzbefehle baut Trigger und Aktionen.",
+      "Prüfe Apples Vorschlag und bestätige ihn."
+    ] : setup.setupSteps).map((step,index)=><View key={`${index}-${step}`} style={styles.step}><Text style={styles.number}>{index+1}</Text><Text style={styles.stepText}>{step}</Text></View>)}</View> : null}
     {setup?.setupState === "AWAITING_CONFIRMATION" ? <>
       <Text style={styles.question}>Hast du die Automation in Kurzbefehle fertiggestellt?</Text>
       <LiquidButton label="Ja, fertig" onPress={onConfirm}/>
