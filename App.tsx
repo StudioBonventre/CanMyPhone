@@ -28,9 +28,8 @@ import { compileAutomationRuntime } from "./src/automation/engine";
 import { launcherPlanForDefinition } from "./src/automation/appLauncher";
 import { approveSensitiveAutomation, materializeShortcutDefinition, type StoredAutomation } from "./src/automation/materialization";
 import { automationRepository, syncNativeRunnerResults } from "./src/automation/automationRepository";
-import { loadConnectorConnections } from "./src/automation/connectorConnectionRepository";
+import { loadConnectorConnections, saveConnectorConnection } from "./src/automation/connectorConnectionRepository";
 import { connectedProviderIds, EMPTY_CONNECTOR_CONNECTION_PROFILE, type ConnectorConnectionProfile } from "./src/automation/connectorConnectionState";
-import { saveConnectorConnection } from "./src/automation/connectorConnectionRepository";
 import { resolveConnectedProviders } from "./src/automation/providerResolution";
 import { CanMyPhoneNative } from "./modules/canmyphone-native";
 import { trackProductEvent } from "./src/lib/analytics";
@@ -780,6 +779,47 @@ export default function App() {
     await clearNeedRadarProfile();
   };
 
+  const connectProvider = async (providerId: string) => {
+    const startedAt = new Date().toISOString();
+    let profile = await saveConnectorConnection({
+      providerId,
+      status: "CONNECTING",
+      updatedAt: startedAt
+    });
+    setConnectorConnections(profile);
+
+    if (providerId !== "apple-home") {
+      profile = await saveConnectorConnection({
+        providerId,
+        status: "ERROR",
+        updatedAt: new Date().toISOString(),
+        errorCode: "CONNECTOR_NOT_LIVE_YET"
+      });
+      setConnectorConnections(profile);
+      return;
+    }
+
+    const snapshot = await CanMyPhoneNative?.homeKitSnapshot?.().catch(() => null);
+    if (snapshot?.authorized) {
+      profile = await saveConnectorConnection({
+        providerId,
+        status: "CONNECTED",
+        updatedAt: new Date().toISOString(),
+        connectedAt: new Date().toISOString()
+      });
+      setConnectorConnections(profile);
+      return;
+    }
+
+    profile = await saveConnectorConnection({
+      providerId,
+      status: "ERROR",
+      updatedAt: new Date().toISOString(),
+      errorCode: snapshot?.restricted ? "HOMEKIT_RESTRICTED" : "HOMEKIT_NOT_AUTHORIZED"
+    });
+    setConnectorConnections(profile);
+  };
+
   const updatePreferences = (patch: Partial<UserPreferences>) => {
     setPreferences((current) => ({ ...current, ...patch }));
   };
@@ -1191,7 +1231,7 @@ export default function App() {
 
                 <MyAutomationsCard items={automations} onToggle={(item)=>{const updated={...item,enabled:!item.enabled,materializationState:(!item.enabled?"ACTIVE":"DISABLED") as StoredAutomation["materializationState"]};automationRepository.save(updated).then(async()=>{setAutomations(await automationRepository.list());trackProductEvent(updated.enabled?"automation_enabled":"automation_disabled",{});}).catch(()=>undefined);}} onDelete={(id)=>automationRepository.remove(id).then(async()=>setAutomations(await automationRepository.list())).catch(()=>undefined)} />
 
-                <ConnectorSettingsCard profile={connectorConnections} />
+                <ConnectorSettingsCard profile={connectorConnections} onConnect={(providerId)=>connectProvider(providerId).catch(()=>undefined)} />
 
                 <ContentSurface emphasis="active" style={styles.youCard}>
                   <View style={styles.youRow}>
