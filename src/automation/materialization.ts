@@ -101,7 +101,7 @@ export function hasValidSafetyApproval(item:StoredAutomation):boolean {
 export function actionExecutionMode(step: ShortcutStep): ActionExecutionMode {
   const cap = capabilityV2(step.capabilityId);
   if (!cap || cap.role !== "action") return "UNSUPPORTED";
-  if (step.capabilityId === "system.brightness.set") return "EXECUTABLE_DIRECT";
+  if (cap.executionModes.includes("DIRECT_PUBLIC_API")) return "EXECUTABLE_DIRECT";
   if (cap.integration || cap.executionModes.includes("THIRD_PARTY_API")) return "REQUIRES_PROVIDER";
   if (cap.executionModes.includes("SHORTCUT") || cap.executionModes.includes("PERSONAL_AUTOMATION")) return "REQUIRES_SHORTCUT_ACTION";
   if (cap.executionModes.includes("APP_INTENT")) return "EXECUTABLE_APP_INTENT";
