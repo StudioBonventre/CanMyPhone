@@ -8,6 +8,7 @@ export type {
   PermissionKind,
   PermissionResult,
   PermissionStatus,
+  ShortcutDescriptionHandoffResult,
   ShortcutsDestination,
   StoreEntitlementResult,
   StoreProductInfo,
