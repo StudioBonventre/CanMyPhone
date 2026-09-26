@@ -20,6 +20,7 @@ import { ShortcutDefinitionPreview } from "./src/components/ShortcutDefinitionPr
 import { AutomationInstallationCard } from "./src/components/AutomationInstallationCard";
 import { MyAutomationsCard } from "./src/components/MyAutomationsCard";
 import { compileShortcutGoal } from "./src/automation/shortcutCompiler";
+import { interpretAutomationWithOnDeviceAI, type AutomationSuggestion } from "./src/automation/semanticInterpreter";
 import { buildAppleIntelligenceAutomationDescription } from "./src/automation/appleShortcutsHandoff";
 import { approveSensitiveAutomation, materializeShortcutDefinition, type StoredAutomation } from "./src/automation/materialization";
 import { automationRepository, syncNativeRunnerResults } from "./src/automation/automationRepository";
@@ -163,6 +164,9 @@ export default function App() {
   const [purchasingProductId, setPurchasingProductId] = useState<string | null>(null);
   const [restoreRunning, setRestoreRunning] = useState(false);
   const [plannerResponse, setPlannerResponse] = useState<PlannerResponse | null>(null);
+  const [semanticDefinition, setSemanticDefinition] = useState<ReturnType<typeof compileShortcutGoal> | null>(null);
+  const [semanticSuggestion, setSemanticSuggestion] = useState<AutomationSuggestion | null>(null);
+  const [semanticClarification, setSemanticClarification] = useState<string | null>(null);
   const [automations, setAutomations] = useState<StoredAutomation[]>([]);
   const [installingAutomation, setInstallingAutomation] = useState<StoredAutomation | null>(null);
 
@@ -306,7 +310,7 @@ export default function App() {
     const result = compileVerifiedGoal(submittedQuery);
     return result.ok ? result.plan : null;
   }, [submittedQuery, plannerResponse]);
-  const shortcutDefinition = useMemo(() => submittedQuery ? compileShortcutGoal(submittedQuery) : null, [submittedQuery]);
+  const shortcutDefinition = useMemo(() => semanticDefinition ?? (submittedQuery ? compileShortcutGoal(submittedQuery) : null), [submittedQuery, semanticDefinition]);
   const isSearching = motionPhase === "diving" || motionPhase === "searching" || motionPhase === "emerging";
 
   const resetQuestion = () => {
@@ -319,6 +323,9 @@ export default function App() {
     setActionResult(null);
     setAnswerFeedback(null);
     setPlannerResponse(null);
+    setSemanticDefinition(null);
+    setSemanticSuggestion(null);
+    setSemanticClarification(null);
     setInstallingAutomation(null);
     setMotionPhase("idle");
   };
@@ -431,6 +438,9 @@ export default function App() {
     setAiSelectedId(null);
     setActionResult(null);
     setAnswerFeedback(null);
+    setSemanticDefinition(null);
+    setSemanticSuggestion(null);
+    setSemanticClarification(null);
     if (!fromClarification) setClarificationUsed(false);
     setProfile((current) => learnFromProblem(current, normalized, solutions, platform));
     setMotionPhase("diving");
@@ -441,18 +451,33 @@ export default function App() {
       const deterministic = resolveConversation(normalized, solutions, deviceContext);
       const compiledShortcut = compileShortcutGoal(normalized);
       let selectedByAI: string | null = null;
+      let semanticHandled = false;
+
+      if (preferences.useOnDeviceAI) {
+        const semantic = await interpretAutomationWithOnDeviceAI(normalized);
+        if (semantic.kind === "understood") {
+          setSemanticDefinition(semantic.definition);
+          setSemanticSuggestion(semantic.suggestion ?? null);
+          semanticHandled = true;
+        } else if (semantic.kind === "clarification") {
+          setSemanticClarification(semantic.question);
+          semanticHandled = true;
+        }
+      }
 
       if (
+        !semanticHandled &&
         preferences.useOnDeviceAI &&
         !deterministic.followUp &&
-        deterministic.solutions.length === 0 && compiledShortcut.confidence < 0.8
+        deterministic.solutions.length === 0 &&
+        compiledShortcut.confidence < 0.8
       ) {
         const candidates = solutions.filter((item) => item.platform === platform || item.platform === "both");
         const resolved = await resolveWithOnDeviceAI(normalized, candidates);
         selectedByAI = resolved.solutionId;
       }
 
-      if (!deterministic.followUp && deterministic.solutions.length === 0 && !selectedByAI && compiledShortcut.confidence < 0.8) {
+      if (!semanticHandled && !deterministic.followUp && deterministic.solutions.length === 0 && !selectedByAI && compiledShortcut.confidence < 0.8) {
         const server = getSupabasePlannerClient();
         if (server) {
           const planned = await planGoal(normalized, { locale: "de", connectedProviders: [], grantedSignals: [] }, server);
@@ -783,9 +808,19 @@ export default function App() {
                 {shortcutDefinition && shortcutDefinition.confidence >= 0.8 && !automationPlan ? (
                   <View style={styles.answerArea}>
                     <ShortcutDefinitionPreview definition={shortcutDefinition} />
+                    {semanticSuggestion ? <ContentSurface style={styles.resultBanner}><Text style={styles.resultTitle}>{semanticSuggestion.title}</Text><Text style={styles.resultText}>{semanticSuggestion.message}</Text>{semanticSuggestion.proposedGoal ? <Pressable onPress={()=>runAsk(semanticSuggestion.proposedGoal!).catch(()=>undefined)} style={styles.textAction}><Text style={styles.textActionText}>Vorschlag verwenden</Text></Pressable> : null}</ContentSurface> : null}
                     {installingAutomation ? <AutomationInstallationCard automation={installingAutomation} onApprove={()=>approveAutomation().catch(()=>undefined)} onHandoff={()=>handoffAutomation().catch(()=>undefined)} onConfirm={()=>confirmAutomation().catch(()=>undefined)} onCancel={()=>cancelSetup().catch(()=>undefined)} /> : <LiquidButton style={styles.primaryAction} label="Automation einrichten" onPress={()=>createAutomation().catch(()=>undefined)} />}
                     {actionResult ? <ContentSurface style={styles.resultBanner}><Text style={styles.resultTitle}>Status</Text><Text style={styles.resultText}>{actionResult.message}</Text></ContentSurface> : null}
                   </View>
+                ) : semanticClarification ? (
+                  <GlassSurface variant="floating" style={styles.followUpCard}>
+                    <Text style={styles.answerEyebrow}>ICH WILL ES RICHTIG VERSTEHEN</Text>
+                    <Text style={styles.followUpText}>{semanticClarification}</Text>
+                    <GlassSurface variant="inset" style={styles.followUpInputRow}>
+                      <TextInput value={followUpDraft} onChangeText={setFollowUpDraft} placeholder="Deine Antwort" placeholderTextColor="#87919D" returnKeyType="send" onSubmitEditing={submitClarification} style={styles.followUpInput} />
+                      <Pressable style={styles.smallSendButton} onPress={submitClarification} accessibilityLabel="Antwort senden"><Text style={styles.smallSendText}>↑</Text></Pressable>
+                    </GlassSurface>
+                  </GlassSurface>
                 ) : plannerResponse && !plannerResponse.ok && plannerResponse.code === "needs-clarification" ? (
                   <GlassSurface variant="floating" style={styles.followUpCard}>
                     <Text style={styles.answerEyebrow}>ICH BRAUCHE NOCH EINE ANGABE</Text>

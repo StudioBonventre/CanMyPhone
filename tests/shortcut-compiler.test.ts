@@ -2,6 +2,7 @@ import test from "node:test"; import assert from "node:assert/strict";
 import { CAPABILITY_CATALOG_V2, capabilityV2 } from "../src/automation/capabilityCatalogV2";
 import { compileShortcutGoal, relevantCatalogForGoal } from "../src/automation/shortcutCompiler";
 import { validateShortcutDefinition } from "../src/automation/shortcutValidation";
+import { acceptSemanticAutomationOutput } from "../src/automation/semanticInterpreter";
 const cases=[
  ["Wenn ich zuhause ankomme, schalte Fokus Arbeit aus.","trigger.location-enter",["system.focus.set"]],
  ["Wenn meine AirPods verbunden werden, starte Spotify.","trigger.bluetooth-connected",["media.spotify.open"]],
@@ -82,4 +83,42 @@ test("arbitrary app names are preserved for app-open triggers",()=>{
 test("opening a known app manually is not mistaken for an app-open trigger",()=>{
   const d=compileShortcutGoal("Öffne Spotify.");
   assert.notEqual(d.trigger.capabilityId,"trigger.app-opened");
+});
+
+test("semantic interpreter accepts free language mapped to allow-listed capabilities",()=>{
+  const raw=JSON.stringify({
+    kind:"automation",
+    confidence:0.94,
+    trigger:{capabilityId:"trigger.app-opened",parameters:{value:"TikTok"}},
+    actions:[{capabilityId:"system.brightness.set",parameters:{percent:100}}],
+    clarificationQuestion:null,
+    suggestion:{
+      title:"Noch praktischer",
+      message:"Soll die Regel auch für weitere Social-Media-Apps gelten?",
+      proposedGoal:"Wenn ich eine meiner Social-Media-Apps öffne, Helligkeit auf 100 %."
+    }
+  });
+  const result=acceptSemanticAutomationOutput("TikTok auf, Bildschirm volle Helligkeit",raw);
+  assert.equal(result.kind,"understood");
+  if(result.kind==="understood"){
+    assert.equal(result.definition.trigger.parameters.value,"TikTok");
+    assert.equal(result.definition.actions[0]?.parameters.percent,100);
+    assert.match(result.suggestion?.message??"",/Social-Media/);
+  }
+});
+test("semantic interpreter rejects invented capabilities",()=>{
+  const raw=JSON.stringify({
+    kind:"automation",
+    confidence:0.99,
+    trigger:{capabilityId:"trigger.magic",parameters:{}},
+    actions:[{capabilityId:"system.private-setting",parameters:{}}],
+    clarificationQuestion:null,
+    suggestion:null
+  });
+  assert.equal(acceptSemanticAutomationOutput("mach irgendwas",raw).kind,"unavailable");
+});
+test("semantic interpreter preserves model clarification instead of guessing",()=>{
+  const raw=JSON.stringify({kind:"clarification",confidence:0.5,trigger:null,actions:[],clarificationQuestion:"Welche App meinst du?",suggestion:null});
+  const result=acceptSemanticAutomationOutput("mach das bei social media",raw);
+  assert.equal(result.kind,"clarification");
 });
