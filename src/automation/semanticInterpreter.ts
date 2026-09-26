@@ -2,6 +2,7 @@ import { CAPABILITY_CATALOG_V2, capabilityV2 } from "./capabilityCatalogV2";
 import { resolveStrategy, type ShortcutDefinition, type ShortcutStep } from "./shortcutCompiler";
 import { validateShortcutDefinition } from "./shortcutValidation";
 import { compactProviderCatalogue } from "./providerRegistry";
+import { compactPlatformLimitations } from "./platformLimitations";
 import { connectorFallbackSuggestion } from "./connectorSuggestions";
 
 export type AutomationSuggestion = {
@@ -253,6 +254,10 @@ export async function interpretAutomationWithOnDeviceAI(goal: string, context: S
       compactProviderCatalogue(),
       `Bereits verbundene Connectoren: ${context.connectedProviderIds?.length ? context.connectedProviderIds.join(", ") : "keine"}`,
       "Wenn der Nutzer keinen Hersteller nennt und genau ein verbundener Connector die gewünschte Aktion sicher unterstützt, darfst du diesen Anbieter bevorzugen. Bei mehreren plausiblen Anbietern frage nach.",
+      "Wichtige Plattformgrenzen:",
+      compactPlatformLimitations(),
+      "Wenn ein Wunsch sprachlich weiter reicht als eine Capability, tue nicht so, als sei eine schwächere Aktion exakt gleichwertig. Frage nach dem eigentlichen Ziel oder schlage eine klar gekennzeichnete Alternative vor.",
+      "Beispiel: 'schließe alle anderen Videos im Hintergrund' bedeutet nicht automatisch 'Play/Pause'. Andere Apps beenden und aktuelle Medienwiedergabe pausieren sind unterschiedliche Ziele.",
       `Nutzerwunsch: ${goal}`
     ].join("\n");
 
