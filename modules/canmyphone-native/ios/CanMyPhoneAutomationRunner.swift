@@ -34,7 +34,7 @@ enum CanMyPhoneAutomationStore {
 
 enum CanMyPhoneAutomationRunner {
   private static let proProductIDs = Set(["com.studiobonventre.canmyphone.pro.monthly", "com.studiobonventre.canmyphone.pro.yearly"])
-  private static let allowedCapabilities = Set(["system.brightness.set", "system.volume.set", "system.low-power.set", "system.flashlight.set", "system.focus.set", "system.app.open", "system.clipboard.set", "system.url.open", "media.play-pause", "media.playlist.play", "media.apple-music.play", "media.spotify.open", "navigation.route.start", "productivity.reminder.create", "smart-home.scene.run", "smart-home.cover.open", "smart-home.cover.close", "smart-home.light.set", "smart-home.climate.set", "tesla.rear-trunk.close"])
+  private static let allowedCapabilities = Set(["system.brightness.set", "system.volume.set", "system.low-power.set", "system.flashlight.set", "system.focus.set", "system.app.open", "system.clipboard.set", "system.url.open", "media.play-pause", "media.playlist.play", "media.apple-music.play", "media.spotify.open", "navigation.route.start", "communication.message.compose", "communication.mail.compose", "communication.call.start", "productivity.calendar.create", "productivity.reminder.create", "smart-home.scene.run", "smart-home.cover.open", "smart-home.cover.close", "smart-home.light.set", "smart-home.climate.set", "tesla.rear-trunk.close"])
 
   static func run(id: String) async -> [String: Any] {
     guard CanMyPhoneAutomationStore.validID(id), var item = CanMyPhoneAutomationStore.load(id: id) else { return result(id, "INVALID_DEFINITION", "Die Automation wurde nicht gefunden oder ist ungültig.", [], nil, "INVALID_DEFINITION") }
@@ -88,6 +88,36 @@ enum CanMyPhoneAutomationRunner {
         var components = URLComponents(string: "https://maps.apple.com/")
         components?.queryItems = [URLQueryItem(name: "daddr", value: destination), URLQueryItem(name: "dirflg", value: "d")]
         guard let url = components?.url, await openExternal(url) else { return finish(&item, id, "FAILED", "Die Navigation konnte nicht geöffnet werden.", executed, capability, "NAVIGATION_OPEN_FAILED") }
+        executed.append(capability)
+
+      case "communication.message.compose", "communication.mail.compose", "communication.call.start":
+        guard Set(parameters.keys) == Set(["recipient"]), let recipient = parameters["recipient"] as? String, !recipient.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return finish(&item, id, "INVALID_DEFINITION", "Der Empfänger ist ungültig.", executed, capability, "INVALID_PARAMETER") }
+        let scheme = capability == "communication.message.compose" ? "sms" : capability == "communication.mail.compose" ? "mailto" : "tel"
+        var components = URLComponents()
+        components.scheme = scheme
+        components.path = recipient.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = components.url, await openExternal(url) else { return finish(&item, id, "FAILED", "Die Kommunikations-App konnte nicht geöffnet werden.", executed, capability, "COMMUNICATION_OPEN_FAILED") }
+        executed.append(capability)
+
+      case "productivity.calendar.create":
+        let allowed = Set(["title", "start", "end", "notes"])
+        guard Set(parameters.keys).isSubset(of: allowed), let title = parameters["title"] as? String, let start = parameters["start"] as? String else { return finish(&item, id, "INVALID_DEFINITION", "Titel oder Startzeit des Kalendereintrags fehlt.", executed, capability, "INVALID_PARAMETER") }
+        let calendarResult = await CanMyPhoneEventKitBridge.shared.createCalendarEvent(title: title, start: start, end: parameters["end"] as? String, notes: parameters["notes"] as? String)
+        guard calendarResult["success"] as? Bool == true else { return finish(&item, id, "FAILED", calendarResult["message"] as? String ?? "Der Kalendereintrag konnte nicht erstellt werden.", executed, capability, calendarResult["code"] as? String ?? "CALENDAR_FAILED") }
+        executed.append(capability)
+
+      case "productivity.reminder.create":
+        let allowed = Set(["title", "due", "notes"])
+        guard Set(parameters.keys).isSubset(of: allowed), let title = parameters["title"] as? String else { return finish(&item, id, "INVALID_DEFINITION", "Der Erinnerungstitel fehlt.", executed, capability, "INVALID_PARAMETER") }
+        let reminderResult = await CanMyPhoneEventKitBridge.shared.createReminder(title: title, due: parameters["due"] as? String, notes: parameters["notes"] as? String)
+        guard reminderResult["success"] as? Bool == true else { return finish(&item, id, "FAILED", reminderResult["message"] as? String ?? "Die Erinnerung konnte nicht erstellt werden.", executed, capability, reminderResult["code"] as? String ?? "REMINDER_FAILED") }
+        executed.append(capability)
+
+      case "smart-home.scene.run":
+        let allowed = Set(["scene", "home"])
+        guard Set(parameters.keys).isSubset(of: allowed), let scene = parameters["scene"] as? String else { return finish(&item, id, "INVALID_DEFINITION", "Der Szenenname fehlt.", executed, capability, "INVALID_PARAMETER") }
+        let sceneResult = await CanMyPhoneHomeKitBridge.shared.runScene(scene: scene, homeName: parameters["home"] as? String)
+        guard sceneResult["success"] as? Bool == true else { return finish(&item, id, "FAILED", sceneResult["message"] as? String ?? "Die Apple-Home-Szene konnte nicht ausgeführt werden.", executed, capability, sceneResult["code"] as? String ?? "HOMEKIT_SCENE_FAILED") }
         executed.append(capability)
 
       case "smart-home.cover.open", "smart-home.cover.close":
