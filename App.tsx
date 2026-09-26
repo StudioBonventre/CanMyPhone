@@ -22,6 +22,7 @@ import { MyAutomationsCard } from "./src/components/MyAutomationsCard";
 import { compileShortcutGoal } from "./src/automation/shortcutCompiler";
 import { interpretAutomationWithOnDeviceAI, type AutomationSuggestion } from "./src/automation/semanticInterpreter";
 import { buildAppleIntelligenceAutomationDescription } from "./src/automation/appleShortcutsHandoff";
+import { compileAutomationRuntime } from "./src/automation/engine";
 import { approveSensitiveAutomation, materializeShortcutDefinition, type StoredAutomation } from "./src/automation/materialization";
 import { automationRepository, syncNativeRunnerResults } from "./src/automation/automationRepository";
 import { CanMyPhoneNative } from "./modules/canmyphone-native";
@@ -336,8 +337,14 @@ export default function App() {
     let opened = false;
     let handoffMode: "GUIDED" | "APPLE_INTELLIGENCE" = "GUIDED";
     const major = osMajor();
+    const runtime = compileAutomationRuntime(stored.definition);
 
-    if (
+    // If Apple only owns the trigger, don't make the person paste an AI prompt.
+    // The CanMyPhone App Shortcut already exists in Shortcuts with the saved
+    // automation as a selectable entity. We only need the Apple trigger setup.
+    if (runtime.appleBridgePurpose === "TRIGGER_ONLY") {
+      opened = Boolean(await CanMyPhoneNative?.openShortcuts("app"));
+    } else if (
       major !== undefined &&
       major >= 27 &&
       typeof CanMyPhoneNative?.prepareShortcutDescription === "function"

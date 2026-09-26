@@ -1,5 +1,4 @@
 import { capabilityV2 } from "./capabilityCatalogV2";
-import { actionExecutionMode } from "./materialization";
 import type { ShortcutDefinition } from "./shortcutCompiler";
 
 export type TriggerDriver =
@@ -37,21 +36,14 @@ function triggerDriver(definition: ShortcutDefinition): TriggerDriver {
 }
 
 function actionDriver(capabilityId: string): ActionDriver {
-  const mode = actionExecutionMode({ capabilityId, parameters: {} });
-  switch (mode) {
-    case "EXECUTABLE_DIRECT":
-      return "CANMYPHONE_NATIVE";
-    case "EXECUTABLE_APP_INTENT":
-      return "CANMYPHONE_APP_INTENT";
-    case "REQUIRES_SHORTCUT_ACTION":
-      return "APPLE_SHORTCUTS_ACTION";
-    case "REQUIRES_PROVIDER":
-      return "PROVIDER";
-    case "GUIDED_ONLY":
-      return "GUIDED";
-    default:
-      return "UNSUPPORTED";
-  }
+  const cap = capabilityV2(capabilityId);
+  if (!cap || cap.role !== "action") return "UNSUPPORTED";
+  if (capabilityId === "system.brightness.set") return "CANMYPHONE_NATIVE";
+  if (cap.integration) return "PROVIDER";
+  if (cap.executionModes.includes("SHORTCUT") || cap.executionModes.includes("PERSONAL_AUTOMATION")) return "APPLE_SHORTCUTS_ACTION";
+  if (cap.executionModes.includes("APP_INTENT")) return "CANMYPHONE_APP_INTENT";
+  if (cap.fallback === "GUIDED_HANDOFF") return "GUIDED";
+  return "UNSUPPORTED";
 }
 
 export function compileAutomationRuntime(definition: ShortcutDefinition): AutomationRuntimePlan {
