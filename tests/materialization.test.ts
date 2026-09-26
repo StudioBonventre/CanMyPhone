@@ -6,6 +6,9 @@ import { runStoredAutomation } from "../src/automation/runner";
 import { compileShortcutGoal } from "../src/automation/shortcutCompiler";
 import { buildAppleIntelligenceAutomationDescription } from "../src/automation/appleShortcutsHandoff";
 import { compileAutomationRuntime } from "../src/automation/engine";
+import { ConnectorRuntime } from "../src/automation/connectorRuntime";
+import { createTeslaConnectorAdapter, createHomematicIPConnectorAdapter } from "../src/automation/connectorAdapters";
+import { acceptSemanticAutomationOutput } from "../src/automation/semanticInterpreter";
 
 class MemoryStorage implements KeyValueStorage {
   data = new Map<string, string>();
@@ -76,4 +79,71 @@ test("materialization stores a concise display name but keeps the original inten
   const item=materialize(goal);
   assert.equal(item.name,"Instagram → Helligkeit 35 %");
   assert.match(item.originalIntentSummary,/Instagram/);
+});
+
+
+test("runner executes provider-neutral Tesla actions through the connector runtime",async()=>{
+  const semantic=acceptSemanticAutomationOutput("Tesla verriegeln",JSON.stringify({
+    kind:"automation",confidence:0.99,
+    trigger:{capabilityId:"trigger.manual",parameters:{}},
+    actions:[{capabilityId:"vehicle.lock",parameters:{brand:"Tesla"}}],
+    clarificationQuestion:null,suggestion:null
+  }));
+  assert.equal(semantic.kind,"understood");
+  if(semantic.kind!=="understood")return;
+  let calls=0;
+  const adapter=createTeslaConnectorAdapter({
+    lockVehicle:async()=>{calls+=1;return {ok:true as const};},
+    unlockVehicle:async()=>({ok:true as const})
+  });
+  const runtime=new ConnectorRuntime([adapter]);
+  const materialized=materializeShortcutDefinition(semantic.definition);
+  const active=approveSensitiveAutomation({...materialized,enabled:true,materializationState:"ACTIVE" as const});
+  const result=await runStoredAutomation(active,{...context,connectedIntegrations:new Set(["tesla"]),connectorRuntime:runtime},async()=>true);
+  assert.equal(result.status,"SUCCESS");
+  assert.equal(calls,1);
+});
+
+test("runner executes Homematic IP actions without pretending they are iOS permissions",async()=>{
+  const semantic=acceptSemanticAutomationOutput("Rollläden Wohnzimmer hoch",JSON.stringify({
+    kind:"automation",confidence:0.99,
+    trigger:{capabilityId:"trigger.manual",parameters:{}},
+    actions:[{capabilityId:"smart-home.cover.open",parameters:{provider:"Homematic IP",room:"Wohnzimmer"}}],
+    clarificationQuestion:null,suggestion:null
+  }));
+  assert.equal(semantic.kind,"understood");
+  if(semantic.kind!=="understood")return;
+  let room="";
+  const adapter=createHomematicIPConnectorAdapter({
+    openCover:async(value)=>{room=value;return {ok:true as const};},
+    closeCover:async()=>({ok:true as const}),
+    setLight:async()=>({ok:true as const}),
+    setClimate:async()=>({ok:true as const})
+  });
+  const runtime=new ConnectorRuntime([adapter]);
+  const item={...materializeShortcutDefinition(semantic.definition),enabled:true,materializationState:"ACTIVE" as const};
+  assert.equal(item.requiredSetup.includes("provider-connection"),false);
+  const result=await runStoredAutomation(item,{...context,connectedIntegrations:new Set(["homematic-ip"]),connectorRuntime:runtime},async()=>true);
+  assert.equal(result.status,"SUCCESS");
+  assert.equal(room,"Wohnzimmer");
+});
+
+test("connector failures are reported as real automation failures",async()=>{
+  const semantic=acceptSemanticAutomationOutput("Tesla verriegeln",JSON.stringify({
+    kind:"automation",confidence:0.99,
+    trigger:{capabilityId:"trigger.manual",parameters:{}},
+    actions:[{capabilityId:"vehicle.lock",parameters:{brand:"Tesla"}}],
+    clarificationQuestion:null,suggestion:null
+  }));
+  assert.equal(semantic.kind,"understood");
+  if(semantic.kind!=="understood")return;
+  const runtime=new ConnectorRuntime([createTeslaConnectorAdapter({
+    lockVehicle:async()=>({ok:false as const,code:"vehicle_offline",message:"Fahrzeug nicht erreichbar."}),
+    unlockVehicle:async()=>({ok:true as const})
+  })]);
+  const item=approveSensitiveAutomation({...materializeShortcutDefinition(semantic.definition),enabled:true,materializationState:"ACTIVE" as const});
+  const result=await runStoredAutomation(item,{...context,connectedIntegrations:new Set(["tesla"]),connectorRuntime:runtime},async()=>true);
+  assert.equal(result.status,"FAILED");
+  assert.equal(result.errorCode,"vehicle_offline");
+  assert.match(result.humanMessage,/nicht erreichbar/i);
 });
