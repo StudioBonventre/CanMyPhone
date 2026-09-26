@@ -30,6 +30,8 @@ import { approveSensitiveAutomation, materializeShortcutDefinition, type StoredA
 import { automationRepository, syncNativeRunnerResults } from "./src/automation/automationRepository";
 import { loadConnectorConnections } from "./src/automation/connectorConnectionRepository";
 import { connectedProviderIds, EMPTY_CONNECTOR_CONNECTION_PROFILE, type ConnectorConnectionProfile } from "./src/automation/connectorConnectionState";
+import { saveConnectorConnection } from "./src/automation/connectorConnectionRepository";
+import { resolveConnectedProviders } from "./src/automation/providerResolution";
 import { CanMyPhoneNative } from "./modules/canmyphone-native";
 import { trackProductEvent } from "./src/lib/analytics";
 import { AuraV2 } from "./src/components/AuraV2";
@@ -402,7 +404,8 @@ export default function App() {
     if (!shortcutDefinition) return;
     trackProductEvent("automation_materialization_started", { strategy: shortcutDefinition.executionStrategy });
     try {
-      const stored = await automationRepository.save(materializeShortcutDefinition(shortcutDefinition));
+      const resolvedDefinition = resolveConnectedProviders(shortcutDefinition, connectedProviderIds(connectorConnections));
+      const stored = await automationRepository.save(materializeShortcutDefinition(resolvedDefinition));
       setInstallingAutomation(stored);
       setAutomations(await automationRepository.list());
 
@@ -415,8 +418,8 @@ export default function App() {
           handled: true,
           succeeded: true,
           message: runtime.appleBridgePurpose === "TRIGGER_ONLY"
-            ? "CanMyPhone ist fertig. iOS muss nur noch den Trigger mit der gespeicherten Automation verbinden."
-            : "Die Automation ist vorbereitet. Ein Apple-Schritt muss noch verbunden werden."
+            ? "Die Logik ist in CanMyPhone gespeichert. Für diesen Auslöser fehlt noch ein iOS-System-Trigger oder ein direkter CanMyPhone-Triggerweg."
+            : "Die Automation ist vorbereitet. Mindestens ein Apple-Systemschritt muss noch verbunden werden."
         });
         trackProductEvent("automation_saved_waiting_for_apple_setup", {
           bridge_purpose: runtime.appleBridgePurpose,
