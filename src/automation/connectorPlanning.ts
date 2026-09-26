@@ -37,7 +37,7 @@ function hints(step: ShortcutStep): ProviderTargetHints {
   return { provider: read("provider"), brand: read("brand"), room: read("room"), device: read("device"), vehicle: read("vehicle") };
 }
 
-function requirementForStep(step: ShortcutStep, connected: ReadonlySet<string>): ConnectorRequirement | null {
+export function connectorRequirementForStep(step: ShortcutStep, connected: ReadonlySet<string> = new Set()): ConnectorRequirement | null {
   if (universal.has(step.capabilityId as UniversalOperation)) {
     const operation = step.capabilityId as UniversalOperation;
     return { capabilityId: step.capabilityId, binding: bindProvider(operation, hints(step), connected) };
@@ -54,7 +54,7 @@ function requirementForStep(step: ShortcutStep, connected: ReadonlySet<string>):
 
 export function connectorPlanForDefinition(definition: ShortcutDefinition, connected: ReadonlySet<string> = new Set()): ConnectorPlan {
   const requirements = definition.actions
-    .map((step) => requirementForStep(step, connected))
+    .map((step) => connectorRequirementForStep(step, connected))
     .filter((item): item is ConnectorRequirement => Boolean(item));
 
   const states = requirements.map((item) => item.binding.status);
