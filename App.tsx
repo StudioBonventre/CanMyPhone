@@ -826,12 +826,40 @@ export default function App() {
     setActionResult({ handled:true, succeeded:true, message:result.message });
   };
 
+  const provisionTeslaNativeExecution = async () => {
+    const service = getTeslaConnectorService();
+    if (!service) {
+      return { ok:false as const, message:"Der sichere Tesla-Backend-Connector ist in diesem Build noch nicht konfiguriert." };
+    }
+    const grant = await service.nativeExecutionGrant();
+    if (!grant.ok) return { ok:false as const, message:grant.message };
+    const configured = await CanMyPhoneNative?.configureTeslaExecutionGrant?.(grant.endpoint, grant.token).catch(() => null);
+    if (!configured?.success) {
+      return {
+        ok:false as const,
+        message:configured?.message ?? "Der sichere Tesla-Hintergrundzugang ist in diesem Development Build noch nicht verfügbar."
+      };
+    }
+    return { ok:true as const, message:"Tesla ist auch für sichere Hintergrund-Automationen bereit." };
+  };
+
   const refreshTeslaConnection = async () => {
     const service = getTeslaConnectorService();
     if (!service) return null;
     const status = await service.status();
     if (!status.ok) return status;
     if (status.ready) {
+      const provisioned = await provisionTeslaNativeExecution();
+      if (!provisioned.ok) {
+        const profile = await saveConnectorConnection({
+          providerId: "tesla",
+          status: "ERROR",
+          updatedAt: new Date().toISOString(),
+          errorCode: "TESLA_NATIVE_GRANT_FAILED"
+        });
+        setConnectorConnections(profile);
+        return { ok:false as const, code:"TESLA_NATIVE_GRANT_FAILED", message:provisioned.message };
+      }
       const profile = await saveConnectorConnection({
         providerId: "tesla",
         status: "CONNECTED",
@@ -898,14 +926,12 @@ export default function App() {
 
       const current = await service.status();
       if (current.ok && current.ready) {
-        profile = await saveConnectorConnection({
-          providerId,
-          status: "CONNECTED",
-          updatedAt: new Date().toISOString(),
-          connectedAt: new Date().toISOString()
-        });
-        setConnectorConnections(profile);
-        setActionResult({ handled:true, succeeded:true, message:current.message });
+        const refreshed = await refreshTeslaConnection();
+        if (refreshed?.ok === false) {
+          setActionResult({ handled:true, succeeded:false, message:refreshed.message });
+          return;
+        }
+        setActionResult({ handled:true, succeeded:true, message:"Tesla ist verbunden und für sichere Hintergrund-Automationen bereit." });
         return;
       }
 
