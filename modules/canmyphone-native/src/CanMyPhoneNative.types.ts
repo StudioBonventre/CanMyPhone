@@ -21,6 +21,36 @@ export type BrightnessResult = {
   message: string;
 };
 
+export type HomeKitSnapshotResult = {
+  authorized: boolean;
+  determined: boolean;
+  restricted: boolean;
+  homes: Array<{
+    id: string;
+    name: string;
+    primary: boolean;
+    rooms: Array<{
+      id: string;
+      name: string;
+      accessories: Array<{
+        id: string;
+        name: string;
+        reachable: boolean;
+        characteristics: string[];
+      }>;
+    }>;
+  }>;
+  message: string;
+};
+
+export type HomeKitActionResult = {
+  success: boolean;
+  code?: string;
+  changed?: number;
+  matched?: number;
+  message: string;
+};
+
 export type ShortcutsDestination = "app" | "create";
 
 export type ShortcutDescriptionHandoffResult = {
@@ -59,6 +89,10 @@ export type NativeModuleShape = {
   permissionStatus(kind: PermissionKind): Promise<PermissionResult>;
   requestPermission(kind: PermissionKind): Promise<PermissionResult>;
   setBrightness(level: number): Promise<BrightnessResult>;
+  homeKitSnapshot(): Promise<HomeKitSnapshotResult>;
+  homeKitSetCover(room: string, device: string | null, position: number): Promise<HomeKitActionResult>;
+  homeKitSetLight(room: string, device: string | null, value: string): Promise<HomeKitActionResult>;
+  homeKitSetClimate(room: string, device: string | null, value: string): Promise<HomeKitActionResult>;
   setPremiumEntitlement(enabled: boolean): Promise<void>;
   openAppSettings(): Promise<boolean>;
   openNotificationSettings(): Promise<boolean>;
