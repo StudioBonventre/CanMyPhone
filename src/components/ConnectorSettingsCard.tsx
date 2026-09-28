@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useSyncExternalStore } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import { PROVIDER_REGISTRY } from "../automation/providerRegistry";
+import { providerDescriptor } from "../automation/providerRegistry";
+import { connectorRegistry } from "../automation/builtinConnectorManifests";
 import { connectorSetupPlan } from "../automation/connectorSetup";
 import { connectionFor, type ConnectorConnectionProfile } from "../automation/connectorConnectionState";
 import { liquidIce } from "../theme/liquidIce";
@@ -19,6 +20,7 @@ function transportLabel(value:string){
 export type ConnectorConnectInput = { hcuSuffix?: string; activationKey?: string };
 
 export function ConnectorSettingsCard({profile,onConnect}:{profile:ConnectorConnectionProfile;onConnect?:(providerId:string,input?:ConnectorConnectInput)=>void}){
+  useSyncExternalStore(connectorRegistry.subscribe, connectorRegistry.getRevision, connectorRegistry.getRevision);
   const [expanded,setExpanded]=useState<string|null>(null);
   const [hcuSuffix,setHcuSuffix]=useState("");
   const [activationKey,setActivationKey]=useState("");
@@ -27,10 +29,10 @@ export function ConnectorSettingsCard({profile,onConnect}:{profile:ConnectorConn
     <Text style={styles.title}>Connector-Plattform</Text>
     <Text style={styles.copy}>CanMyPhone verbindet Hersteller und Smart-Home-Systeme über verifizierte Schnittstellen. Eine Verbindung gilt erst dann als aktiv, wenn sie wirklich autorisiert wurde.</Text>
     <View style={styles.list}>
-      {PROVIDER_REGISTRY.map((provider)=>{
+      {connectorRegistry.list().map(providerDescriptor).map((provider)=>{
         const connection=connectionFor(profile,provider.id);
         const plan=connectorSetupPlan(provider.id);
-        const state=connection?.status==="CONNECTED"
+        const state=!plan?.executableToday ? "Noch nicht freigegeben" : connection?.status==="CONNECTED"
           ?"Verbunden"
           :connection?.status==="CONNECTING"
             ?"Verbindung läuft"

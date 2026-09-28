@@ -111,6 +111,20 @@ public final class CanMyPhoneNativeModule: Module {
     AsyncFunction("removeHomeKitAutomation") { (id: String) async -> [String: Any] in
       return await CanMyPhoneHomeKitBridge.shared.removeAutomation(id: id)
     }
+    AsyncFunction("installRegistryHomeKitAutomation") { (json: String) async -> [String: Any] in
+      guard let data = json.data(using: .utf8), let p = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        let id = p["id"] as? String, let fingerprint = p["fingerprint"] as? String, let name = p["name"] as? String,
+        let trigger = p["trigger"] as? String, let operation = p["operation"] as? String,
+        ["light.power.set", "light.brightness.set"].contains(operation),
+        let room = p["room"] as? String, let value = p["lightValue"] as? String,
+        CanMyPhoneConnectorRegistryPolicy.allows(providerHint: "apple-home", capability: operation)
+      else { return ["success": false, "code": "CONNECTOR_NOT_READY", "message": "Der HomeKit-Ausführungsweg ist nicht freigegeben."] }
+      if trigger == "trigger.homekit-time", let time = p["time"] as? String {
+        return await CanMyPhoneHomeKitBridge.shared.installDailyLightAutomation(id: id, fingerprint: fingerprint, name: name, homeName: p["home"] as? String ?? "", time: time, room: room, lightValue: value, device: p["device"] as? String)
+      }
+      guard let sensor = p["sensor"] as? String, let type = p["sensorType"] as? String, ["motion", "contact"].contains(type), let sensorValue = p["value"] as? Bool else { return ["success": false, "code": "INVALID_SENSOR", "message": "Der Sensor ist nicht eindeutig festgelegt."] }
+      return await CanMyPhoneHomeKitBridge.shared.installCharacteristicAutomation(id: id, fingerprint: fingerprint, name: name, homeName: p["home"] as? String ?? "", sensorName: sensor, sensorType: type, sensorValue: sensorValue, room: room, lightValue: value, device: p["device"] as? String)
+    }
 
     AsyncFunction("homeKitSetCover") { (room: String, device: String?, position: Int) async -> [String: Any] in
       return await CanMyPhoneHomeKitBridge.shared.setCover(room: room, device: device, position: position)
@@ -354,6 +368,9 @@ public final class CanMyPhoneNativeModule: Module {
 
     AsyncFunction("automationRunnerSnapshots") { () async -> String in
       return CanMyPhoneAutomationStore.snapshotsJSON()
+    }
+    AsyncFunction("syncConnectorRegistry") { (json: String) -> Bool in
+      return CanMyPhoneConnectorRegistryPolicy.save(json: json)
     }
   }
 

@@ -174,8 +174,8 @@ test("provider router binds brands semantically and asks for connection instead 
 
 test("provider router stays truthful about unknown vendors and offers standards as fallback",()=>{
   const unknown=bindProvider("smart-home.cover.open",{provider:"UnknownBrand",room:"Wohnzimmer"});
-  assert.equal(unknown.status,"UNSUPPORTED");
-  if(unknown.status==="UNSUPPORTED")assert.ok(unknown.fallbackCandidates.some((item)=>item.id==="matter"));
+  assert.equal(unknown.status,"DISCOVERY_REQUIRED");
+  if(unknown.status==="DISCOVERY_REQUIRED")assert.ok(unknown.fallbackCandidates.some((item)=>item.id==="matter"));
 });
 
 test("connected providers become bound without changing the AI plan",()=>{
@@ -231,7 +231,7 @@ test("connector router chooses the only connected smart-home provider when brand
 });
 
 test("connector router asks instead of guessing when multiple connected providers can do the same thing",()=>{
-  const binding=bindProvider("smart-home.cover.open",{room:"Wohnzimmer"},new Set(["homematic-ip","home-assistant"]));
+  const binding=bindProvider("smart-home.cover.open",{room:"Wohnzimmer"},new Set(["homematic-ip","apple-home"]));
   assert.equal(binding.status,"AMBIGUOUS");
 });
 

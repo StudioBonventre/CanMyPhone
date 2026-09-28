@@ -52,7 +52,7 @@ async function callModel(goal:string,locale:string,connectedProviderIds:string[]
           "Return only allow-listed capability ids; never invent APIs, menu paths or provider support.",
           "One automation may contain multiple independent actions across manufacturers.",
           "If the user omits a provider, do not invent one. Leave provider/brand absent; runtime routing will choose a single compatible connected provider or ask later.",
-          "For provider-neutral hardware use vehicle.lock/unlock and smart-home cover/light/climate capabilities.",
+          "Plan universal operations first. The device-local registry then resolves providers and discovered devices. Never infer a device capability from its brand. Unknown providers require discovery, not invented APIs.",
           "Ask one short clarification only when a necessary trigger, target or value is genuinely ambiguous.",
           "Optional suggestions may improve the automation but must never silently alter the request.",
           semanticCapabilitySummary,

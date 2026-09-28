@@ -4,10 +4,12 @@ import { validateShortcutDefinition } from "./shortcutValidation";
 import { compileAutomationRuntime } from "./engine";
 import { installationPlanForDefinition, type InstallationPlan } from "./installationPlan";
 import { automationDisplayName } from "./displayName";
+import { connectorRequirementForStep } from "./connectorPlanning";
+import { connectorRegistry } from "./builtinConnectorManifests";
 
 export const STORED_AUTOMATION_SCHEMA_VERSION = 2 as const;
 
-export type MaterializationState = "DRAFT" | "READY_TO_INSTALL" | "APPLE_SETUP_REQUIRED" | "INSTALLED" | "ACTIVE" | "DISABLED" | "BROKEN" | "PERMISSION_REQUIRED" | "INTEGRATION_REQUIRED";
+export type MaterializationState = "DRAFT" | "READY_TO_INSTALL" | "APPLE_SETUP_REQUIRED" | "INSTALLED" | "ACTIVE" | "DISABLED" | "BROKEN" | "PERMISSION_REQUIRED" | "INTEGRATION_REQUIRED" | "DISCOVERY_REQUIRED";
 export type SetupState = "NOT_STARTED" | "HANDED_OFF" | "AWAITING_CONFIRMATION" | "USER_CONFIRMED" | "ACTIVE" | "UNKNOWN";
 export type ActionExecutionMode = "EXECUTABLE_DIRECT" | "EXECUTABLE_APP_INTENT" | "REQUIRES_SHORTCUT_ACTION" | "REQUIRES_APPLE_AUTOMATION" | "REQUIRES_PROVIDER" | "GUIDED_ONLY" | "UNSUPPORTED";
 export type FailurePolicy = "STOP" | "CONTINUE" | "BEST_EFFORT";
@@ -108,8 +110,8 @@ export function actionExecutionMode(step: ShortcutStep): ActionExecutionMode {
   const cap = capabilityV2(step.capabilityId);
   if (!cap || cap.role !== "action") return "UNSUPPORTED";
   if (cap.executionModes.includes("DIRECT_PUBLIC_API")) return "EXECUTABLE_DIRECT";
-  const provider = typeof step.parameters.provider === "string" ? step.parameters.provider.trim().toLowerCase() : "";
-  if (step.capabilityId.startsWith("smart-home.") && ["apple-home","apple home","homekit","home"].includes(provider)) return "EXECUTABLE_DIRECT";
+  const binding = connectorRequirementForStep(step, new Set(connectorRegistry.listReadyProviders().map(m => m.providerId)))?.binding;
+  if (binding?.status === "BOUND" && connectorRegistry.getProvider(binding.provider.id)?.transport === "HOMEKIT") return "EXECUTABLE_DIRECT";
   if (cap.integration || cap.executionModes.includes("THIRD_PARTY_API")) return "REQUIRES_PROVIDER";
   if (cap.executionModes.includes("SHORTCUT") || cap.executionModes.includes("PERSONAL_AUTOMATION")) return "REQUIRES_SHORTCUT_ACTION";
   if (cap.executionModes.includes("APP_INTENT")) return "EXECUTABLE_APP_INTENT";
@@ -131,7 +133,9 @@ export function materializeShortcutDefinition(definition: ShortcutDefinition, no
   const integrations = [...new Set([...definition.integrations, ...(triggerProvider ? [triggerProvider] : [])])];
   const modes = definition.actions.map(actionExecutionMode);
   let materializationState: MaterializationState = "READY_TO_INSTALL";
-  if (runtime.installationHost === "UNSUPPORTED") materializationState = "BROKEN";
+  const installationPlan = installationPlanForDefinition(definition);
+  if (installationPlan.status === "DISCOVERY_REQUIRED") materializationState = "DISCOVERY_REQUIRED";
+  else if (runtime.installationHost === "UNSUPPORTED") materializationState = "BROKEN";
   else if (integrations.length || modes.includes("REQUIRES_PROVIDER") || runtime.triggerDriver === "PROVIDER") materializationState = "INTEGRATION_REQUIRED";
   else if (definition.requiredSetup.length) materializationState = "PERMISSION_REQUIRED";
   else if (runtime.appleBridgeRequired) materializationState = "APPLE_SETUP_REQUIRED";
@@ -144,7 +148,7 @@ export function materializeShortcutDefinition(definition: ShortcutDefinition, no
     riskLevel: definition.risk, confirmationRequired: definition.confirmationRequired,
     safetyApproval:{required:definition.confirmationRequired,confirmed:false},
     requiredSetup: [...definition.requiredSetup], integrations,
-    materializationState, installationPlan: installationPlanForDefinition(definition), personalSetup,
+    materializationState, installationPlan, personalSetup,
     failurePolicy: definition.risk === "high" ? "STOP" : (modes.length > 1 ? "BEST_EFFORT" : "STOP")
   };
 }

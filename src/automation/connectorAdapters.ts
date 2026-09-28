@@ -15,7 +15,7 @@ export function createTeslaConnectorAdapter(client: TeslaConnectorClient): Conne
       let result: TeslaClientResult;
       if (request.capabilityId === "vehicle.lock") result = await client.lockVehicle(vehicle);
       else if (request.capabilityId === "vehicle.unlock") result = await client.unlockVehicle(vehicle);
-      else if (request.capabilityId === "tesla.rear-trunk.close" || request.capabilityId === "vehicle.rear-trunk.close") result = await client.closeRearTrunk(vehicle);
+      else if (["vehicle.trunk.close", "tesla.rear-trunk.close", "vehicle.rear-trunk.close"].includes(request.capabilityId)) result = await client.closeRearTrunk(vehicle);
       else {
         return { ok:false, providerId:"tesla", code:"UNSUPPORTED_OPERATION", message:"Diese Tesla-Aktion unterstützt der Connector noch nicht." };
       }
@@ -48,16 +48,27 @@ export function createHomematicIPConnectorAdapter(client: HomematicIPConnectorCl
       let result: HomematicClientResult;
       switch (request.capabilityId) {
         case "smart-home.cover.open":
+        case "cover.open":
           result = await client.openCover(room, device);
           break;
         case "smart-home.cover.close":
+        case "cover.close":
           result = await client.closeCover(room, device);
           break;
         case "smart-home.light.set":
           result = await client.setLight(room, value, device);
           break;
+        case "light.power.set":
+          result = await client.setLight(room, request.parameters.on === true ? "on" : "off", device);
+          break;
+        case "light.brightness.set":
+          result = await client.setLight(room, String(request.parameters.percent), device);
+          break;
         case "smart-home.climate.set":
           result = await client.setClimate(room, value, device);
+          break;
+        case "climate.temperature.set":
+          result = await client.setClimate(room, String(request.parameters.celsius), device);
           break;
         default:
           return { ok:false, providerId:"homematic-ip", code:"UNSUPPORTED_OPERATION", message:"Diese Homematic-IP-Aktion unterstützt der Connector noch nicht." };

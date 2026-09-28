@@ -65,7 +65,7 @@ test("connector runtime dispatches only to the registered provider adapter",asyn
       unlockVehicle:async()=>({ok:true as const}),
       closeRearTrunk:async()=>({ok:true as const})
     })
-  ]);
+  ], undefined, () => true);
   const ok=await runtime.execute({
     automationId:"cmp_auto_test",
     providerId:"tesla",
@@ -120,7 +120,7 @@ test("Tesla rear-trunk routing never aliases to vehicle lock",async()=>{
   assert.equal(requirement?.binding.status,"BOUND");
   if(requirement?.binding.status==="BOUND"){
     assert.equal(requirement.binding.provider.id,"tesla");
-    assert.equal(requirement.binding.operation,"vehicle.rear-trunk.close");
+    assert.equal(requirement.binding.operation,"vehicle.trunk.close");
   }
 
   let locked=0;
@@ -131,7 +131,7 @@ test("Tesla rear-trunk routing never aliases to vehicle lock",async()=>{
       unlockVehicle:async()=>({ok:true as const}),
       closeRearTrunk:async()=>{trunkClosed+=1;return {ok:true as const};}
     })
-  ]);
+  ], undefined, () => true);
   const result=await runtime.execute({
     automationId:"cmp_auto_trunk",
     providerId:"tesla",

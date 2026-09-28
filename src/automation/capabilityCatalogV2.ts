@@ -2,11 +2,17 @@ export type CapabilityRole = "trigger" | "condition" | "action";
 export type CapabilityCategory = "trigger"|"system"|"media"|"navigation"|"communication"|"productivity"|"smart-home"|"apps"|"third-party";
 export type Strategy = "DIRECT_PUBLIC_API"|"APP_INTENT"|"SHORTCUT"|"PERSONAL_AUTOMATION"|"THIRD_PARTY_API"|"GUIDED_HANDOFF"|"UNSUPPORTED";
 export type Feasibility = "FULLY_AUTOMATIC"|"ONE_TIME_SETUP"|"PARTIALLY_AUTOMATIC"|"REQUIRES_THIRD_PARTY"|"GUIDED_ONLY"|"UNSUPPORTED";
-export type ParameterRule = { type:"string"|"number"|"boolean"; required:boolean; values?:readonly (string|number)[]; min?:number; max?:number };
+export type ParameterRule = { type:"string"|"number"|"boolean"; required:boolean; values?:readonly (string|number|boolean)[]; min?:number; max?:number };
 export type CapabilityV2 = { id:string; category:CapabilityCategory; provider:string; role:CapabilityRole; description:string; executionModes:Strategy[]; risk:"low"|"medium"|"high"; requiresPro:boolean; publicApi:boolean; background:boolean; confirmation:boolean; permissions:string[]; integration?:string; parameters:Record<string,ParameterRule>; inputs:string[]; outputs:string[]; compatibleTriggers?:string[]; fallback:Strategy; availability:string };
 
 const cap = (value:CapabilityV2) => value;
 export const CAPABILITY_CATALOG_V2: readonly CapabilityV2[] = [
+  ...UNIVERSAL_CAPABILITIES.filter(item => !["vehicle.lock", "vehicle.unlock"].includes(item.id)).map(item => cap({
+    id: item.id, category: item.role === "trigger" ? "trigger" : "third-party", provider: "provider-router", role: item.role,
+    description: item.id, executionModes: ["THIRD_PARTY_API"], risk: item.risk, requiresPro: true, publicApi: true,
+    background: false, confirmation: item.risk === "high", permissions: [], parameters: item.parameters,
+    inputs: [], outputs: [item.role === "trigger" ? "event" : "provider-result"], fallback: "GUIDED_HANDOFF", availability: "registry-required"
+  })),
   cap({id:"trigger.manual",category:"trigger",provider:"shortcuts",role:"trigger",description:"Manuell gestarteter Kurzbefehl",executionModes:["SHORTCUT","APP_INTENT"],risk:"low",requiresPro:false,publicApi:true,background:false,confirmation:false,permissions:[],parameters:{},inputs:[],outputs:["event"],fallback:"GUIDED_HANDOFF",availability:"ios"}),
   ...[
     "time","weekday","alarm","sleep",
@@ -76,3 +82,4 @@ export const CAPABILITY_CATALOG_V2: readonly CapabilityV2[] = [
 
 export const capabilityV2 = (id:string) => CAPABILITY_CATALOG_V2.find((item)=>item.id===id);
 export function selectCapabilityCandidates(goal:string) { const q=goal.toLowerCase(); return CAPABILITY_CATALOG_V2.filter((c)=>c.role==="trigger" || c.description.split(/[.-]/).some((term)=>term.length>3&&q.includes(term)) || (q.includes("spotify")&&c.id.includes("spotify")) || (q.includes("helligkeit")&&c.id.includes("brightness")) || (q.includes("fokus")&&c.id.includes("focus")) || (q.includes("navigation")&&c.category==="navigation") || (q.includes("stromspar")&&c.id.includes("low-power")) || (q.includes("tesla")&&c.provider==="tesla")); }
+import { UNIVERSAL_CAPABILITIES } from "../../supabase/functions/_shared/universal-capabilities";

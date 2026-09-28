@@ -22,9 +22,9 @@ test("READY requires every gate, commercial approval and trusted adapter", async
   const candidate = new ProviderConnectorRegistry().discover("xyz", "XYZ");
   const ready: ProviderConnectorManifest = {
     ...candidate, connectorVersion: 2, lifecycle: "READY", commercialUseStatus: "ALLOWED",
-    documentationSources: [{ url: "https://developer.example.com/api", kind: "OFFICIAL_DOCS", verifiedAt: "2026-09-26" }],
+    documentationSources: [{ url: "https://developer.example.com/api", kind: "OFFICIAL_DOCS", providerOwned: true, retrievedAt: "2026-09-26", verifiedAt: "2026-09-26" }],
     allowedDomains: ["api.example.com"],
-    actions: [{ capabilityId: "light.power.set", inputSchema: { on: "boolean" }, resultSchema: { ok: "boolean" }, risk: "LOW", confirmationRequired: false }],
+    actions: [{ capabilityId: "light.power.set", inputSchema: { on: "boolean" }, resultSchema: { ok: "boolean" }, risk: "LOW", confirmationRequired: false, sourceUrls: ["https://developer.example.com/api"] }],
     verification: { documentation: true, authentication: true, endpointAllowlist: true, inputSchema: true, outputSchema: true, riskClassification: true, terms: true, connectorTests: true }
   };
   assert.throws(() => new ProviderConnectorRegistry([ready]), /NOT_VERIFIED/);

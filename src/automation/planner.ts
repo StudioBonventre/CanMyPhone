@@ -1,6 +1,8 @@
 import { createTeslaRearTrunkPlan } from "./teslaPlan";
 import type { AutomationPlan } from "./types";
 import { validateAutomationPlan } from "./validation";
+import { legacyPlanProvidersReady } from "./legacyRegistryGate";
+import type { ConnectorRegistry } from "./providerConnectorRegistry";
 
 export type PlannerContext = {
   locale: string;
@@ -24,14 +26,14 @@ function isTeslaRearTrunkGoal(goal: string): boolean {
  * Fast deterministic compilation for verified high-value goals. Everything else
  * crosses the authenticated server planner boundary and is validated again here.
  */
-export function compileVerifiedGoal(goal: string): PlannerResponse {
+export function compileVerifiedGoal(goal: string, registry?: ConnectorRegistry): PlannerResponse {
   const normalized = goal.trim();
   if (!normalized) return { ok: false, code: "needs-clarification", message: "Ich brauche noch eine Angabe.", clarificationQuestion: "Was soll wann passieren?" };
-  if (isTeslaRearTrunkGoal(normalized)) return { ok: true, plan: createTeslaRearTrunkPlan(), source: "verified-template" };
+  if (isTeslaRearTrunkGoal(normalized) && legacyPlanProvidersReady(createTeslaRearTrunkPlan(), registry)) return { ok: true, plan: createTeslaRearTrunkPlan(), source: "verified-template" };
   return { ok: false, code: "unsupported", message: "Für dieses Ziel ist noch kein verifizierter lokaler Plan vorhanden." };
 }
 
-export function acceptServerPlannerOutput(input: unknown): PlannerResponse {
+export function acceptServerPlannerOutput(input: unknown, registry?: ConnectorRegistry): PlannerResponse {
   if (input && typeof input === "object" && "clarificationNeeded" in input && (input as {clarificationNeeded?:unknown}).clarificationNeeded === true) {
     const question = (input as {clarificationQuestion?:unknown}).clarificationQuestion;
     return typeof question === "string" && question.trim()
@@ -40,7 +42,7 @@ export function acceptServerPlannerOutput(input: unknown): PlannerResponse {
   }
   const candidate = input && typeof input === "object" && "plan" in input ? (input as {plan:unknown}).plan : input;
   const validated = validateAutomationPlan(candidate);
-  return validated.ok
+  return validated.ok && legacyPlanProvidersReady(validated.plan, registry)
     ? { ok: true, plan: validated.plan, source: "server-ai" }
     : { ok: false, code: "invalid-plan", message: "Diese Automation kann ich noch nicht sicher erstellen." };
 }
@@ -49,11 +51,11 @@ export type ServerPlannerClient = {
   plan(goal: string, context: PlannerContext): Promise<unknown>;
 };
 
-export async function planGoal(goal: string, context: PlannerContext, server: ServerPlannerClient): Promise<PlannerResponse> {
-  const verified = compileVerifiedGoal(goal);
+export async function planGoal(goal: string, context: PlannerContext, server: ServerPlannerClient, registry?: ConnectorRegistry): Promise<PlannerResponse> {
+  const verified = compileVerifiedGoal(goal, registry);
   if (verified.ok) return verified;
   if (!goal.trim()) return verified;
-  try { return acceptServerPlannerOutput(await server.plan(goal, context)); }
+  try { return acceptServerPlannerOutput(await server.plan(goal, context), registry); }
   catch (error) {
     const code = error instanceof Error ? error.message : "server-error";
     if (code === "timeout") return { ok:false, code:"timeout", message:"Die Planung dauert gerade zu lange. Bitte versuche es erneut." };

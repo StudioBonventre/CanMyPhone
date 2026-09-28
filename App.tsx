@@ -28,6 +28,9 @@ import { compileAutomationRuntime } from "./src/automation/engine";
 import { approveSensitiveAutomation, homekitInstallationFingerprint, materializeShortcutDefinition, type StoredAutomation } from "./src/automation/materialization";
 import { automationRepository, syncNativeRunnerResults } from "./src/automation/automationRepository";
 import { loadConnectorConnections, saveConnectorConnection } from "./src/automation/connectorConnectionRepository";
+import { connectorRegistryRepository, refreshConnectorRegistry, refreshConnectedDeviceInventory } from "./src/lib/connectorRegistryService";
+import { connectorPlanForDefinition } from "./src/automation/connectorPlanning";
+import { connectorRegistry } from "./src/automation/builtinConnectorManifests";
 import { connectedProviderIds, EMPTY_CONNECTOR_CONNECTION_PROFILE, type ConnectorConnectionProfile } from "./src/automation/connectorConnectionState";
 import { resolveConnectedProviders } from "./src/automation/providerResolution";
 import { CanMyPhoneNative, type LocationAuthorizationResult, type NamedLocation } from "./modules/canmyphone-native";
@@ -141,14 +144,24 @@ function osMajor(): number | undefined {
 
 async function installHomeKitAutomation(item: StoredAutomation) {
   const trigger=item.definition.trigger.parameters;
-  const action=item.definition.actions[0]?.parameters;
+  const step=item.definition.actions[0];
+  const action=step?.parameters;
   if (!action || item.definition.actions.length!==1) return null;
+  if (!connectorRegistry.executable("apple-home",step.capabilityId === "smart-home.light.set" ? "light.power.set" : step.capabilityId)) return null;
+  const lightValue = step.capabilityId === "light.power.set" ? (action.on === true ? "on" : "off") : step.capabilityId === "light.brightness.set" ? String(action.percent) : String(action.value);
   const fingerprint=homekitInstallationFingerprint(item);
+  if (action.device || ["sensor.motion.changed", "sensor.contact.changed"].includes(item.definition.trigger.capabilityId)) {
+    return CanMyPhoneNative?.installRegistryHomeKitAutomation?.(JSON.stringify({ id:item.id, fingerprint, name:item.name,
+      trigger:item.definition.trigger.capabilityId, operation:step.capabilityId === "smart-home.light.set" ? (/^(on|off|an|aus)$/i.test(lightValue) ? "light.power.set" : "light.brightness.set") : step.capabilityId,
+      home:trigger.home ?? "", sensor:trigger.device ?? trigger.sensor, sensorType:trigger.sensorType ?? (item.definition.trigger.capabilityId === "sensor.motion.changed" ? "motion" : "contact"),
+      value:trigger.value, time:trigger.time, room:action.room, lightValue, device:action.device
+    })).catch(()=>null) ?? null;
+  }
   if (item.definition.trigger.capabilityId==="trigger.homekit-characteristic") {
-    return CanMyPhoneNative?.installHomeKitCharacteristicAutomation?.(item.id,fingerprint,item.name,String(trigger.home ?? ""),String(trigger.sensor),String(trigger.sensorType),trigger.value===true,String(action.room),String(action.value)).catch(()=>null) ?? null;
+    return CanMyPhoneNative?.installHomeKitCharacteristicAutomation?.(item.id,fingerprint,item.name,String(trigger.home ?? ""),String(trigger.sensor),String(trigger.sensorType),trigger.value===true,String(action.room),lightValue).catch(()=>null) ?? null;
   }
   if (item.definition.trigger.capabilityId==="trigger.homekit-time") {
-    return CanMyPhoneNative?.installHomeKitDailyLightAutomation?.(item.id,fingerprint,item.name,String(trigger.home ?? ""),String(trigger.time),String(action.room),String(action.value)).catch(()=>null) ?? null;
+    return CanMyPhoneNative?.installHomeKitDailyLightAutomation?.(item.id,fingerprint,item.name,String(trigger.home ?? ""),String(trigger.time),String(action.room),lightValue).catch(()=>null) ?? null;
   }
   return null;
 }
@@ -214,6 +227,7 @@ export default function App() {
 
   useEffect(() => {
     let alive = true;
+    refreshConnectorRegistry().then(() => refreshConnectedDeviceInventory()).catch(() => undefined);
     loadConnectorConnections().then((profile) => {
       if (alive) setConnectorConnections(profile);
     }).catch(() => undefined);
@@ -283,6 +297,7 @@ export default function App() {
       appState.current = nextState;
 
       if (nextState === "active" && previous !== "active") {
+        refreshConnectorRegistry().then(() => refreshConnectedDeviceInventory()).catch(() => undefined);
         refreshProEntitlement().then(setEntitlements).catch(() => undefined);
         syncNativeRunnerResults().then(setAutomations).catch(() => undefined);
         CanMyPhoneNative?.locationAuthorizationStatus?.().then(setLocationAuthorization).catch(() => undefined);
@@ -428,6 +443,7 @@ export default function App() {
     if (!shortcutDefinition) return;
     trackProductEvent("automation_materialization_started", { strategy: shortcutDefinition.executionStrategy });
     try {
+      await connectorRegistryRepository.hydrate();
       const resolvedDefinition = resolveConnectedProviders(shortcutDefinition, connectedProviderIds(connectorConnections));
       const stored = await automationRepository.save(materializeShortcutDefinition(resolvedDefinition));
       setInstallingAutomation(stored);
@@ -468,6 +484,12 @@ export default function App() {
 
   const confirmAutomation = async () => {
     if (!installingAutomation) return;
+    await connectorRegistryRepository.hydrate();
+    const connections = connectorPlanForDefinition(installingAutomation.definition, connectedProviderIds(connectorConnections));
+    if (!connections.ready) {
+      setActionResult({ handled:true, succeeded:false, message:connections.discoveryRequired ? "Neue Verbindung wird geprüft. Die Automation kann erst nach Freigabe aktiviert werden." : "Eine benötigte Verbindung oder Gerätefähigkeit fehlt." });
+      return;
+    }
     const runtime = compileAutomationRuntime(installingAutomation.definition);
     if (["trigger.location-enter","trigger.location-exit"].includes(installingAutomation.definition.trigger.capabilityId)) {
       const [authorization, locations]=await Promise.all([
@@ -533,6 +555,7 @@ export default function App() {
     setMotionPhase("searching");
 
     searchTimer.current = setTimeout(async () => {
+      await connectorRegistryRepository.hydrate();
       const deterministic = resolveConversation(normalized, solutions, deviceContext);
       const compiledShortcut = compileShortcutGoal(normalized);
       let selectedByAI: string | null = null;
@@ -883,6 +906,7 @@ export default function App() {
           connectedAt: new Date().toISOString()
         });
         setConnectorConnections(profile);
+        await refreshConnectedDeviceInventory();
         return;
       }
 
@@ -970,6 +994,7 @@ export default function App() {
         });
         setConnectorConnections(profile);
         setActionResult({handled:true,succeeded:true,message:pairing.message});
+        await refreshConnectedDeviceInventory();
         return;
       }
       profile=await saveConnectorConnection({
@@ -1429,7 +1454,7 @@ export default function App() {
                     const occupied=(await automationRepository.list()).filter(other=>other.enabled && other.id!==item.id && ["trigger.location-enter","trigger.location-exit"].includes(other.definition.trigger.capabilityId)).length;
                     if (occupied>=20) throw new Error("GEOFENCE_LIMIT");
                   }
-                  if (!item.enabled && item.definition.trigger.capabilityId.startsWith("trigger.homekit-")) {
+                  if (!item.enabled && (item.installationPlan?.installationHost === "HOMEKIT" || item.definition.trigger.capabilityId.startsWith("trigger.homekit-"))) {
                     const installed=await installHomeKitAutomation(item);
                     if (!installed?.success) throw new Error("HOMEKIT_INSTALL_FAILED");
                   }

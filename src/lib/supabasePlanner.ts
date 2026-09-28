@@ -7,6 +7,21 @@ import { createTeslaConnectorService } from "../automation/teslaConnectorService
 
 let supabase: SupabaseClient | null | undefined;
 
+export async function fetchConnectorRegistryRecords(): Promise<unknown> {
+  const instance = client();
+  if (!instance || !await accessToken(instance)) throw new Error("REGISTRY_OFFLINE");
+  const rows: unknown[] = [];
+  for (let offset = 0; offset < 1000; offset += 100) {
+    const response = await instance.from("connector_providers")
+      .select("provider_key,display_name,status,commercial_status,version,connector_manifests(manifest,active)")
+      .order("provider_key").range(offset, offset + 99);
+    if (response.error) throw new Error("REGISTRY_UNAVAILABLE");
+    rows.push(...(response.data ?? []));
+    if ((response.data?.length ?? 0) < 100) return rows;
+  }
+  throw new Error("REGISTRY_SNAPSHOT_TOO_LARGE");
+}
+
 async function accessToken(instance: SupabaseClient): Promise<string | null> {
   const current = await instance.auth.getSession();
   if (current.data.session?.access_token) return current.data.session.access_token;

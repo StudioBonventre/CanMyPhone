@@ -1,31 +1,71 @@
-# Connector discovery architecture (foundation)
+# Connector registry — Phase 2
 
-## Honest current status
+## Implemented data flow
 
-The new `ProviderConnectorRegistry` accepts versioned declarative manifests for ecosystem, direct, and dynamic connectors. It does **not** fetch or interpret manufacturer documentation and does **not** create adapters. Existing Tesla and Homematic IP adapters remain the only provider adapters exercised by the TypeScript connector runtime; Apple Home uses its separate native HomeKit installation path. Matter, Google Home, SmartThings, Home Assistant, openHAB, Tuya and the broad manufacturer seed list are *discovery priorities*, not operational integrations. No brand in a seed catalogue implies device support.
+User goal → universal capability plan → shared ConnectorRegistry → discovered device capabilities → execution-path resolution → installation plan → guarded runtime.
 
-The existing `PROVIDER_REGISTRY` is still a compatibility catalogue for the current planner. Migration of that planner and the native HomeKit path to the manifest registry is required before this is a single unified connector engine. Until then, callers of `ConnectorRuntime` must supply the registry to enforce its manifest gate; existing call sites without a registry retain the legacy adapter behaviour. This is a transitional boundary, not a claim that every execution path has been migrated.
+The semantic interpreter, provider resolution, connector planning, installation planning and runtime query the same registry. The old PROVIDER_REGISTRY export is a compatibility snapshot only. Legacy Tesla graphs also check the registry at planning and execution. Built-ins and server records expose the same interface. Adapter implementations remain deliberately shipped, allow-listed code; manifests never supply executable code or arbitrary request endpoints.
 
-## Unknown manufacturer to READY
+The on-device Foundation Models planner receives available providers, lifecycle/commercial status and actual minimal device inventory. Household names, rooms and inventory are NOT added to the cloud planner request. Its existing connected-provider list is filtered by the registry; server output remains untrusted and is resolved/validated locally.
 
-1. An unknown provider is registered as `CANDIDATE_LEGAL_REVIEW_REQUIRED`, with no operations, endpoint or execution permission. Repeated discovery reuses its record.
-2. A server-side discovery agent must retrieve current *official* developer docs, OpenAPI, SDK, official GitHub or platform manifest. Community material may be a lead only. Store source URL, kind and verification timestamp in `documentationSources`. An AI confidence number is informational, never a gate.
-3. A reviewer records transport, authentication, device types, universal capabilities, parameter/result/event schemas, domain allowlist, rate limits, regions, background limits, risk and confirmation requirements, terms/commercial status, API and connector versions. `UNKNOWN`, `PERSONAL_USE_ONLY`, `PARTNER_APPROVAL_REQUIRED` or `BLOCKED` terms cannot become READY.
-4. A *trusted, tested* adapter must be shipped and all eight verification gates completed. Only then can a new manifest version be promoted to READY. Version numbers must increase. Deprecation/blocking requires a newer version.
-5. The deterministic runtime checks manifest lifecycle, operation and input schema before calling a registered adapter. High-risk/confirmation-required operations also need a caller-supplied trusted approval verifier and fail closed without one. The manifest cannot contain executable code or a request URL. Network hosts must be constrained inside each adapter as well; the current runtime does not itself make HTTP requests or prove adapter host enforcement.
+## Universal capabilities and compatibility
 
-This is intentionally not an AI-to-HTTP pipeline. No AI-generated JavaScript, Swift or URL is executed.
+The portable universal-capabilities module is shared by the app and semantic Edge Function. It describes light, cover, climate, lock, sensor, vehicle, energy, charger, media and appliance operations. A vocabulary entry is not an execution permission: only operations present in an executable manifest and shipped adapter can run.
 
-## Capability discovery and routing
+Existing smart-home and Tesla IDs normalize to universal operations at the boundary. Parameters, ranges, risks and confirmation rules remain enforced. The saved original definition and approval fingerprint are not rewritten in the native runner.
 
-Device inventory must be obtained from the connected provider, including a stable device identifier and the *observed* operations. `resolveDeviceCapability` filters to observed operations and executable manifests, asks when multiple devices remain, and prefers an available ecosystem route (Apple Home, Matter, Google Home, SmartThings, Home Assistant, openHAB, Tuya) over a direct route for the same device. It cannot infer RGB from a Hue brand or charging-current control from a wallbox brand. The current product has no universal persisted inventory or discovery refresh yet; this resolver is a foundation, not live multi-ecosystem routing.
+## Registry lifecycle, provenance and commercial gate
 
-Universal identifiers may include `light.power.set`, `light.brightness.set`, `light.color.set`, `cover.open`, `climate.temperature.set`, `lock.unlock`, `appliance.finished`, `charger.current.set`, `calendar.event.create` and many future operations. The manifest's operation list is data, not a closed TypeScript manufacturer switch. Sensitive operations must still pass the existing automation approval and safety fingerprint checks; a connector manifest does not replace those checks.
+Discovery requests carry provider hints, requested capabilities, optional device hints, locale and region. Results carry identity, official documentation, candidate manifest, authentication/transport, events, commercial status, verification and blockers. The contract is implemented; an autonomous web-research agent is NOT implemented or running.
 
-## Server registry boundary (not deployed)
+DISCOVERED → CANDIDATE → VALIDATING → VERIFIED → READY.
 
-A production registry needs server-owned immutable manifest versions and provenance records, private candidate/verification writes, and an authenticated read projection of READY manifests. It must validate manifests server-side and never grant client writes to lifecycle, verification or commercial fields. It also needs official-domain source retrieval with SSRF protection, an approval workflow and adapter release binding. Supabase RLS and grants need explicit allow/deny tests. This repository cannot currently run the Supabase CLI or a local database here, so no migration or server discovery agent is claimed as complete.
+Discovery results can only register candidates. Promotion requires all eight verification gates, a shipped trusted adapter, ALLOWED commercial status and per-capability official provenance: source URL/type, provider-owned flag and retrieved/verified timestamps. Actions reference their sources; triggers/conditions require event schemas and source references. Unknown verification fields, schema extensions, arbitrary endpoints and risk downgrades are rejected. Other commercial states do not grant execution. Disabling a provider prevents subsequent executions, including legacy plans.
 
-Hundreds of brands can be indexed as candidates and mapped to the same ecosystem adapter and universal operations. Their presence in the catalogue is not proof of API access, commercial permission or runtime support. New direct adapters are justified only for capabilities not available through connected ecosystems.
+Built-in Apple Home, Tesla and Homematic IP manifests describe existing shipped implementations. Their exact local release snapshots are explicitly trusted, with empty external verification claims. This is NOT evidence of hardware testing or a legal certification. Remote replacements do not inherit this exception: they must pass the full dynamic gate.
 
-`DISCOVERY_SEEDS` supplies broad search hints across home, media, vehicles, energy, appliances, productivity and health. Unknown IDs outside these hints are accepted as candidates. `discoverConnectorPath` first checks a reusable READY connector, then connected ecosystem devices; otherwise it queues research beginning with an official local API. It does not fetch documents or infer that such an API exists.
+## Device inventory and execution paths
+
+Apple Home inventory derives capabilities from writable light/cover/climate characteristics and event-capable sensors. Older native builds lacking capability metadata produce no inferred device capabilities. Homematic inventory derives cover, switch/dimmer and heating-group support from HCU state. No brand name confers a capability.
+
+A physical device may carry multiple provider paths. Resolution filters capability, lifecycle, commercial gate, online/credential state, connected provider, region and requested background/event support. It then scores explicit user preference, locality, reliability, background support, privacy and latency, with stable tie-breaking. Multiple physical targets remain ambiguous rather than being guessed. Results include provider-specific device ID, host, reason, confidence and alternative providers; alternatives are not blindly retried after a potentially non-idempotent command.
+
+Connected HomeKit/HCU inventory refreshes locally at startup, foreground return and connection. No cross-ecosystem identity deduplication or persistent universal device inventory is claimed. If inventory is unavailable, existing adapters still perform their real target discovery and must report failure rather than invent success.
+
+## Runtime and native boundary
+
+ConnectorRuntime always has a registry, including default construction. It checks readiness, schema, actual inventory when available, approval and provider-confirmed result schema. The native runner receives an allow-listed registry projection with versions and expiry, persisted in the app group. It checks this before connector actions and translates universal operations to shipped native adapters. No URLs or credentials are present in that projection. Invalid or missing policy fails closed. Sensitive actions still require approval of the exact stored definition.
+
+HomeKit installation supports a single light action with a HomeKit time or motion/contact trigger and no extra conditions. CanMyPhone installs this in Apple Home; the Home hub owns subsequent execution. This is not a general background callback into CanMyPhone, and cross-provider HomeKit event chains remain unavailable. Existing installed HomeKit automations are independently owned by the Home hub: registry revocation prevents new CanMyPhone dispatch/installation, but is not a remote kill switch for an already installed HomeKit automation.
+
+## Autonomous triggers: actual limits
+
+- Named-location enter/exit: Core Location monitoring and native runner are implemented, subject to Always authorization, valid saved coordinates, system delivery and background restrictions. Force-quit, permission changes or unavailable provider/network access can prevent execution. No exact-time guarantee.
+- Time: exact arbitrary background execution on iOS is not available through a general timer. Current personal time triggers use Apple Shortcuts; the supported HomeKit daily-light installation runs in Apple Home instead.
+- HomeKit motion/contact: the supported HomeKit-only light automation is installed in Apple Home without Personal Automation.
+- Provider/connector events: event dispatcher/contracts exist, but no persistent authenticated external event subscription is installed by current direct connectors. These plans are not presented as ready.
+- Other iOS-only personal triggers (such as app-open, focus and charging): Apple Personal Automation remains the system-trigger fallback. Action-specific public API limitations still apply.
+
+A new iOS development build is necessary for the changed bridge; JavaScript reload alone cannot install Swift changes.
+
+## Supabase registry and offline repository
+
+Migration: supabase/migrations/20260926210000_connector_registry.sql.
+
+Tables: connector_providers (published metadata), connector_manifests (versioned JSONB capability schemas), connector_sources (official provenance), connector_verification_runs (append-only audit). Capabilities are embedded in immutable manifest versions, not duplicated into a separate table.
+
+RLS is enabled everywhere. Authenticated clients may read provider metadata and published active READY/ALLOWED manifests; candidate manifests and verification audits remain private. Client writes are not granted. Trusted service processes must follow lifecycle/version/provenance checks and supply successful verification evidence. Registry tables contain no provider credentials. Credentials stay in Keychain or existing secure backend stores.
+
+The app repository hydrates versioned AsyncStorage cache once, coalesces refreshes, checks snapshot consistency and monotonic provider versions, preserves revocations and rejects missing-record/rollback snapshots. Verified server data is usable offline for at most 24 hours; expired entries cannot authorize new executions. Revocation is learned at refresh, not instantaneously while offline. Built-in release snapshots are the initial offline baseline. Runs do not refetch the complete registry.
+
+The native policy shares the same expiry and server version. JSON null expiry is removed before UserDefaults storage because null is not a property-list value. Concurrent consumers wait for the same cache hydration.
+
+## Verification and remaining work
+
+Implemented and locally tested: registry/core integration, multiple paths, discovery-only candidates, commercial/provenance gates, device mismatch, sensitive approval, legacy revocation, offline cache, and migration security. The migration is executed against embedded PostgreSQL (PGlite), with actual role/RLS/grant checks, not SQL-text assertions.
+
+No Supabase project was returned by the available project connection. Therefore the migration has NOT been deployed remotely; remote Security Advisors, production RLS and Edge Function deployment are NOT verified. No iOS build or real HomeKit/Homematic/Tesla hardware/account execution was performed in this Windows task. Unit tests and Expo Doctor are not substitutes for those checks.
+
+Matter, Google Home, SmartThings, Home Assistant, openHAB and Tuya remain informational ECOSYSTEM candidates, not live adapters. Dynamic discovery does not auto-install arbitrary adapters.
+
+Next: deploy the migration to the intended Supabase project, run Security Advisors, publish reviewed registry records, then build iOS and validate one real sensor→light installation plus geofence→provider execution with the user's hardware. A persistent authenticated provider-event transport and the research/review service are separate subsequent integrations.

@@ -1,4 +1,6 @@
-import { PROVIDER_REGISTRY, type ProviderDescriptor } from "./providerRegistry";
+import { providerDescriptor, type ProviderDescriptor } from "./providerRegistry";
+import { connectorRegistry } from "./builtinConnectorManifests";
+import type { ConnectorRegistry } from "./providerConnectorRegistry";
 
 export type ConnectorSetupStep = {
   id: string;
@@ -13,9 +15,10 @@ export type ConnectorSetupPlan = {
   executableToday: boolean;
 };
 
-export function connectorSetupPlan(providerId: string): ConnectorSetupPlan | null {
-  const provider=PROVIDER_REGISTRY.find((item)=>item.id===providerId);
-  if(!provider)return null;
+export function connectorSetupPlan(providerId: string, registry: ConnectorRegistry = connectorRegistry): ConnectorSetupPlan | null {
+  const manifest=registry.getProvider(providerId);
+  if(!manifest)return null;
+  const provider=providerDescriptor(manifest);
 
   const common:ConnectorSetupStep[]=[
     {id:"consent",title:"Verbindung erlauben",detail:"CanMyPhone verbindet den Anbieter nur nach deiner ausdrücklichen Freigabe.",userActionRequired:true}
@@ -24,7 +27,7 @@ export function connectorSetupPlan(providerId: string): ConnectorSetupPlan | nul
   if(provider.id==="tesla"){
     return {
       provider,
-      executableToday:true,
+      executableToday:registry.listReadyProviders().some(item=>item.providerId===providerId),
       steps:[
         ...common,
         {id:"oauth",title:"Tesla-Konto verbinden",detail:"OAuth-Freigabe für die benötigten Fahrzeugdaten und Befehle.",userActionRequired:true},
@@ -37,7 +40,7 @@ export function connectorSetupPlan(providerId: string): ConnectorSetupPlan | nul
   if(provider.id==="homematic-ip"){
     return {
       provider,
-      executableToday:true,
+      executableToday:registry.listReadyProviders().some(item=>item.providerId===providerId),
       steps:[
         ...common,
         {id:"hcu",title:"Home Control Unit angeben",detail:"Gib die letzten vier Stellen der HCU-SGTIN ein. CanMyPhone verbindet sich danach ausschließlich lokal mit hcu1-XXXX.local.",userActionRequired:true},
@@ -50,7 +53,7 @@ export function connectorSetupPlan(providerId: string): ConnectorSetupPlan | nul
   if(provider.id==="apple-home"){
     return {
       provider,
-      executableToday:true,
+      executableToday:registry.listReadyProviders().some(item=>item.providerId===providerId),
       steps:[
         ...common,
         {id:"permission",title:"Apple-Home-Zugriff erlauben",detail:"CanMyPhone benötigt die HomeKit-Berechtigung, um vorhandene Räume und Geräte zu lesen und zu steuern.",userActionRequired:true},

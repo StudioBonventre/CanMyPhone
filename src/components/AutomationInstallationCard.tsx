@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useSyncExternalStore } from "react";
+import { connectorRegistry } from "../automation/builtinConnectorManifests";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { hasValidSafetyApproval, type StoredAutomation } from "../automation/materialization";
 import { compileAutomationRuntime } from "../automation/engine";
@@ -30,6 +31,7 @@ export function AutomationInstallationCard({
   namedLocationNames?:string[];
   connectedProviderIds?:string[];
 }) {
+  useSyncExternalStore(connectorRegistry.subscribe, connectorRegistry.getRevision, connectorRegistry.getRevision);
   const setup=automation.personalSetup;
   const direct=!setup;
   const runtime=compileAutomationRuntime(automation.definition);
@@ -44,6 +46,8 @@ export function AutomationInstallationCard({
   const locationLabel=locationValue==="parked-vehicle-location"?"Standort bei deinem Tesla":locationValue;
   const heading=automation.materializationState==="ACTIVE"
     ?"AKTIV"
+    :connectorPlan.discoveryRequired
+      ?"NEUE VERBINDUNG WIRD GEPRÜFT"
     :runtime.installationHost==="UNSUPPORTED"
       ?"NOCH NICHT AUSFÜHRBAR"
     :waitingForConnector
@@ -61,6 +65,8 @@ export function AutomationInstallationCard({
         :runtime.installationHost==="PROVIDER"
           ?"Der verbundene Dienst überwacht diesen Auslöser."
           :"CanMyPhone überwacht diesen Auslöser selbst."
+    :connectorPlan.discoveryRequired
+      ?"CanMyPhone hat die gewünschten Schritte erkannt. Die neue Verbindung muss geprüft und freigegeben werden, bevor diese Automation laufen kann."
     :runtime.installationHost==="UNSUPPORTED"
       ?runtime.summary
     :waitingForConnector
@@ -88,7 +94,7 @@ export function AutomationInstallationCard({
             ?binding.provider.displayName
             :"candidates" in binding
               ?binding.candidates.map((item)=>item.displayName).join(" / ")
-              :"noch kein passender Connector";
+              :binding.status==="DISCOVERY_REQUIRED"?binding.request.providerName:"noch kein passender Connector";
           const state=binding.status==="BOUND"
             ?"Verbunden"
             :binding.status==="CONNECTION_REQUIRED"
@@ -97,7 +103,7 @@ export function AutomationInstallationCard({
                 ?"Connector noch nicht implementiert"
                 :binding.status==="AMBIGUOUS"
                   ?"Ausführungsweg auswählen"
-                  :"Noch kein direkter Connector";
+                  :binding.status==="DISCOVERY_REQUIRED"?"Neue Verbindung wird geprüft":binding.status==="DEVICE_CAPABILITY_MISMATCH"?"Gerätefähigkeit fehlt":"Noch kein direkter Connector";
           return <View key={`${requirement.capabilityId}-${index}`} style={styles.connectorRow}>
             <Text style={styles.connectorName}>{provider}</Text>
             <Text style={styles.connectorState}>{state}</Text>

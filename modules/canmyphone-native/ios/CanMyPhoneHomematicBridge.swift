@@ -280,7 +280,7 @@ final class CanMyPhoneHomematicBridge: NSObject, URLSessionDelegate {
     for item in objectValues(state["devices"]) {
       guard let deviceID = item["id"] as? String, deviceIDs.contains(deviceID) else { continue }
       let label = normalize(item["label"] as? String)
-      if !deviceQuery.isEmpty && label != deviceQuery && !label.contains(deviceQuery) { continue }
+      if !deviceQuery.isEmpty && deviceID != device && label != deviceQuery && !label.contains(deviceQuery) { continue }
 
       for channel in objectValues(item["functionalChannels"]) {
         guard let index = number(channel["index"]).map({ Int($0) }) else { continue }

@@ -37,6 +37,7 @@ export type HomeKitSnapshotResult = {
         name: string;
         reachable: boolean;
         characteristics: string[];
+        capabilities?: string[];
       }>;
     }>;
   }>;
@@ -124,6 +125,8 @@ export type StoreEntitlementResult = {
 };
 
 export type NativeModuleShape = {
+  syncConnectorRegistry?(json: string): Promise<boolean>;
+  installRegistryHomeKitAutomation?(json: string): Promise<HomeKitActionResult>;
   foundationModelStatus(): Promise<FoundationModelStatus>;
   askFoundationModel(prompt: string): Promise<string>;
   permissionStatus(kind: PermissionKind): Promise<PermissionResult>;

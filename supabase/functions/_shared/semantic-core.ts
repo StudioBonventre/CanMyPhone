@@ -1,4 +1,6 @@
 export const semanticCapabilityIds = new Set([
+  ...UNIVERSAL_CAPABILITIES.map(cap => cap.id),
+  "trigger.provider-event", "trigger.homekit-characteristic", "trigger.homekit-time",
   "trigger.manual",
   "trigger.time","trigger.weekday","trigger.alarm","trigger.sleep",
   "trigger.location-enter","trigger.location-exit",
@@ -23,6 +25,7 @@ export const semanticCapabilityIds = new Set([
 ]);
 
 export const semanticCapabilitySummary = [
+  "Universal hardware operations (prefer these over legacy smart-home IDs): " + JSON.stringify(UNIVERSAL_CAPABILITIES),
   "Triggers: manual, time/weekday/alarm/sleep, location enter/exit, CarPlay, email/message/transaction, Wi-Fi, Bluetooth, Apple Watch workout, NFC, app opened/closed, airplane mode, focus, low-power mode, battery, charger, sound recognition.",
   "Direct system actions: system.brightness.set {percent}; system.flashlight.set {value:on|off}; system.clipboard.set {value}; system.url.open {url}; navigation.route.start {destination}.",
   "Communication actions: communication.message.compose/mail.compose/call.start {recipient}. They open the system communication UI and do not silently send messages or place calls.",
@@ -30,7 +33,7 @@ export const semanticCapabilitySummary = [
   "Apple Home: smart-home.scene.run {scene,home?}; provider-neutral smart-home.cover.open/close {provider?,room,device?}; smart-home.light.set/climate.set {provider?,room,value}.",
   "Apple-owned actions such as focus and low-power mode remain system-orchestrated unless a direct public API is explicitly listed.",
   "Provider-neutral actions: vehicle.lock, vehicle.unlock, smart-home.cover.open/close, smart-home.light.set, smart-home.climate.set.",
-  "Named providers currently known to routing: Tesla, Homematic IP, Apple Home, Matter, Home Assistant."
+  "Provider availability and device capabilities are determined by the device-local ConnectorRegistry after semantic planning; never assume support from a manufacturer name."
 ].join("\n");
 
 export type SemanticEnvelope = {
@@ -85,3 +88,5 @@ export function validateSemanticEnvelope(value:unknown):{ok:true;value:SemanticE
 export function safeSemanticLogFields(requestId:string,result:"ok"|"clarification"|"error",code?:string){
   return{requestId,result,...(code?{code}:{})};
 }
+// @ts-ignore Deno deployment requires the extension; the mobile tsconfig is intentionally unchanged.
+import { UNIVERSAL_CAPABILITIES } from "./universal-capabilities.ts";

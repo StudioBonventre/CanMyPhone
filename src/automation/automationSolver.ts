@@ -38,6 +38,8 @@ export function solveAutomationRoutes(
 
   if(runtime.installationHost!=="UNSUPPORTED"&&connectors.requirements.length&&connectors.ready){
     routes.push({kind:"CONNECTED_PROVIDER",rank:85,automatic:true,exact:true,summary:"Alle benötigten Hersteller-Connectoren sind verbunden."});
+  }else if(connectors.discoveryRequired){
+    routes.push({kind:"SETUP_REQUIRED",rank:45,automatic:false,exact:false,summary:"Neue Verbindung wird geprüft. Der gewünschte Integrationsweg ist noch nicht freigegeben."});
   }else if(runtime.installationHost!=="UNSUPPORTED"&&connectors.requirements.length){
     routes.push({kind:"SETUP_REQUIRED",rank:45,automatic:false,exact:true,summary:"Die Automation ist technisch auflösbar, benötigt aber noch eine Herstellerverbindung."});
   }

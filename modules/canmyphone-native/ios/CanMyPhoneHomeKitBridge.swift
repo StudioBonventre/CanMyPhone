@@ -56,11 +56,22 @@ final class CanMyPhoneHomeKitBridge: NSObject, HMHomeManagerDelegate {
               service.characteristics.map { $0.characteristicType }
             }
           )
+          let writableTypes = Set(accessory.services.flatMap { $0.characteristics }.filter { $0.properties.contains(HMCharacteristicPropertyWritable) }.map { $0.characteristicType })
+          let lightTypes = Set(accessory.services.filter { $0.serviceType == HMServiceTypeLightbulb }.flatMap { $0.characteristics }.filter { $0.properties.contains(HMCharacteristicPropertyWritable) }.map { $0.characteristicType })
+          let eventTypes = Set(accessory.services.flatMap { $0.characteristics }.filter { $0.properties.contains(HMCharacteristicPropertySupportsEventNotification) }.map { $0.characteristicType })
+          var capabilities: [String] = []
+          if lightTypes.contains(HMCharacteristicTypePowerState) { capabilities.append("light.power.set") }
+          if lightTypes.contains(HMCharacteristicTypeBrightness) { capabilities.append("light.brightness.set") }
+          if writableTypes.contains(HMCharacteristicTypeTargetPosition) { capabilities += ["cover.open", "cover.close"] }
+          if writableTypes.contains(HMCharacteristicTypeTargetTemperature) { capabilities.append("climate.temperature.set") }
+          if eventTypes.contains(HMCharacteristicTypeMotionDetected) { capabilities.append("sensor.motion.changed") }
+          if eventTypes.contains(HMCharacteristicTypeContactState) { capabilities.append("sensor.contact.changed") }
           return [
             "id": accessory.uniqueIdentifier.uuidString,
             "name": accessory.name,
             "reachable": accessory.isReachable,
-            "characteristics": Array(characteristicTypes).sorted()
+            "characteristics": Array(characteristicTypes).sorted(),
+            "capabilities": capabilities
           ]
         }
         return [
@@ -127,7 +138,7 @@ final class CanMyPhoneHomeKitBridge: NSObject, HMHomeManagerDelegate {
     return failure("HOMEKIT_SCENE_NOT_FOUND", "Die Apple-Home-Szene „\(cleanScene)“ wurde nicht gefunden.")
   }
 
-  func installCharacteristicAutomation(id: String, fingerprint: String, name: String, homeName: String, sensorName: String, sensorType: String, sensorValue: Bool, room: String, lightValue: String) async -> [String: Any] {
+  func installCharacteristicAutomation(id: String, fingerprint: String, name: String, homeName: String, sensorName: String, sensorType: String, sensorValue: Bool, room: String, lightValue: String, device: String? = nil) async -> [String: Any] {
     await waitUntilReady()
     guard manager.authorizationStatus.contains(.authorized) else { return failure("HOMEKIT_NOT_AUTHORIZED", "Apple Home-Zugriff ist nicht erlaubt.") }
     let homes = homeName.isEmpty ? manager.homes : manager.homes.filter { $0.name.compare(homeName, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }
@@ -137,7 +148,7 @@ final class CanMyPhoneHomeKitBridge: NSObject, HMHomeManagerDelegate {
       guard CanMyPhoneAutomationStore.defaults?.string(forKey: "CanMyPhoneHomeKitFingerprint.\(id)") == fingerprint else { return failure("HOMEKIT_DEFINITION_CHANGED", "Die Apple-Home-Automation wurde verändert und muss zuerst entfernt werden.") }
       return ["success": true, "alreadyInstalled": true, "message": "Die Apple-Home-Automation ist bereits installiert."]
     }
-    let sensorMatches=home.accessories.filter { $0.name.compare(sensorName, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }
+    let sensorMatches=home.accessories.filter { $0.uniqueIdentifier.uuidString.caseInsensitiveCompare(sensorName) == .orderedSame || $0.name.compare(sensorName, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }
     let characteristicType = sensorType == "contact" ? HMCharacteristicTypeContactState : sensorType == "motion" ? HMCharacteristicTypeMotionDetected : ""
     guard sensorMatches.count == 1, let sensor = sensorMatches.first,
           let observed = sensor.services.flatMap({ $0.characteristics }).first(where: { $0.characteristicType == characteristicType && $0.properties.contains(HMCharacteristicPropertySupportsEventNotification) }) else {
@@ -149,7 +160,13 @@ final class CanMyPhoneHomeKitBridge: NSObject, HMHomeManagerDelegate {
     guard let power else { return failure("INVALID_LIGHT_VALUE", "Für Licht werden an, aus oder ein Prozentwert unterstützt.") }
     let matchingRooms = home.rooms.filter { $0.name.compare(room, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }
     guard matchingRooms.count == 1, let targetRoom = matchingRooms.first else { return failure("HOMEKIT_ROOM_AMBIGUOUS", "Wähle genau einen Apple-Home-Raum aus.") }
-    let lights = targetRoom.accessories.flatMap { $0.services.filter { $0.serviceType == HMServiceTypeLightbulb }.flatMap { $0.characteristics } }
+    let targets = targetRoom.accessories.filter { accessory in
+      accessory.services.contains(where: { $0.serviceType == HMServiceTypeLightbulb }) &&
+        (device == nil || accessory.uniqueIdentifier.uuidString == device || accessory.name == device)
+    }
+    if device != nil && targets.count != 1 { return failure("HOMEKIT_DEVICE_AMBIGUOUS", "Das ausgewählte Gerät ist nicht eindeutig erreichbar.") }
+    if percent != nil && !targets.allSatisfy({ $0.services.flatMap { $0.characteristics }.contains(where: { $0.characteristicType == HMCharacteristicTypeBrightness && $0.properties.contains(HMCharacteristicPropertyWritable) }) }) { return failure("DEVICE_CAPABILITY_MISMATCH", "Das ausgewählte Licht unterstützt keine Helligkeitssteuerung.") }
+    let lights = targets.flatMap { $0.services.filter { $0.serviceType == HMServiceTypeLightbulb }.flatMap { $0.characteristics } }
     let powerCharacteristics = lights.filter { $0.characteristicType == HMCharacteristicTypePowerState }
     guard !powerCharacteristics.isEmpty else { return failure("HOMEKIT_TARGET_NOT_FOUND", "In diesem Raum wurde kein steuerbares Licht gefunden.") }
     do {
@@ -203,7 +220,7 @@ final class CanMyPhoneHomeKitBridge: NSObject, HMHomeManagerDelegate {
     return ["success": true, "message": "Apple-Home-Automation entfernt."]
   }
 
-  func installDailyLightAutomation(id: String, fingerprint: String, name: String, homeName: String, time: String, room: String, lightValue: String) async -> [String: Any] {
+  func installDailyLightAutomation(id: String, fingerprint: String, name: String, homeName: String, time: String, room: String, lightValue: String, device: String? = nil) async -> [String: Any] {
     await waitUntilReady()
     guard manager.authorizationStatus.contains(.authorized) else { return failure("HOMEKIT_NOT_AUTHORIZED", "Apple Home-Zugriff ist nicht erlaubt.") }
     let homes = homeName.isEmpty ? manager.homes : manager.homes.filter { $0.name.compare(homeName, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }
@@ -217,11 +234,17 @@ final class CanMyPhoneHomeKitBridge: NSObject, HMHomeManagerDelegate {
     }
     let matchingRooms=home.rooms.filter { $0.name.compare(room, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }
     guard matchingRooms.count == 1, let targetRoom=matchingRooms.first else { return failure("HOMEKIT_ROOM_AMBIGUOUS", "Wähle genau einen Apple-Home-Raum aus.") }
-    let lights=targetRoom.accessories.flatMap { $0.services.filter { $0.serviceType == HMServiceTypeLightbulb }.flatMap { $0.characteristics } }
+    let targets = targetRoom.accessories.filter { accessory in
+      accessory.services.contains(where: { $0.serviceType == HMServiceTypeLightbulb }) &&
+        (device == nil || accessory.uniqueIdentifier.uuidString == device || accessory.name == device)
+    }
+    if device != nil && targets.count != 1 { return failure("HOMEKIT_DEVICE_AMBIGUOUS", "Das ausgewählte Gerät ist nicht eindeutig erreichbar.") }
+    let lights=targets.flatMap { $0.services.filter { $0.serviceType == HMServiceTypeLightbulb }.flatMap { $0.characteristics } }
     let powerCharacteristics=lights.filter { $0.characteristicType == HMCharacteristicTypePowerState }
     guard !powerCharacteristics.isEmpty else { return failure("HOMEKIT_TARGET_NOT_FOUND", "In diesem Raum wurde kein steuerbares Licht gefunden.") }
     let normalized=lightValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     let percent=parsePercent(normalized)
+    if percent != nil && !targets.allSatisfy({ $0.services.flatMap { $0.characteristics }.contains(where: { $0.characteristicType == HMCharacteristicTypeBrightness && $0.properties.contains(HMCharacteristicPropertyWritable) }) }) { return failure("DEVICE_CAPABILITY_MISMATCH", "Das ausgewählte Licht unterstützt keine Helligkeitssteuerung.") }
     let power: Bool?=["on","an","ein"].contains(normalized) ? true : ["off","aus"].contains(normalized) ? false : percent.map { $0 > 0 }
     guard let power else { return failure("INVALID_LIGHT_VALUE", "Für Licht werden an, aus oder ein Prozentwert unterstützt.") }
     var calendar=Calendar.current
@@ -304,7 +327,7 @@ final class CanMyPhoneHomeKitBridge: NSObject, HMHomeManagerDelegate {
       return failure("HOMEKIT_NOT_AUTHORIZED", "Apple Home-Zugriff ist nicht erlaubt.")
     }
 
-    let accessories = matchingAccessories(room: room, device: device)
+    let accessories = matchingAccessories(room: room, device: device).filter { $0.services.contains(where: { $0.serviceType == HMServiceTypeLightbulb }) }
     guard !accessories.isEmpty else {
       return failure("HOMEKIT_TARGET_NOT_FOUND", "In diesem Raum wurde kein passendes Licht gefunden.")
     }
@@ -320,6 +343,13 @@ final class CanMyPhoneHomeKitBridge: NSObject, HMHomeManagerDelegate {
 
     guard requestedPower != nil || percent != nil else {
       return failure("INVALID_LIGHT_VALUE", "Für Licht werden an, aus oder ein Prozentwert unterstützt.")
+    }
+
+    guard device == nil || accessories.count == 1 else {
+      return failure("HOMEKIT_TARGET_AMBIGUOUS", "Wähle genau ein Licht aus.")
+    }
+    if percent != nil && !accessories.allSatisfy({ $0.services.flatMap { $0.characteristics }.contains(where: { $0.characteristicType == HMCharacteristicTypeBrightness && $0.properties.contains(HMCharacteristicPropertyWritable) }) }) {
+      return failure("DEVICE_CAPABILITY_MISMATCH", "Nicht alle ausgewählten Lichter unterstützen Helligkeitssteuerung.")
     }
 
     var writes = 0
@@ -396,7 +426,7 @@ final class CanMyPhoneHomeKitBridge: NSObject, HMHomeManagerDelegate {
 
     guard let deviceQuery, !deviceQuery.isEmpty else { return roomMatches }
     return roomMatches.filter { accessory in
-      accessory.name.range(of: deviceQuery, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+      accessory.uniqueIdentifier.uuidString.caseInsensitiveCompare(deviceQuery) == .orderedSame || accessory.name.range(of: deviceQuery, options: [.caseInsensitive, .diacriticInsensitive]) != nil
     }
   }
 

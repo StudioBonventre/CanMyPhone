@@ -198,7 +198,7 @@ function devicesInRoom(state: HomematicState, room: string, device?: string): Ho
   let matches = state.devices.filter((item) => ids.has(item.id));
   if (device?.trim()) {
     const target = normalize(device);
-    matches = matches.filter((item) => normalize(item.label) === target || normalize(item.label).includes(target));
+    matches = matches.filter((item) => item.id === device || normalize(item.label) === target || normalize(item.label).includes(target));
   }
   return matches;
 }

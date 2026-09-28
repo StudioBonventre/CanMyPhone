@@ -1,5 +1,13 @@
 import { capabilityV2 } from "./capabilityCatalogV2";
 import type { ShortcutDefinition, ShortcutStep } from "./shortcutCompiler";
+import { connectorRegistry } from "./builtinConnectorManifests";
+import { connectorRequirementForStep } from "./connectorPlanning";
+import type { ConnectorRegistry } from "./providerConnectorRegistry";
+
+function stepProvider(step: ShortcutStep, registry: ConnectorRegistry) {
+  const binding = connectorRequirementForStep(step, new Set(registry.listReadyProviders().map(m => m.providerId)), registry)?.binding;
+  return binding && "provider" in binding ? registry.getProvider(binding.provider.id) : undefined;
+}
 
 export type TriggerDriver =
   | "CANMYPHONE_MANUAL"
@@ -31,24 +39,27 @@ export type AutomationRuntimePlan = {
   summary: string;
 };
 
-function triggerDriver(definition: ShortcutDefinition): TriggerDriver {
+function triggerDriver(definition: ShortcutDefinition, registry: ConnectorRegistry): TriggerDriver {
   const trigger = capabilityV2(definition.trigger.capabilityId);
   if (!trigger || trigger.role !== "trigger") return "UNSUPPORTED";
   if (definition.trigger.capabilityId === "trigger.manual") return "CANMYPHONE_MANUAL";
-  if (["trigger.homekit-characteristic","trigger.homekit-time"].includes(definition.trigger.capabilityId)) return "HOMEKIT";
+  if (["trigger.homekit-characteristic","trigger.homekit-time"].includes(definition.trigger.capabilityId)) return registry.executable("apple-home", definition.trigger.capabilityId) ? "HOMEKIT" : "UNSUPPORTED";
+  const provider = stepProvider(definition.trigger, registry);
+  if (provider?.transport === "HOMEKIT" && provider.eventInstallationSupported && registry.executable(provider.providerId, definition.trigger.capabilityId)) return "HOMEKIT";
   if (trigger.executionModes.includes("DIRECT_PUBLIC_API")) return "CANMYPHONE_NATIVE";
   if (trigger.integration || trigger.executionModes.includes("THIRD_PARTY_API")) return "PROVIDER";
   if (trigger.executionModes.includes("PERSONAL_AUTOMATION")) return "APPLE_SHORTCUTS_BRIDGE";
   return "UNSUPPORTED";
 }
 
-function actionDriver(step: ShortcutStep, homekitTrigger = false): ActionDriver {
+function actionDriver(step: ShortcutStep, homekitTrigger = false, registry: ConnectorRegistry = connectorRegistry): ActionDriver {
   const cap = capabilityV2(step.capabilityId);
   if (!cap || cap.role !== "action") return "UNSUPPORTED";
-  if (homekitTrigger && step.capabilityId === "smart-home.light.set" && ["apple-home","apple home","homekit","home"].includes(String(step.parameters.provider ?? "").trim().toLowerCase())) return "HOMEKIT";
+  const resolvedProvider = stepProvider(step, registry);
+  if (resolvedProvider && !registry.listReadyProviders().some(m => m.providerId === resolvedProvider.providerId)) return "UNSUPPORTED";
+  if (homekitTrigger && ["smart-home.light.set", "light.power.set", "light.brightness.set"].includes(step.capabilityId) && resolvedProvider?.transport === "HOMEKIT") return "HOMEKIT";
   if (cap.executionModes.includes("DIRECT_PUBLIC_API")) return "CANMYPHONE_NATIVE";
-  const provider = typeof step.parameters.provider === "string" ? step.parameters.provider.trim().toLowerCase() : "";
-  if (step.capabilityId.startsWith("smart-home.") && ["apple-home","apple home","homekit","home"].includes(provider)) return "CANMYPHONE_NATIVE";
+  if (resolvedProvider?.transport === "HOMEKIT") return "CANMYPHONE_NATIVE";
   if (cap.integration || cap.executionModes.includes("THIRD_PARTY_API")) return "PROVIDER";
   if (cap.executionModes.includes("SHORTCUT") || cap.executionModes.includes("PERSONAL_AUTOMATION")) return "APPLE_SHORTCUTS_ACTION";
   if (cap.executionModes.includes("APP_INTENT")) return "CANMYPHONE_APP_INTENT";
@@ -56,9 +67,9 @@ function actionDriver(step: ShortcutStep, homekitTrigger = false): ActionDriver 
   return "UNSUPPORTED";
 }
 
-export function compileAutomationRuntime(definition: ShortcutDefinition): AutomationRuntimePlan {
-  const trigger = triggerDriver(definition);
-  const actions = definition.actions.map((action) => actionDriver(action, trigger === "HOMEKIT"));
+export function compileAutomationRuntime(definition: ShortcutDefinition, registry: ConnectorRegistry = connectorRegistry): AutomationRuntimePlan {
+  const trigger = triggerDriver(definition, registry);
+  const actions = definition.actions.map((action) => actionDriver(action, trigger === "HOMEKIT", registry));
   const hasAppleActions = actions.includes("APPLE_SHORTCUTS_ACTION");
   const bridgeForTrigger = trigger === "APPLE_SHORTCUTS_BRIDGE";
   const appleBridgeRequired = bridgeForTrigger || hasAppleActions;

@@ -1,10 +1,12 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { CanMyPhoneNative } from "../../modules/canmyphone-native";
 import { AutomationPersistence } from "./automationPersistence";
+import { syncNativeConnectorRegistry } from "../lib/connectorRegistryService";
 
 export const automationRepository = new AutomationPersistence(AsyncStorage, {
   async save(item){
-    if (!item.enabled && item.materializationState === "DISABLED" && item.definition.trigger.capabilityId.startsWith("trigger.homekit-")) {
+    await syncNativeConnectorRegistry();
+    if (!item.enabled && item.materializationState === "DISABLED" && (item.installationPlan?.installationHost === "HOMEKIT" || item.definition.trigger.capabilityId.startsWith("trigger.homekit-"))) {
       const removed = await CanMyPhoneNative?.removeHomeKitAutomation?.(item.id);
       if (!removed?.success) throw new Error("HOMEKIT_REMOVE_FAILED");
     }
@@ -13,7 +15,7 @@ export const automationRepository = new AutomationPersistence(AsyncStorage, {
   },
   async remove(id){
     const item = await automationRepository.get(id);
-    if (item?.definition.trigger.capabilityId.startsWith("trigger.homekit-") && item.materializationState === "ACTIVE") {
+    if (item && (item.installationPlan?.installationHost === "HOMEKIT" || item.definition.trigger.capabilityId.startsWith("trigger.homekit-")) && item.materializationState === "ACTIVE") {
       const removed = await CanMyPhoneNative?.removeHomeKitAutomation?.(id);
       if (!removed?.success) throw new Error("HOMEKIT_REMOVE_FAILED");
     }

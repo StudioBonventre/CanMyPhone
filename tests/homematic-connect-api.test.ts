@@ -97,6 +97,7 @@ test("Homematic room discovery resolves functional channels without guessing dev
   assert.deepEqual(covers,[{kind:"device-channel",deviceId:"device-shutter",channelIndex:4}]);
   const lights=resolveHomematicLightTargets(state!,"Wohnzimmer","Deckenlicht");
   assert.deepEqual(lights,[{kind:"device-channel",deviceId:"device-light",channelIndex:3}]);
+  assert.deepEqual(resolveHomematicLightTargets(state!,"Wohnzimmer","device-light"),lights);
   assert.deepEqual(resolveHomematicCoverTargets(state!,"Schlafzimmer"),[]);
 });
 

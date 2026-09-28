@@ -1,5 +1,7 @@
 import type { SemanticAutomationResult } from "./semanticInterpreter";
 import { acceptSemanticAutomationOutput } from "./semanticInterpreter";
+import { connectorRegistry } from "./builtinConnectorManifests";
+import type { ConnectorRegistry } from "./providerConnectorRegistry";
 
 export type SemanticServerClientConfig={
   supabaseUrl:string;
@@ -7,6 +9,7 @@ export type SemanticServerClientConfig={
   getAccessToken:()=>Promise<string|null>;
   timeoutMs?:number;
   fetcher?:typeof fetch;
+  registry?:ConnectorRegistry;
 };
 
 export type SemanticServerContext={
@@ -37,7 +40,7 @@ export function createSemanticServerClient(config:SemanticServerClientConfig){
             body:JSON.stringify({
               goal:goal.slice(0,800),
               locale:context.locale.slice(0,10),
-              connectedProviderIds:context.connectedProviderIds.slice(0,20),
+              connectedProviderIds:context.connectedProviderIds.filter(id => (config.registry ?? connectorRegistry).listReadyProviders().some(p => p.providerId === id)).slice(0,20),
               localNow:context.localNow ?? new Date().toISOString(),
               timeZone:context.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "unknown"
             })

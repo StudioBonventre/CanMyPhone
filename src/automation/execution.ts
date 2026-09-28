@@ -1,5 +1,7 @@
 import type { AutomationPlan, FallbackStep } from "./types";
 import { validateAutomationPlan } from "./validation";
+import { legacyPlanProvidersReady } from "./legacyRegistryGate";
+import type { ConnectorRegistry } from "./providerConnectorRegistry";
 
 export type ProviderResult = { ok: true; confirmed: true } | { ok: false; code: string; message?: string };
 export type AutomationProvider = { execute(plan: AutomationPlan): Promise<ProviderResult> };
@@ -11,9 +13,10 @@ export function fallbackFor(plan: AutomationPlan, code: string): FallbackStep | 
   return plan.fallbacks.find((item) => item.id === "command-failed");
 }
 
-export async function executeValidatedPlan(plan: AutomationPlan, provider: AutomationProvider, confirmed: boolean) {
+export async function executeValidatedPlan(plan: AutomationPlan, provider: AutomationProvider, confirmed: boolean, registry?: ConnectorRegistry) {
   const validation = validateAutomationPlan(plan);
   if (!validation.ok) return { ok: false as const, message: validation.errors.join("; ") };
+  if (!legacyPlanProvidersReady(plan, registry)) return { ok: false as const, message: "Die Verbindung ist nicht zur Ausführung freigegeben." };
   if (plan.confirmationRequired && !confirmed) return { ok: false as const, message: "Bestätigung erforderlich." };
   const result = await provider.execute(plan);
   if (result.ok) return { ok: true as const, message: "Ausführung wurde vom Anbieter bestätigt." };
