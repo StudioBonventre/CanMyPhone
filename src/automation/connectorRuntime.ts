@@ -2,7 +2,7 @@ import { connectorRegistry } from "./builtinConnectorManifests";
 import { validateSchemaValue, type ConnectorRegistry } from "./providerConnectorRegistry";
 import { normalizeConnectorStep } from "../../supabase/functions/_shared/universal-capabilities";
 import { hasValidSafetyApproval, type StoredAutomation } from "./materialization";
-export type ConnectorExecutionRequest = { automationId: string; providerId: string; capabilityId: string; parameters: Record<string, string | number | boolean> };
+export type ConnectorExecutionRequest = { automationId: string; providerId: string; capabilityId: string; parameters: Record<string, string | number | boolean>; providerDeviceId?: string };
 export type ConnectorExecutionResult =
   | { ok: true; confirmed: true; providerId: string; message?: string }
   | { ok: false; providerId: string; code: string; message: string };
@@ -21,7 +21,7 @@ export class ConnectorRuntime {
   async execute(request: ConnectorExecutionRequest, approvedAutomation?: StoredAutomation): Promise<ConnectorExecutionResult> {
     const fail = (code: string, message: string): ConnectorExecutionResult => ({ ok: false, providerId: request.providerId, code, message });
     const normalized = normalizeConnectorStep(request);
-    const snapshot = { ...request, ...normalized, parameters: { ...normalized.parameters } };
+    const snapshot: ConnectorExecutionRequest = { ...request, ...normalized, parameters: { ...normalized.parameters } };
     if (!this.registry.validateExecution(snapshot.providerId, snapshot.capabilityId, snapshot.parameters)) return fail("CONNECTOR_NOT_READY", "Connector, Operation oder Parameter sind nicht freigegeben.");
     const device = typeof snapshot.parameters.device === "string" ? snapshot.parameters.device : undefined;
     const inventory = this.registry.getDevices();
@@ -29,6 +29,7 @@ export class ConnectorRuntime {
       const resolved = this.registry.resolveCapability({ capabilityId: snapshot.capabilityId, deviceName: device,
         room: typeof snapshot.parameters.room === "string" ? snapshot.parameters.room : undefined, connectedProviderIds: new Set([snapshot.providerId]) });
       if (resolved.status !== "READY") return fail("DEVICE_CAPABILITY_MISMATCH", "Kein eindeutig erreichbares Gerät besitzt die benötigte Fähigkeit.");
+      snapshot.providerDeviceId = resolved.path.providerDeviceId;
     }
     const approved = approvedAutomation?.id === request.automationId && approvedAutomation.confirmationRequired && hasValidSafetyApproval(approvedAutomation) &&
       approvedAutomation.definition.actions.some(action => {
