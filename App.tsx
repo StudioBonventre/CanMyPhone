@@ -890,6 +890,20 @@ export default function App() {
     return status;
   };
 
+  const refreshHomeAssistantConnection = async () => {
+    const status = await CanMyPhoneNative?.homeAssistantStatus?.().catch(() => null);
+    if (!status?.connected) return status;
+    const profile = await saveConnectorConnection({
+      providerId: "home-assistant",
+      status: "CONNECTED",
+      updatedAt: new Date().toISOString(),
+      connectedAt: new Date().toISOString()
+    });
+    setConnectorConnections(profile);
+    await refreshConnectedDeviceInventory().catch(() => undefined);
+    return status;
+  };
+
   const connectProvider = async (providerId: string, input?: ConnectorConnectInput) => {
     const startedAt = new Date().toISOString();
     let profile = await saveConnectorConnection({
