@@ -7,6 +7,7 @@ import { ConnectorRuntime } from "../src/automation/connectorRuntime";
 import { createTeslaConnectorAdapter, createHomematicIPConnectorAdapter } from "../src/automation/connectorAdapters";
 import { buildTeslaAuthorizationURL, buildTeslaVirtualKeyPairingURL, TESLA_DEFAULT_SCOPES } from "../src/automation/teslaAuth";
 import { createTeslaConnectorService } from "../src/automation/teslaConnectorService";
+import { createDefaultConnectorRegistry } from "../src/automation/builtinConnectorManifests";
 
 test("connector catalogue has stable unique ids and explicit implementation state",()=>{
   assert.equal(new Set(PROVIDER_REGISTRY.map((item)=>item.id)).size,PROVIDER_REGISTRY.length);
@@ -207,4 +208,42 @@ test("Tesla connector provisions a native execution grant without exposing provi
     assert.match(grant.endpoint,/\/functions\/v1\/tesla-connector$/);
     assert.equal(grant.token.length,43);
   }
+});
+
+
+test("connector runtime passes the resolved provider device id to the adapter",async()=>{
+  const registry=createDefaultConnectorRegistry();
+  registry.setDevices([{
+    deviceId:"hmip-cover-living",
+    providerId:"homematic-ip",
+    name:"Rollladen",
+    room:"Wohnzimmer",
+    capabilities:["cover.open"],
+    observedAt:"2026-09-30T00:00:00Z",
+    online:true,
+    paths:[{
+      providerId:"homematic-ip",
+      providerDeviceId:"channel:shutter-1",
+      capabilities:["cover.open"],
+      observedAt:"2026-09-30T00:00:00Z",
+      online:true,
+      credentialReady:true
+    }]
+  }]);
+  let target:string|undefined;
+  const runtime=new ConnectorRuntime([{
+    providerId:"homematic-ip",
+    execute:async(request)=>{
+      target=request.providerDeviceId;
+      return {ok:true as const,confirmed:true as const,providerId:"homematic-ip"};
+    }
+  }],registry);
+  const result=await runtime.execute({
+    automationId:"cmp_auto_device",
+    providerId:"homematic-ip",
+    capabilityId:"cover.open",
+    parameters:{room:"Wohnzimmer"}
+  });
+  assert.equal(result.ok,true);
+  assert.equal(target,"channel:shutter-1");
 });
