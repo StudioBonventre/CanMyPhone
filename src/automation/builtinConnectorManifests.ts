@@ -34,7 +34,22 @@ export const BUILTIN_CONNECTOR_MANIFESTS: readonly ProviderConnectorManifest[] =
     triggers: ["sensor.motion.changed", "sensor.contact.changed", "trigger.homekit-characteristic", "trigger.homekit-time"], eventInstallationSupported: true,
     actions: [...smartHome.map(id => operation(id, true)), { capabilityId: "smart-home.scene.run", inputSchema: { scene: "string", home: { type: "string", required: false } }, resultSchema: { ok: "boolean", confirmed: "boolean", providerId: "string" }, risk: "MEDIUM", confirmationRequired: false }] },
   builtin("matter", "Matter", "MATTER", smartHome, ["matter"], false, "ECOSYSTEM"),
-  builtin("home-assistant", "Home Assistant", "LOCAL_REST", smartHome, ["home assistant", "hass"], false, "ECOSYSTEM"),
+  { ...builtin("home-assistant", "Home Assistant", "LOCAL_REST", ["light.power.set", "light.brightness.set", "light.color-temperature.set", "switch.power.set", "cover.open", "cover.close", "cover.position.set", "climate.temperature.set", "climate.mode.set", "lock.lock", "lock.unlock", "media.play", "media.pause", "media.volume.set"], ["home assistant", "hass"], false, "ECOSYSTEM"),
+    authentication: "oauth2-indieauth",
+    discovery: "HOME_ASSISTANT_REGISTRIES",
+    actions: ["light.power.set", "light.brightness.set", "light.color-temperature.set", "switch.power.set", "cover.open", "cover.close", "cover.position.set", "climate.temperature.set", "climate.mode.set", "lock.lock", "lock.unlock", "media.play", "media.pause", "media.volume.set"].map(id => operation(id, false)),
+    triggers: ["sensor.motion.changed", "sensor.contact.changed", "sensor.temperature.changed"],
+    eventSchemas: {
+      "sensor.motion.changed": { value: "boolean" },
+      "sensor.contact.changed": { value: "boolean" },
+      "sensor.temperature.changed": { value: "number" }
+    },
+    documentationSources: [
+      { url: "https://developers.home-assistant.io/docs/auth_api/", kind: "OFFICIAL_DOCS", providerOwned: true },
+      { url: "https://developers.home-assistant.io/docs/api/rest/", kind: "OFFICIAL_DOCS", providerOwned: true },
+      { url: "https://developers.home-assistant.io/docs/api/websocket/", kind: "OFFICIAL_DOCS", providerOwned: true }
+    ],
+    eventInstallationSupported: false, backgroundCapability: "NONE" },
   builtin("google-home", "Google Home", "GOOGLE_HOME", smartHome, ["google home"], false, "ECOSYSTEM"),
   builtin("smartthings", "SmartThings", "SMARTTHINGS", smartHome, ["samsung smartthings"], false, "ECOSYSTEM"),
   builtin("openhab", "openHAB", "LOCAL_REST", smartHome, ["openhab"], false, "ECOSYSTEM"),
