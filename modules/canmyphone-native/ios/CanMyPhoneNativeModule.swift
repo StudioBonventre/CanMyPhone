@@ -154,6 +154,30 @@ public final class CanMyPhoneNativeModule: Module {
       return CanMyPhoneHomematicBridge.shared.disconnect()
     }
 
+    AsyncFunction("homeAssistantStatus") { () -> [String: Any] in
+      return CanMyPhoneHomeAssistantBridge.shared.status()
+    }
+
+    AsyncFunction("homeAssistantBeginOAuth") { (instanceUrl: String, clientId: String, redirectUri: String) -> [String: Any] in
+      return CanMyPhoneHomeAssistantBridge.shared.beginOAuth(instanceURL: instanceUrl, clientID: clientId, redirectURI: redirectUri)
+    }
+
+    AsyncFunction("homeAssistantCompleteOAuth") { (callbackUrl: String) async -> [String: Any] in
+      return await CanMyPhoneHomeAssistantBridge.shared.completeOAuth(callbackURL: callbackUrl)
+    }
+
+    AsyncFunction("homeAssistantSnapshot") { () async -> [String: Any] in
+      return await CanMyPhoneHomeAssistantBridge.shared.snapshot()
+    }
+
+    AsyncFunction("homeAssistantExecute") { (capability: String, entityId: String, parametersJson: String) async -> [String: Any] in
+      return await CanMyPhoneHomeAssistantBridge.shared.execute(capability: capability, entityID: entityId, parametersJSON: parametersJson)
+    }
+
+    AsyncFunction("homeAssistantDisconnect") { () async -> [String: Any] in
+      return await CanMyPhoneHomeAssistantBridge.shared.disconnect()
+    }
+
     AsyncFunction("configureTeslaExecutionGrant") { (endpoint: String, token: String) -> [String: Any] in
       return CanMyPhoneTeslaBridge.shared.configure(endpoint: endpoint, token: token)
     }
