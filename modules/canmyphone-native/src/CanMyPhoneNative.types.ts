@@ -67,6 +67,19 @@ export type HomematicActionResult = {
   message: string;
 };
 
+export type HomeAssistantActionResult = {
+  success: boolean;
+  code?: string;
+  connected?: boolean;
+  instanceUrl?: string;
+  authorizationUrl?: string;
+  state?: string;
+  expiresAt?: number;
+  states?: Array<Record<string, unknown>>;
+  confirmed?: boolean;
+  message?: string;
+};
+
 export type LocationAuthorizationResult = {
   status: "always" | "whenInUse" | "denied" | "restricted" | "notDetermined" | "unknown";
   always: boolean;
@@ -143,6 +156,12 @@ export type NativeModuleShape = {
   homematicSnapshot(): Promise<HomematicActionResult>;
   homematicExecute(path: string, bodyJson: string): Promise<HomematicActionResult>;
   homematicDisconnect(): Promise<HomematicActionResult>;
+  homeAssistantStatus(): Promise<HomeAssistantActionResult>;
+  homeAssistantBeginOAuth(instanceUrl: string, clientId: string, redirectUri: string): Promise<HomeAssistantActionResult>;
+  homeAssistantCompleteOAuth(callbackUrl: string): Promise<HomeAssistantActionResult>;
+  homeAssistantSnapshot(): Promise<HomeAssistantActionResult>;
+  homeAssistantExecute(capability: string, entityId: string, parametersJson: string): Promise<HomeAssistantActionResult>;
+  homeAssistantDisconnect(): Promise<HomeAssistantActionResult>;
   configureTeslaExecutionGrant(endpoint: string, token: string): Promise<TeslaNativeExecutionResult>;
   clearTeslaExecutionGrant(): Promise<TeslaNativeExecutionResult>;
   locationAuthorizationStatus(): Promise<LocationAuthorizationResult>;
