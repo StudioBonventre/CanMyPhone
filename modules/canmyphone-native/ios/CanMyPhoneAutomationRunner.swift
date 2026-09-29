@@ -59,7 +59,7 @@ enum CanMyPhoneAutomationRunner {
   private static func runUnchecked(id: String) async -> [String: Any] {
     guard CanMyPhoneAutomationStore.validID(id), var item = CanMyPhoneAutomationStore.load(id: id) else { return result(id, "INVALID_DEFINITION", "Die Automation wurde nicht gefunden oder ist ungültig.", [], nil, "INVALID_DEFINITION") }
     guard item["enabled"] as? Bool == true else { return finish(&item, id, "FAILED", "Diese Automation ist deaktiviert.", [], nil, "AUTOMATION_DISABLED") }
-    guard item["version"] as? Int == 2, let definition = item["definition"] as? [String: Any], let actions = definition["actions"] as? [[String: Any]], !actions.isEmpty else { return finish(&item, id, "INVALID_DEFINITION", "Die Automation ist ungültig oder veraltet.", [], nil, "INVALID_DEFINITION") }
+    guard item["version"] as? Int == 2, let definition = item["definition"] as? [String: Any], let conditions = definition["conditions"] as? [[String: Any]], let actions = definition["actions"] as? [[String: Any]], !actions.isEmpty else { return finish(&item, id, "INVALID_DEFINITION", "Die Automation ist ungültig oder veraltet.", [], nil, "INVALID_DEFINITION") }
     if (item["installationPlan"] as? [String: Any])?["installationHost"] as? String == "HOMEKIT" {
       return finish(&item, id, "UNSUPPORTED_ACTION", "Diese Automation wird ausschließlich von Apple Home ausgeführt.", [], nil, "HOMEKIT_OWNS_EXECUTION")
     }
@@ -73,6 +73,10 @@ enum CanMyPhoneAutomationRunner {
     if item["confirmationRequired"] as? Bool == true {
       guard let approval = item["safetyApproval"] as? [String: Any], approval["required"] as? Bool == true, approval["confirmed"] as? Bool == true, let approved = approval["definitionFingerprint"] as? String, approved == safetyFingerprint(item: item, definition: definition) else { return finish(&item, id, "FAILED", "Diese konkrete Version der sensiblen Automation muss zuerst bestätigt werden.", [], nil, "CONFIRMATION_REQUIRED") }
     }
+    let conditionResult = evaluateConditions(conditions)
+    guard conditionResult.valid else { return finish(&item, id, "INVALID_DEFINITION", "Eine Bedingung ist ungültig oder wird noch nicht sicher unterstützt.", [], nil, "INVALID_CONDITION") }
+    if !conditionResult.matches { return finish(&item, id, "SUCCESS", "Automation geprüft: Die Bedingungen sind aktuell nicht erfüllt, daher wurde keine Aktion ausgeführt.", [], nil, nil) }
+
     var executed: [String] = []
     for action in actions {
       guard Set(action.keys) == Set(["capabilityId", "parameters"]), let originalCapability = action["capabilityId"] as? String,
@@ -254,6 +258,34 @@ enum CanMyPhoneAutomationRunner {
       }
     }
     return finish(&item, id, "SUCCESS", "Alle Aktionen wurden erfolgreich ausgeführt.", executed, nil, nil)
+  }
+
+  private static func evaluateConditions(_ conditions: [[String: Any]], now: Date = Date()) -> (valid: Bool, matches: Bool) {
+    let calendar = Calendar.current
+    let components = calendar.dateComponents([.hour, .minute], from: now)
+    guard let hour = components.hour, let minute = components.minute else { return (false, false) }
+    let currentMinutes = hour * 60 + minute
+
+    for condition in conditions {
+      guard Set(condition.keys) == Set(["capabilityId", "parameters"]),
+        condition["capabilityId"] as? String == "condition.time-window",
+        let parameters = condition["parameters"] as? [String: Any],
+        Set(parameters.keys) == Set(["after"]),
+        let after = parameters["after"] as? String,
+        let afterMinutes = parseClockMinutes(after)
+      else { return (false, false) }
+      if currentMinutes < afterMinutes { return (true, false) }
+    }
+    return (true, true)
+  }
+
+  private static func parseClockMinutes(_ value: String) -> Int? {
+    let parts = value.split(separator: ":", omittingEmptySubsequences: false)
+    guard parts.count == 2, parts[0].count == 2, parts[1].count == 2,
+      let hours = Int(parts[0]), let minutes = Int(parts[1]),
+      (0...23).contains(hours), (0...59).contains(minutes)
+    else { return nil }
+    return hours * 60 + minutes
   }
 
   private static func normalizedProvider(_ raw: Any?) -> String? {
