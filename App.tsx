@@ -904,6 +904,42 @@ export default function App() {
     return status;
   };
 
+  const completeHomeAssistantOAuth = async (url: string) => {
+    const completed = await CanMyPhoneNative?.homeAssistantCompleteOAuth?.(url).catch(() => null);
+    if (!completed?.success) {
+      const profile = await saveConnectorConnection({
+        providerId: "home-assistant",
+        status: "ERROR",
+        updatedAt: new Date().toISOString(),
+        errorCode: completed?.code ?? "HOME_ASSISTANT_OAUTH_FAILED"
+      });
+      setConnectorConnections(profile);
+      setActionResult({handled:true,succeeded:false,message:completed?.message ?? "Die Home-Assistant-Anmeldung konnte nicht bestätigt werden."});
+      return;
+    }
+    const snapshot = await CanMyPhoneNative?.homeAssistantSnapshot?.().catch(() => null);
+    if (!snapshot?.success) {
+      const profile = await saveConnectorConnection({
+        providerId: "home-assistant",
+        status: "ERROR",
+        updatedAt: new Date().toISOString(),
+        errorCode: snapshot?.code ?? "HOME_ASSISTANT_CONNECTION_TEST_FAILED"
+      });
+      setConnectorConnections(profile);
+      setActionResult({handled:true,succeeded:false,message:snapshot?.message ?? "Home Assistant ist angemeldet, aber die Instanz konnte nicht verifiziert werden."});
+      return;
+    }
+    const profile = await saveConnectorConnection({
+      providerId: "home-assistant",
+      status: "CONNECTED",
+      updatedAt: new Date().toISOString(),
+      connectedAt: new Date().toISOString()
+    });
+    setConnectorConnections(profile);
+    await refreshConnectedDeviceInventory();
+    setActionResult({handled:true,succeeded:true,message:"Home Assistant ist sicher verbunden. Geräte und Fähigkeiten wurden eingelesen."});
+  };
+
   const connectProvider = async (providerId: string, input?: ConnectorConnectInput) => {
     const startedAt = new Date().toISOString();
     let profile = await saveConnectorConnection({
