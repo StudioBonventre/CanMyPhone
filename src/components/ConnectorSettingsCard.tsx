@@ -17,13 +17,14 @@ function transportLabel(value:string){
   }
 }
 
-export type ConnectorConnectInput = { hcuSuffix?: string; activationKey?: string };
+export type ConnectorConnectInput = { hcuSuffix?: string; activationKey?: string; instanceUrl?: string };
 
 export function ConnectorSettingsCard({profile,onConnect}:{profile:ConnectorConnectionProfile;onConnect?:(providerId:string,input?:ConnectorConnectInput)=>void}){
   useSyncExternalStore(connectorRegistry.subscribe, connectorRegistry.getRevision, connectorRegistry.getRevision);
   const [expanded,setExpanded]=useState<string|null>(null);
   const [hcuSuffix,setHcuSuffix]=useState("");
   const [activationKey,setActivationKey]=useState("");
+  const [homeAssistantUrl,setHomeAssistantUrl]=useState("");
   return <ContentSurface style={styles.card}>
     <Text style={styles.eyebrow}>VERBINDUNGEN</Text>
     <Text style={styles.title}>Connector-Plattform</Text>
@@ -32,8 +33,9 @@ export function ConnectorSettingsCard({profile,onConnect}:{profile:ConnectorConn
       {connectorRegistry.list().map(providerDescriptor).map((provider)=>{
         const connection=connectionFor(profile,provider.id);
         const plan=connectorSetupPlan(provider.id);
-        const state=!plan?.executableToday ? "Noch nicht freigegeben" : connection?.status==="CONNECTED"
-          ?"Verbunden"
+        const state=connection?.status==="CONNECTED"
+          ?(plan?.executableToday?"Verbunden":"Verbunden · Freigabe ausstehend")
+          :!plan?.executableToday ? (plan?.connectionAvailable?"Einrichtung möglich":"Noch nicht freigegeben")
           :connection?.status==="CONNECTING"
             ?"Verbindung läuft"
             :connection?.status==="ERROR"
@@ -42,6 +44,7 @@ export function ConnectorSettingsCard({profile,onConnect}:{profile:ConnectorConn
                 ?"Geplant"
                 :"Noch nicht verbunden";
         const open=expanded===provider.id;
+        const connectionAvailable=plan?.connectionAvailable??plan?.executableToday??false;
         return <View key={provider.id} style={styles.wrapper}>
           <Pressable onPress={()=>setExpanded(open?null:provider.id)} style={styles.row}>
             <View style={styles.rowCopy}>
@@ -61,7 +64,7 @@ export function ConnectorSettingsCard({profile,onConnect}:{profile:ConnectorConn
               </View>
             </View>)}
             <Text style={styles.footnote}>{plan.executableToday?"Connector ausführbar":"Connector-Plattform vorbereitet · Verbindung noch nicht freigeschaltet"}</Text>
-            {provider.id==="homematic-ip"&&plan.executableToday&&connection?.status!=="CONNECTED"?<View style={styles.pairingFields}>
+            {provider.id==="homematic-ip"&&connectionAvailable&&connection?.status!=="CONNECTED"?<View style={styles.pairingFields}>
               <TextInput
                 value={hcuSuffix}
                 onChangeText={(value)=>setHcuSuffix(value.replace(/[^A-Za-z0-9]/g,"").slice(0,4).toUpperCase())}
@@ -85,12 +88,26 @@ export function ConnectorSettingsCard({profile,onConnect}:{profile:ConnectorConn
               />
               <Text style={styles.localHint}>Die Kopplung läuft nur im lokalen Netzwerk. Der HCU-Auth-Token wird im iOS-Keychain gespeichert.</Text>
             </View>:null}
-            {plan.executableToday&&connection?.status!=="CONNECTED"
+            {provider.id==="home-assistant"&&connectionAvailable&&connection?.status!=="CONNECTED"?<View style={styles.pairingFields}>
+              <TextInput
+                value={homeAssistantUrl}
+                onChangeText={setHomeAssistantUrl}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                placeholder="https://dein-home-assistant.example"
+                placeholderTextColor={liquidIce.color.textTertiary}
+                style={styles.input}
+                accessibilityLabel="Home Assistant Adresse"
+              />
+              <Text style={styles.localHint}>Die Anmeldung öffnet deine eigene Home-Assistant-Instanz. Zugangstokens speichert CanMyPhone ausschließlich im iOS-Keychain.</Text>
+            </View>:null}
+            {connectionAvailable&&connection?.status!=="CONNECTED"
               ?<Pressable
-                  disabled={(connection?.status==="CONNECTING"&&provider.id!=="tesla")||(provider.id==="homematic-ip"&&(hcuSuffix.length!==4||!activationKey.trim()))}
-                  onPress={()=>onConnect?.(provider.id,provider.id==="homematic-ip"?{hcuSuffix,activationKey}:undefined)}
-                  style={[styles.connectButton,((connection?.status==="CONNECTING"&&provider.id!=="tesla")||(provider.id==="homematic-ip"&&(hcuSuffix.length!==4||!activationKey.trim())))&&styles.connectButtonDisabled]}
-                ><Text style={styles.connectButtonText}>{connection?.status==="CONNECTING"?(provider.id==="tesla"?"Kopplung fortsetzen":"Verbindung läuft …"):"Verbinden"}</Text></Pressable>
+                  disabled={(connection?.status==="CONNECTING"&&!["tesla","home-assistant"].includes(provider.id))||(provider.id==="homematic-ip"&&(hcuSuffix.length!==4||!activationKey.trim()))||(provider.id==="home-assistant"&&!homeAssistantUrl.trim())}
+                  onPress={()=>onConnect?.(provider.id,provider.id==="homematic-ip"?{hcuSuffix,activationKey}:provider.id==="home-assistant"?{instanceUrl:homeAssistantUrl.trim()}:undefined)}
+                  style={[styles.connectButton,((connection?.status==="CONNECTING"&&!["tesla","home-assistant"].includes(provider.id))||(provider.id==="homematic-ip"&&(hcuSuffix.length!==4||!activationKey.trim()))||(provider.id==="home-assistant"&&!homeAssistantUrl.trim()))&&styles.connectButtonDisabled]}
+                ><Text style={styles.connectButtonText}>{connection?.status==="CONNECTING"?(provider.id==="tesla"?"Kopplung fortsetzen":provider.id==="home-assistant"?"Anmeldung erneut öffnen":"Verbindung läuft …"):"Verbinden"}</Text></Pressable>
               :null}
           </View>:null}
         </View>;
