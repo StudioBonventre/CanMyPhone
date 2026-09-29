@@ -26,6 +26,10 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Report resolved Expo dependencies
+        run: |
+          node -e "const l=require('./package-lock.json'); const p=l.packages; console.log('EXPO_LOCK='+JSON.stringify({root:p[''],expo:p['node_modules/expo'],ui:p['node_modules/@expo/ui'],widgets:p['node_modules/expo-widgets'],constants:p['node_modules/expo-constants'],core:p['node_modules/expo-modules-core']}))"
+
       - name: TypeScript
         run: npm run typecheck
 
@@ -37,7 +41,7 @@ jobs:
 
 
   ios-native-compile:
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 35
     steps:
       - name: Checkout
@@ -48,9 +52,9 @@ jobs:
         with:
           node-version: 24
 
-      - name: Select Xcode 26.3
+      - name: Select Xcode 26.6
         run: |
-          sudo xcode-select -s /Applications/Xcode_26.3.app/Contents/Developer
+          sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
           xcodebuild -version
           swift --version
 
