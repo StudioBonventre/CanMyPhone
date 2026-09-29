@@ -1104,11 +1104,16 @@ export default function App() {
 
   useEffect(() => {
     refreshTeslaConnection().catch(() => undefined);
-    const subscription = Linking.addEventListener("url", ({ url }) => {
+    refreshHomeAssistantConnection().catch(() => undefined);
+    const handleConnectorUrl=(url:string)=>{
       if (url.startsWith("canmyphone://connector/tesla")) {
         refreshTeslaConnection().catch(() => undefined);
+      } else if (url.startsWith(HOME_ASSISTANT_REDIRECT_URI)) {
+        completeHomeAssistantOAuth(url).catch(() => undefined);
       }
-    });
+    };
+    const subscription = Linking.addEventListener("url", ({ url }) => handleConnectorUrl(url));
+    Linking.getInitialURL().then((url)=>{if(url)handleConnectorUrl(url);}).catch(()=>undefined);
     return () => subscription.remove();
   }, []);
 
