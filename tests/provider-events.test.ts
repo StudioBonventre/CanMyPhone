@@ -152,3 +152,41 @@ test("provider ingress rejects verifier identity substitution", async () => {
   assert.equal(result.accepted, false);
   assert.equal(result.duplicate, false);
 });
+
+
+test("universal provider event matches universal sensor trigger without legacy event wrapper", async () => {
+  const parsed = acceptSemanticAutomationOutput("Bewegung Flur", JSON.stringify({
+    kind: "automation",
+    confidence: 0.99,
+    trigger: { capabilityId: "sensor.motion.changed", parameters: { provider: "home-assistant", room: "Flur", value: true } },
+    actions: [{ capabilityId: "system.brightness.set", parameters: { percent: 20 } }],
+    clarificationQuestion: null,
+    suggestion: null
+  }));
+  assert.equal(parsed.kind, "understood");
+  if (parsed.kind !== "understood") throw new Error("semantic setup failed");
+  const automation = { ...materializeShortcutDefinition(parsed.definition), enabled: true };
+  let runs = 0;
+  const result = await ingestProviderEvent(
+    { providerId: "home-assistant", installationId: "install-1", headers: {}, body: {}, receivedAt: "2026-09-29T23:59:51Z" },
+    [automation],
+    async item => {
+      runs += 1;
+      return { automationId: item.id, status: "SUCCESS", executedSteps: ["system.brightness.set"], humanMessage: "ok", timestamp: fixedNow.toISOString() };
+    },
+    {
+      verifier: verifierFor(normalized({
+        eventType: "sensor.motion.changed",
+        capabilityId: "sensor.motion.changed",
+        room: "Flur",
+        normalizedPayload: { value: true }
+      })),
+      receipts: new MemoryProviderEventReceiptStore(),
+      registry: eventRegistry(),
+      now: fixedNow
+    }
+  );
+  assert.equal(result.accepted, true);
+  assert.equal(runs, 1);
+  if (result.accepted) assert.deepEqual(result.dispatch.matchedAutomationIds,[automation.id]);
+});
