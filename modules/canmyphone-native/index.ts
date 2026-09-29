@@ -4,6 +4,7 @@ import type { NativeModuleShape } from "./src/CanMyPhoneNative.types";
 export type {
   BrightnessResult,
   FoundationModelStatus,
+  HomeAssistantActionResult,
   HomeKitActionResult,
   HomeKitSnapshotResult,
   HomematicActionResult,
