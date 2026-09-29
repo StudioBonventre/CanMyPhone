@@ -1028,6 +1028,38 @@ export default function App() {
       return;
     }
 
+    if (providerId === "home-assistant") {
+      const instanceUrl=input?.instanceUrl?.trim()??"";
+      if(!instanceUrl){
+        profile=await saveConnectorConnection({providerId,status:"ERROR",updatedAt:new Date().toISOString(),errorCode:"HOME_ASSISTANT_INSTANCE_REQUIRED"});
+        setConnectorConnections(profile);
+        setActionResult({handled:true,succeeded:false,message:"Bitte gib zuerst die Adresse deiner Home-Assistant-Instanz ein."});
+        return;
+      }
+      if(!HOME_ASSISTANT_CLIENT_ID){
+        profile=await saveConnectorConnection({providerId,status:"ERROR",updatedAt:new Date().toISOString(),errorCode:"HOME_ASSISTANT_CLIENT_ID_NOT_CONFIGURED"});
+        setConnectorConnections(profile);
+        setActionResult({handled:true,succeeded:false,message:"Der Home-Assistant-OAuth-Client ist in diesem Build noch nicht konfiguriert."});
+        return;
+      }
+      const authorization=await CanMyPhoneNative?.homeAssistantBeginOAuth?.(instanceUrl,HOME_ASSISTANT_CLIENT_ID,HOME_ASSISTANT_REDIRECT_URI).catch(()=>null);
+      if(!authorization?.success||!authorization.authorizationUrl){
+        profile=await saveConnectorConnection({providerId,status:"ERROR",updatedAt:new Date().toISOString(),errorCode:authorization?.code??"HOME_ASSISTANT_OAUTH_PREPARE_FAILED"});
+        setConnectorConnections(profile);
+        setActionResult({handled:true,succeeded:false,message:authorization?.message??"Die Home-Assistant-Anmeldung konnte nicht vorbereitet werden."});
+        return;
+      }
+      const opened=await Linking.openURL(authorization.authorizationUrl).then(()=>true).catch(()=>false);
+      if(!opened){
+        profile=await saveConnectorConnection({providerId,status:"ERROR",updatedAt:new Date().toISOString(),errorCode:"HOME_ASSISTANT_AUTH_LINK_FAILED"});
+        setConnectorConnections(profile);
+        setActionResult({handled:true,succeeded:false,message:"Die Home-Assistant-Anmeldung konnte nicht geöffnet werden."});
+        return;
+      }
+      setActionResult({handled:true,succeeded:false,message:"Home-Assistant-Anmeldung geöffnet. Nach deiner Freigabe kehrt iOS automatisch zu CanMyPhone zurück."});
+      return;
+    }
+
     if (providerId === "homematic-ip") {
       const suffix=input?.hcuSuffix?.trim()??"";
       const activationKey=input?.activationKey?.trim()??"";
