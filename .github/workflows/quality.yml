@@ -26,10 +26,6 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Report resolved Expo dependencies
-        run: |
-          node -e "const l=require('./package-lock.json'); const p=l.packages; console.log('EXPO_LOCK='+JSON.stringify({root:p[''],expo:p['node_modules/expo'],ui:p['node_modules/@expo/ui'],widgets:p['node_modules/expo-widgets'],constants:p['node_modules/expo-constants'],core:p['node_modules/expo-modules-core']}))"
-
       - name: TypeScript
         run: npm run typecheck
 
