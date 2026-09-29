@@ -45,7 +45,12 @@ private actor CanMyPhoneAutomationRunGate {
 
 enum CanMyPhoneAutomationRunner {
   private static let proProductIDs = Set(["com.studiobonventre.canmyphone.pro.monthly", "com.studiobonventre.canmyphone.pro.yearly"])
-  private static let allowedCapabilities = Set(["system.brightness.set", "system.volume.set", "system.low-power.set", "system.flashlight.set", "system.focus.set", "system.app.open", "system.clipboard.set", "system.url.open", "media.play-pause", "media.playlist.play", "media.apple-music.play", "media.spotify.open", "navigation.route.start", "communication.message.compose", "communication.mail.compose", "communication.call.start", "productivity.calendar.create", "productivity.reminder.create", "smart-home.scene.run", "smart-home.cover.open", "smart-home.cover.close", "smart-home.light.set", "smart-home.climate.set", "vehicle.lock", "vehicle.unlock", "tesla.rear-trunk.close"])
+  private static let homeAssistantCapabilities = Set([
+    "light.power.set", "light.brightness.set", "light.color-temperature.set", "switch.power.set",
+    "cover.open", "cover.close", "cover.position.set", "climate.temperature.set", "climate.mode.set",
+    "lock.lock", "lock.unlock", "media.play", "media.pause", "media.volume.set"
+  ])
+  private static let allowedCapabilities = Set(["system.brightness.set", "system.volume.set", "system.low-power.set", "system.flashlight.set", "system.focus.set", "system.app.open", "system.clipboard.set", "system.url.open", "media.play-pause", "media.playlist.play", "media.apple-music.play", "media.spotify.open", "navigation.route.start", "communication.message.compose", "communication.mail.compose", "communication.call.start", "productivity.calendar.create", "productivity.reminder.create", "smart-home.scene.run", "smart-home.cover.open", "smart-home.cover.close", "smart-home.light.set", "smart-home.climate.set", "vehicle.lock", "vehicle.unlock", "tesla.rear-trunk.close"]).union(homeAssistantCapabilities)
 
   static func run(id: String) async -> [String: Any] {
     guard await CanMyPhoneAutomationRunGate.shared.acquire(id) else {
@@ -88,8 +93,29 @@ enum CanMyPhoneAutomationRunner {
       if let operation = connectorOperation(capability, parameters) {
         let provider = capability == "tesla.rear-trunk.close" ? "tesla" : capability == "smart-home.scene.run" ? "apple-home" : (parameters["provider"] as? String ?? parameters["brand"] as? String ?? "")
         guard CanMyPhoneConnectorRegistryPolicy.allows(providerHint: provider, capability: operation) else { return finish(&item, id, "BLOCKED_INTEGRATION", "Der Connector oder diese Operation ist nicht freigegeben.", executed, originalCapability, "CONNECTOR_NOT_READY") }
-        if ["vehicle.lock", "vehicle.unlock", "vehicle.trunk.close"].contains(operation) && item["confirmationRequired"] as? Bool != true { return finish(&item, id, "FAILED", "Die sensible Aktion benötigt eine Bestätigung.", executed, originalCapability, "CONFIRMATION_REQUIRED") }
+        if ["vehicle.lock", "vehicle.unlock", "vehicle.trunk.close", "lock.lock", "lock.unlock"].contains(operation) && item["confirmationRequired"] as? Bool != true { return finish(&item, id, "FAILED", "Die sensible Aktion benötigt eine Bestätigung.", executed, originalCapability, "CONFIRMATION_REQUIRED") }
       }
+
+      if homeAssistantCapabilities.contains(capability), let provider = normalizedProvider(parameters["provider"]), isHomeAssistantProvider(provider) {
+        guard let entityID = parameters["device"] as? String, !entityID.isEmpty else {
+          return finish(&item, id, "INVALID_DEFINITION", "Für die Home-Assistant-Aktion fehlt die eindeutig aufgelöste Entity.", executed, originalCapability, "HOME_ASSISTANT_ENTITY_REQUIRED")
+        }
+        let targetKeys = Set(["provider", "room", "device"])
+        let actionParameters = Dictionary(uniqueKeysWithValues: parameters.filter { !targetKeys.contains($0.key) })
+        guard JSONSerialization.isValidJSONObject(actionParameters),
+          let data = try? JSONSerialization.data(withJSONObject: actionParameters),
+          let json = String(data: data, encoding: .utf8)
+        else {
+          return finish(&item, id, "INVALID_DEFINITION", "Die Home-Assistant-Parameter sind ungültig.", executed, originalCapability, "INVALID_PARAMETER")
+        }
+        let haResult = await CanMyPhoneHomeAssistantBridge.shared.execute(capability: capability, entityID: entityID, parametersJSON: json)
+        guard haResult["success"] as? Bool == true, haResult["confirmed"] as? Bool == true else {
+          return finish(&item, id, "FAILED", haResult["message"] as? String ?? "Home Assistant hat die Aktion nicht bestätigt.", executed, originalCapability, haResult["code"] as? String ?? "HOME_ASSISTANT_ACTION_FAILED")
+        }
+        executed.append(originalCapability)
+        continue
+      }
+
       switch capability {
       case "system.brightness.set":
         guard Set(parameters.keys) == Set(["percent"]), let percent = number(parameters["percent"]), (0.0...100.0).contains(percent) else { return finish(&item, id, "INVALID_DEFINITION", "Der Helligkeitswert ist ungültig.", executed, capability, "INVALID_PARAMETER") }
@@ -302,6 +328,9 @@ enum CanMyPhoneAutomationRunner {
     case "tesla.rear-trunk.close": return "vehicle.trunk.close"
     case "vehicle.lock", "vehicle.unlock", "smart-home.scene.run": return capability
     case "smart-home.light.set": return ["on", "off", "an", "aus"].contains(String(describing: parameters["value"] ?? "").lowercased()) ? "light.power.set" : "light.brightness.set"
+    case "light.power.set", "light.brightness.set", "light.color-temperature.set", "switch.power.set",
+      "cover.open", "cover.close", "cover.position.set", "climate.temperature.set", "climate.mode.set",
+      "lock.lock", "lock.unlock", "media.play", "media.pause", "media.volume.set": return capability
     default: return nil
     }
   }
@@ -309,6 +338,10 @@ enum CanMyPhoneAutomationRunner {
   private static func lowerConnectorAction(_ capability: String, _ input: [String: Any]) -> (String, [String: Any])? {
     var parameters = input
     let targetKeys = Set(["provider", "brand", "room", "device", "vehicle"])
+    if let provider = normalizedProvider(input["provider"]), isHomeAssistantProvider(provider), homeAssistantCapabilities.contains(capability) {
+      guard homeAssistantActionInputValid(capability, input) else { return nil }
+      return (capability, input)
+    }
     switch capability {
     case "cover.open", "cover.close":
       guard Set(input.keys).isSubset(of: targetKeys) else { return nil }
@@ -334,12 +367,40 @@ enum CanMyPhoneAutomationRunner {
     }
   }
 
+  private static func homeAssistantActionInputValid(_ capability: String, _ input: [String: Any]) -> Bool {
+    let targets = Set(["provider", "room", "device"])
+    guard input["device"] is String else { return false }
+    switch capability {
+    case "light.power.set", "switch.power.set":
+      return Set(input.keys).isSubset(of: targets.union(["on"])) && input["on"] is Bool
+    case "light.brightness.set", "cover.position.set", "media.volume.set":
+      guard Set(input.keys).isSubset(of: targets.union(["percent"])), let value = number(input["percent"]) else { return false }
+      return (0...100).contains(value)
+    case "light.color-temperature.set":
+      guard Set(input.keys).isSubset(of: targets.union(["kelvin"])), let value = number(input["kelvin"]) else { return false }
+      return (1000...10000).contains(value)
+    case "climate.temperature.set":
+      guard Set(input.keys).isSubset(of: targets.union(["celsius"])), let value = number(input["celsius"]) else { return false }
+      return (5...35).contains(value)
+    case "climate.mode.set":
+      return Set(input.keys).isSubset(of: targets.union(["mode"])) && (input["mode"] as? String)?.isEmpty == false
+    case "cover.open", "cover.close", "lock.lock", "lock.unlock", "media.play", "media.pause":
+      return Set(input.keys).isSubset(of: targets)
+    default:
+      return false
+    }
+  }
+
+  private static func isHomeAssistantProvider(_ value: String) -> Bool {
+    ["home-assistant", "home assistant", "hass"].contains(value)
+  }
+
   private static func isHomematicProvider(_ value: String) -> Bool {
     ["homematic-ip", "homematic ip", "homematic", "hmip"].contains(value)
   }
 
   private static func validProvider(_ value: String) -> Bool {
-    ["apple-home", "apple home", "homekit", "home"].contains(value) || isHomematicProvider(value)
+    ["apple-home", "apple home", "homekit", "home"].contains(value) || isHomematicProvider(value) || isHomeAssistantProvider(value)
   }
 
   private static func openExternal(_ url: URL) async -> Bool {
