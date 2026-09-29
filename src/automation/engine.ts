@@ -74,8 +74,12 @@ export function compileAutomationRuntime(definition: ShortcutDefinition, registr
   const bridgeForTrigger = trigger === "APPLE_SHORTCUTS_BRIDGE";
   const appleBridgeRequired = bridgeForTrigger || hasAppleActions;
   const homekitOnly = trigger === "HOMEKIT" && actions.length === 1 && actions[0] === "HOMEKIT" && definition.conditions.length === 0;
+  const unsupportedConditions = definition.conditions.some((condition) => {
+    const capability = capabilityV2(condition.capabilityId);
+    return !capability || capability.role !== "condition" || !capability.executionModes.includes("DIRECT_PUBLIC_API");
+  });
   const unsupportedCombination = actions.some(driver => driver === "UNSUPPORTED" || driver === "GUIDED") ||
-    definition.conditions.length > 0 ||
+    unsupportedConditions ||
     (hasAppleActions && (!bridgeForTrigger || actions.some(driver => driver !== "APPLE_SHORTCUTS_ACTION")));
   // No connector currently supplies a persistent, authenticated event transport.
   // The dispatcher accepts verified events, but a plan cannot be activated until
