@@ -13,6 +13,7 @@ export type ConnectorSetupPlan = {
   provider: ProviderDescriptor;
   steps: ConnectorSetupStep[];
   executableToday: boolean;
+  connectionAvailable?: boolean;
 };
 
 export function connectorSetupPlan(providerId: string, registry: ConnectorRegistry = connectorRegistry): ConnectorSetupPlan | null {
@@ -58,6 +59,21 @@ export function connectorSetupPlan(providerId: string, registry: ConnectorRegist
         ...common,
         {id:"permission",title:"Apple-Home-Zugriff erlauben",detail:"CanMyPhone benötigt die HomeKit-Berechtigung, um vorhandene Räume und Geräte zu lesen und zu steuern.",userActionRequired:true},
         {id:"discover",title:"HomeKit-Geräte übernehmen",detail:"Vorhandene HomeKit-Räume und Zubehörteile werden als CanMyPhone-Ziele verfügbar.",userActionRequired:false}
+      ]
+    };
+  }
+
+  if(provider.id==="home-assistant"){
+    return {
+      provider,
+      executableToday:registry.listReadyProviders().some(item=>item.providerId===providerId),
+      connectionAvailable:true,
+      steps:[
+        ...common,
+        {id:"instance",title:"Home Assistant angeben",detail:"Gib die Adresse deiner eigenen Home-Assistant-Instanz an. Lokales HTTP ist nur im privaten Netzwerk zulässig; entfernte Instanzen benötigen HTTPS.",userActionRequired:true},
+        {id:"oauth",title:"Home Assistant freigeben",detail:"Die Anmeldung läuft über den offiziellen Home-Assistant-OAuth/IndieAuth-Flow. Tokens werden anschließend nur im iOS-Keychain gespeichert.",userActionRequired:true},
+        {id:"discover",title:"Geräte und Fähigkeiten erkennen",detail:"CanMyPhone liest Entities und bietet nur Funktionen an, die Home Assistant für das konkrete Gerät meldet.",userActionRequired:false},
+        {id:"verify",title:"Ausführung prüfen",detail:"Der Connector wird erst für Automationen freigegeben, wenn Registry, Runtime und Verbindung verifiziert sind.",userActionRequired:false}
       ]
     };
   }
