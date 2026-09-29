@@ -20,6 +20,8 @@ export type NormalizedProviderEvent = {
   providerId: string;
   installationId: string;
   deviceId?: string;
+  deviceName?: string;
+  room?: string;
   capabilityId: string;
   eventType: string;
   normalizedPayload: Record<string, unknown>;
@@ -134,14 +136,41 @@ export async function ingestProviderEvent(
   const claimed = await options.receipts.claim(dedupeKey, new Date(now.getTime() + (options.dedupeTtlMs ?? 24 * 60 * 60_000)).toISOString());
   if (!claimed) return { accepted: false, duplicate: true, code: "PROVIDER_EVENT_DUPLICATE" };
 
-  const dispatch = await dispatchVerifiedProviderEvent({
-    eventId: event.eventId,
-    providerId: event.providerId,
-    event: event.eventType,
-    receivedAt: event.receivedAt
-  }, automations, execute);
-
+  const dispatch = await dispatchNormalizedProviderEvent(event, automations, execute);
   return { accepted: true, duplicate: false, event, dispatch };
+}
+
+function targetMatches(parameters: Record<string, string | number | boolean>, event: NormalizedProviderEvent): boolean {
+  const provider = typeof parameters.provider === "string" ? normalize(parameters.provider) : "";
+  if (provider && provider !== normalize(event.providerId)) return false;
+  const device = typeof parameters.device === "string" ? normalize(parameters.device) : "";
+  if (device && ![event.deviceId, event.deviceName].some(value => typeof value === "string" && normalize(value) === device)) return false;
+  const room = typeof parameters.room === "string" ? normalize(parameters.room) : "";
+  if (room && (typeof event.room !== "string" || normalize(event.room) !== room)) return false;
+  if (typeof parameters.value === "boolean" && event.normalizedPayload.value !== parameters.value) return false;
+  return true;
+}
+
+/** Matches the provider-neutral capability first. Legacy trigger.provider-event
+ * definitions remain supported while old saved automations are migrated. */
+export async function dispatchNormalizedProviderEvent(
+  event: NormalizedProviderEvent,
+  automations: readonly StoredAutomation[],
+  execute: (automation: StoredAutomation) => Promise<AutomationExecutionResult>
+): Promise<ProviderEventDispatchResult> {
+  const providerId = normalize(event.providerId);
+  const eventName = normalize(event.eventType);
+  const matches = automations.filter((automation) => {
+    if (!validateStoredAutomation(automation) || !automation.enabled || !hasValidSafetyApproval(automation)) return false;
+    const trigger = automation.definition.trigger;
+    if (trigger.capabilityId === event.capabilityId) return targetMatches(trigger.parameters, event);
+    if (trigger.capabilityId !== "trigger.provider-event") return false;
+    const parameters = trigger.parameters;
+    return normalize(String(parameters.provider ?? "")) === providerId && normalize(String(parameters.event ?? "")) === eventName;
+  });
+  const executions: AutomationExecutionResult[] = [];
+  for (const automation of matches) executions.push(await execute(automation));
+  return { matchedAutomationIds: matches.map(({ id }) => id), executions };
 }
 
 /** Dispatch only events already authenticated by the connector transport. Event
