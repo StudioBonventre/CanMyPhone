@@ -166,6 +166,9 @@ async function installHomeKitAutomation(item: StoredAutomation) {
   return null;
 }
 
+const HOME_ASSISTANT_CLIENT_ID = process.env.EXPO_PUBLIC_HOME_ASSISTANT_CLIENT_ID?.trim() ?? "";
+const HOME_ASSISTANT_REDIRECT_URI = "canmyphone://home-assistant";
+
 export default function App() {
   const [tab, setTab] = useState<Tab>("ask");
   const [draftQuery, setDraftQuery] = useState("");
