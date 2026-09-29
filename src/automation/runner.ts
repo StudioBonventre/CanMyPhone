@@ -12,10 +12,31 @@ export type RunnerContext = {
   connectedIntegrations: Set<string>;
   connectorRuntime?: ConnectorRuntime;
   registry?: ConnectorRegistry;
+  now?: Date;
 };
 export type ActionExecutor = (capabilityId: string, parameters: Record<string, string | number | boolean>) => Promise<boolean>;
 
 const result = (automationId: string, status: AutomationExecutionResult["status"], humanMessage: string, extra: Partial<AutomationExecutionResult> = {}): AutomationExecutionResult => ({ automationId, status, humanMessage, executedSteps: [], timestamp: new Date().toISOString(), ...extra });
+
+function parseClockMinutes(value: unknown): number | null {
+  if (typeof value !== "string") return null;
+  const match = value.match(/^(?:[01]\d|2[0-3]):[0-5]\d$/);
+  if (!match) return null;
+  const [hours, minutes] = value.split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+function evaluateConditions(conditions: StoredAutomation["definition"]["conditions"], now: Date): { valid: boolean; matches: boolean } {
+  for (const condition of conditions) {
+    if (condition.capabilityId !== "condition.time-window") return { valid: false, matches: false };
+    if (Object.keys(condition.parameters).length !== 1 || !("after" in condition.parameters)) return { valid: false, matches: false };
+    const after = parseClockMinutes(condition.parameters.after);
+    if (after === null) return { valid: false, matches: false };
+    const current = now.getHours() * 60 + now.getMinutes();
+    if (current < after) return { valid: true, matches: false };
+  }
+  return { valid: true, matches: true };
+}
 
 export async function runStoredAutomation(item: StoredAutomation, context: RunnerContext, execute: ActionExecutor): Promise<AutomationExecutionResult> {
   if (!validateStoredAutomation(item) || !validateShortcutDefinition(item.definition).ok) return result(item?.id ?? "unknown", "INVALID_DEFINITION", "Diese Automation ist ungültig oder veraltet.", { errorCode: "INVALID_DEFINITION" });
@@ -27,6 +48,10 @@ export async function runStoredAutomation(item: StoredAutomation, context: Runne
   if (missingPermission) return result(item.id, "BLOCKED_PERMISSION", "Eine benötigte Berechtigung fehlt.", { errorCode: "PERMISSION_REQUIRED" });
   const missingIntegration = item.integrations.find(x => !context.connectedIntegrations.has(x));
   if (missingIntegration) return result(item.id, "BLOCKED_INTEGRATION", "Ein benötigter Dienst ist nicht verbunden.", { errorCode: "INTEGRATION_REQUIRED" });
+
+  const conditionResult = evaluateConditions(item.definition.conditions, context.now ?? new Date());
+  if (!conditionResult.valid) return result(item.id, "INVALID_DEFINITION", "Eine Bedingung ist ungültig oder wird noch nicht sicher unterstützt.", { errorCode: "INVALID_CONDITION" });
+  if (!conditionResult.matches) return result(item.id, "SUCCESS", "Automation geprüft: Die Bedingungen sind aktuell nicht erfüllt, daher wurde keine Aktion ausgeführt.");
 
   const executedSteps: string[] = []; let failedStep: string | undefined;
   for (const step of item.definition.actions) {
