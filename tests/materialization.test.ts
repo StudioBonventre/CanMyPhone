@@ -36,6 +36,20 @@ const scenarios=[
 ] as const;
 for(const [goal,trigger,mode] of scenarios)test(`materializes honestly: ${goal}`,()=>{const item=materialize(goal);const runtime=compileAutomationRuntime(item.definition);if(runtime.installationHost==="APPLE_PERSONAL_AUTOMATION"){assert.equal(item.personalSetup?.appleTriggerType,trigger);assert.equal(item.personalSetup?.setupState,"NOT_STARTED");}else{assert.equal(item.personalSetup,undefined);}assert.equal(actionExecutionMode(item.definition.actions[0]!),mode);assert.notEqual(item.materializationState,"ACTIVE");});
 test("manual brightness is directly executable without Apple automation",()=>{const item=materialize("Setze Helligkeit auf 35 %.");assert.equal(item.definition.trigger.capabilityId,"trigger.manual");assert.equal(item.personalSetup,undefined);assert.equal(actionExecutionMode(item.definition.actions[0]!),"EXECUTABLE_DIRECT");});
+test("native time-window conditions gate actions without forcing Shortcuts",async()=>{
+  const item=runnable();
+  item.definition.conditions=[{capabilityId:"condition.time-window",parameters:{after:"22:00"}}];
+  assert.equal(compileAutomationRuntime(item.definition).installationHost,"CANMYPHONE_NATIVE");
+  let calls=0;
+  const before=await runStoredAutomation(item,{...context,now:new Date(2026,8,19,21,59)},async()=>{calls+=1;return true;});
+  assert.equal(before.status,"SUCCESS");
+  assert.equal(calls,0);
+  assert.deepEqual(before.executedSteps,[]);
+  const after=await runStoredAutomation(item,{...context,now:new Date(2026,8,19,22,1)},async()=>{calls+=1;return true;});
+  assert.equal(after.status,"SUCCESS");
+  assert.equal(calls,1);
+  assert.deepEqual(after.executedSteps,["system.brightness.set"]);
+});
 test("iOS 27 handoff description gives Shortcuts the trigger and CanMyPhone action",()=>{const definition=compileShortcutGoal("Wenn ich Instagram öffne, setze die Helligkeit auf 35 %.");const prompt=buildAppleIntelligenceAutomationDescription(definition);assert.match(prompt,/persönliche Automation/i);assert.match(prompt,/Instagram/);assert.match(prompt,/35 Prozent/);assert.match(prompt,/CanMyPhone Automation ausführen/);});
 test("materialized personal automations can track an Apple Intelligence handoff",()=>{const item=materialize("Wenn ich Instagram öffne, setze die Helligkeit auf 35 %.");assert.equal(item.personalSetup?.handoffMode,undefined);const updated={...item,personalSetup:item.personalSetup?{...item.personalSetup,handoffMode:"APPLE_INTELLIGENCE" as const}:undefined};assert.equal(updated.personalSetup?.handoffMode,"APPLE_INTELLIGENCE");});
 
