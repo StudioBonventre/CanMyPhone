@@ -11,6 +11,7 @@ export const UNIVERSAL_CAPABILITIES: readonly UniversalCapability[] = [
   action("light.brightness.set", { percent: number(0, 100) }),
   action("light.color.set", { color: string }),
   action("light.color-temperature.set", { kelvin: number(1000, 10000) }),
+  action("switch.power.set", { on: { type: "boolean", required: true } }),
   action("cover.open", {}, "medium"), action("cover.close", {}, "medium"), action("cover.position.set", { percent: number(0, 100) }, "medium"),
   action("climate.temperature.set", { celsius: number(5, 35) }, "medium"), action("climate.mode.set", { mode: string }, "medium"),
   action("lock.lock", {}, "high"), action("lock.unlock", {}, "high"),
