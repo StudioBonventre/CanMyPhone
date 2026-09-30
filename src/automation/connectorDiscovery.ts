@@ -33,10 +33,18 @@ export function validateDiscoveryResult(value: unknown): value is ConnectorDisco
     Object.values(result.candidateManifest.verification).every(value => value === false) &&
     result.candidateManifest.documentationSources.every(source => source.providerOwned !== true && !source.verifiedAt) &&
     typeof result.authenticationType === "string" &&
+    result.authenticationType === result.candidateManifest.authentication &&
     typeof result.transport === "string" &&
+    result.transport === result.candidateManifest.transport &&
     Array.isArray(result.capabilities) && result.capabilities.every(capability => typeof capability === "string") &&
+    result.capabilities.every(capability =>
+      result.candidateManifest.actions.some(action => action.capabilityId === capability) ||
+      result.candidateManifest.triggers.includes(capability)
+    ) &&
     typeof result.eventSupport === "boolean" &&
+    result.eventSupport === Boolean(result.candidateManifest.eventInstallationSupported) &&
     typeof result.commercialStatus === "string" &&
+    result.commercialStatus === result.candidateManifest.commercialUseStatus &&
     Array.isArray(result.blockingReasons) && result.blockingReasons.every(reason => typeof reason === "string");
 }
 
