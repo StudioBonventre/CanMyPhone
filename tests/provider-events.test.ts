@@ -21,7 +21,7 @@ function eventRegistry(): ProviderConnectorRegistry {
     backgroundCapability: "SERVER",
     eventInstallationSupported: true,
     triggers: ["sensor.motion.changed"],
-    eventSchemas: { "sensor.motion.changed": { active: "boolean" } }
+    eventSchemas: { "sensor.motion.changed": { value: "boolean" } }
   };
   return new ProviderConnectorRegistry([manifest], new Set(["home-assistant"]), [manifest]);
 }
@@ -50,7 +50,7 @@ function normalized(overrides: Partial<NormalizedProviderEvent> = {}): Normalize
     deviceId: "binary_sensor.hall_motion",
     capabilityId: "sensor.motion.changed",
     eventType: "motion-detected",
-    normalizedPayload: { active: true },
+    normalizedPayload: { value: true },
     occurredAt: "2026-09-29T23:59:50Z",
     receivedAt: "2026-09-29T23:59:51Z",
     verification: { verified: true, method: "WEBSOCKET_SESSION", verifiedAt: "2026-09-29T23:59:51Z" },
