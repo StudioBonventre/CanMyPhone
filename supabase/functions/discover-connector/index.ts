@@ -104,21 +104,21 @@ function researchSchema(capabilities: string[]) {
       "commercialUseFinding","blockingReasons","confidence"
     ],
     properties: {
-      providerId: { type: "string", pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$", maxLength: 80 },
-      displayName: { type: "string", minLength: 1, maxLength: 160 },
-      category: { type: "string", minLength: 1, maxLength: 80 },
-      aliases: { type: "array", maxItems: 20, items: { type: "string", maxLength: 80 } },
-      deviceTypes: { type: "array", maxItems: 30, items: { type: "string", maxLength: 80 } },
+      providerId: { type: "string", pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+      displayName: { type: "string" },
+      category: { type: "string" },
+      aliases: { type: "array", maxItems: 20, items: { type: "string" } },
+      deviceTypes: { type: "array", maxItems: 30, items: { type: "string" } },
       transport: { type: "string", enum: ["LOCAL_REST","CLOUD_REST","WEBSOCKET","WEBHOOK","MATTER","HOMEKIT","SMARTTHINGS","GOOGLE_HOME","MQTT","OCPP","UNKNOWN"] },
-      authentication: { type: "string", minLength: 1, maxLength: 120 },
-      discovery: { type: "string", minLength: 1, maxLength: 160 },
-      supportedCapabilities: { type: "array", uniqueItems: true, maxItems: capabilities.length, items: { type: "string", enum: capabilities } },
+      authentication: { type: "string" },
+      discovery: { type: "string" },
+      supportedCapabilities: { type: "array", maxItems: capabilities.length, items: { type: "string", enum: capabilities } },
       localNetworkRequired: { type: "boolean" },
       backgroundCapability: { type: "string", enum: ["NATIVE","SERVER","FOREGROUND_ONLY","NONE"] },
-      apiVersion: { type: "string", maxLength: 80 },
-      regionAvailability: { type: "array", maxItems: 30, items: { type: "string", maxLength: 40 } },
+      apiVersion: { type: "string" },
+      regionAvailability: { type: "array", maxItems: 30, items: { type: "string" } },
       commercialUseFinding: { type: "string", enum: ["ALLOWED","PARTNER_APPROVAL_REQUIRED","PERSONAL_USE_ONLY","UNKNOWN","BLOCKED"] },
-      blockingReasons: { type: "array", maxItems: 20, items: { type: "string", maxLength: 300 } },
+      blockingReasons: { type: "array", maxItems: 20, items: { type: "string" } },
       confidence: { type: "number", minimum: 0, maximum: 1 }
     }
   };
