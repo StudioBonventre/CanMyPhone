@@ -460,8 +460,8 @@ export default function App() {
             ) === index)
             .slice(0, 3);
           let researched = 0;
-          for (const request of requests) {
-            const result = await discoveryClient.discover(request);
+          const results = await Promise.all(requests.map(request => discoveryClient.discover(request)));
+          for (const result of results) {
             if (!result) continue;
             try {
               acceptDiscoveryResult(result, connectorRegistry);
