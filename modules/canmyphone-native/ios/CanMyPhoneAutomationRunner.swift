@@ -338,9 +338,44 @@ enum CanMyPhoneAutomationRunner {
   private static func lowerConnectorAction(_ capability: String, _ input: [String: Any]) -> (String, [String: Any])? {
     var parameters = input
     let targetKeys = Set(["provider", "brand", "room", "device", "vehicle"])
-    if let provider = normalizedProvider(input["provider"]), isHomeAssistantProvider(provider), homeAssistantCapabilities.contains(capability) {
-      guard homeAssistantActionInputValid(capability, input) else { return nil }
-      return (capability, input)
+    if let provider = normalizedProvider(input["provider"]), isHomeAssistantProvider(provider) {
+      if homeAssistantCapabilities.contains(capability) {
+        guard homeAssistantActionInputValid(capability, input) else { return nil }
+        return (capability, input)
+      }
+      switch capability {
+      case "smart-home.cover.open", "smart-home.cover.close":
+        guard Set(input.keys).isSubset(of: targetKeys) else { return nil }
+        let universal = capability == "smart-home.cover.open" ? "cover.open" : "cover.close"
+        guard homeAssistantActionInputValid(universal, input) else { return nil }
+        return (universal, input)
+      case "smart-home.light.set":
+        guard Set(input.keys).isSubset(of: targetKeys.union(["value"])), let raw = input["value"] as? String else { return nil }
+        var universalParameters = input
+        universalParameters.removeValue(forKey: "value")
+        let normalized = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if ["on", "an"].contains(normalized) {
+          universalParameters["on"] = true
+          return homeAssistantActionInputValid("light.power.set", universalParameters) ? ("light.power.set", universalParameters) : nil
+        }
+        if ["off", "aus"].contains(normalized) {
+          universalParameters["on"] = false
+          return homeAssistantActionInputValid("light.power.set", universalParameters) ? ("light.power.set", universalParameters) : nil
+        }
+        guard let percent = Double(normalized.replacingOccurrences(of: ",", with: ".")), percent.isFinite, (0...100).contains(percent) else { return nil }
+        universalParameters["percent"] = percent
+        return homeAssistantActionInputValid("light.brightness.set", universalParameters) ? ("light.brightness.set", universalParameters) : nil
+      case "smart-home.climate.set":
+        guard Set(input.keys).isSubset(of: targetKeys.union(["value"])), let raw = input["value"] as? String,
+          let celsius = Double(raw.replacingOccurrences(of: ",", with: ".")), celsius.isFinite, (5...35).contains(celsius)
+        else { return nil }
+        var universalParameters = input
+        universalParameters.removeValue(forKey: "value")
+        universalParameters["celsius"] = celsius
+        return homeAssistantActionInputValid("climate.temperature.set", universalParameters) ? ("climate.temperature.set", universalParameters) : nil
+      default:
+        break
+      }
     }
     switch capability {
     case "cover.open", "cover.close":
