@@ -32,3 +32,14 @@ export async function saveConnectorConnection(record: ConnectorConnectionRecord)
   await saveConnectorConnections(next);
   return next;
 }
+
+
+export async function removeConnectorConnection(providerId: string): Promise<ConnectorConnectionProfile> {
+  const current = await loadConnectorConnections();
+  const next: ConnectorConnectionProfile = {
+    version: 1,
+    connections: current.connections.filter((item) => item.providerId !== providerId)
+  };
+  await saveConnectorConnections(next);
+  return next;
+}
