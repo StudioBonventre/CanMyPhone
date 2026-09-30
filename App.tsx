@@ -921,6 +921,17 @@ export default function App() {
   const refreshHomeAssistantConnection = async () => {
     const status = await CanMyPhoneNative?.homeAssistantStatus?.().catch(() => null);
     if (!status?.connected) return status;
+    const snapshot = await CanMyPhoneNative?.homeAssistantSnapshot?.().catch(() => null);
+    if (!snapshot?.success) {
+      const profile = await saveConnectorConnection({
+        providerId: "home-assistant",
+        status: "ERROR",
+        updatedAt: new Date().toISOString(),
+        errorCode: snapshot?.code ?? "HOME_ASSISTANT_CONNECTION_TEST_FAILED"
+      });
+      setConnectorConnections(profile);
+      return status;
+    }
     const profile = await saveConnectorConnection({
       providerId: "home-assistant",
       status: "CONNECTED",
