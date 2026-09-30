@@ -4,7 +4,7 @@ import { connectorRegistry } from "../automation/builtinConnectorManifests";
 import { ConnectorRegistryRepository } from "../automation/connectorRegistryRepository";
 import { fetchConnectorRegistryRecords } from "./supabasePlanner";
 import { devicesFromHomeKit, devicesFromHomematic } from "../automation/deviceDiscovery";
-import { discoverHomeAssistantEntities, type HomeAssistantState } from "../automation/homeAssistantModel";
+import { discoverHomeAssistantSnapshot } from "../automation/homeAssistantModel";
 import { connectedProviderIds } from "../automation/connectorConnectionState";
 import { loadConnectorConnections } from "../automation/connectorConnectionRepository";
 export const connectorRegistryRepository = new ConnectorRegistryRepository(connectorRegistry, AsyncStorage, fetchConnectorRegistryRecords);
@@ -36,11 +36,8 @@ export async function refreshConnectedDeviceInventory() {
   }
   if (connected.has("home-assistant")) {
     const snapshot = await CanMyPhoneNative?.homeAssistantSnapshot?.().catch(() => null);
-    if (snapshot?.success && Array.isArray(snapshot.states)) {
-      const states = snapshot.states.filter((item): item is HomeAssistantState =>
-        typeof item.entity_id === "string" && typeof item.state === "string" && Boolean(item.attributes) && typeof item.attributes === "object"
-      );
-      discovered.push(...discoverHomeAssistantEntities(states));
+    if (snapshot?.success) {
+      discovered.push(...discoverHomeAssistantSnapshot(snapshot));
     }
   }
   connectorRegistry.setDevices(discovered);
