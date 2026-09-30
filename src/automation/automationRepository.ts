@@ -10,7 +10,8 @@ export const automationRepository = new AutomationPersistence(AsyncStorage, {
       const removed = await CanMyPhoneNative?.removeHomeKitAutomation?.(item.id);
       if (!removed?.success) throw new Error("HOMEKIT_REMOVE_FAILED");
     }
-    await CanMyPhoneNative?.syncAutomationDefinition(JSON.stringify(item));
+    const nativeSynced = await CanMyPhoneNative?.syncAutomationDefinition(JSON.stringify(item));
+    if (nativeSynced !== true) throw new Error("NATIVE_AUTOMATION_SYNC_FAILED");
     await CanMyPhoneNative?.syncLocationAutomations?.().catch(()=>undefined);
   },
   async remove(id){
@@ -19,8 +20,9 @@ export const automationRepository = new AutomationPersistence(AsyncStorage, {
       const removed = await CanMyPhoneNative?.removeHomeKitAutomation?.(id);
       if (!removed?.success) throw new Error("HOMEKIT_REMOVE_FAILED");
     }
-    await CanMyPhoneNative?.deleteAutomationDefinition(id);
-    await CanMyPhoneNative?.syncLocationAutomations?.().catch(()=>undefined);
+    if (!CanMyPhoneNative) throw new Error("NATIVE_AUTOMATION_SYNC_FAILED");
+    await CanMyPhoneNative.deleteAutomationDefinition(id);
+    await CanMyPhoneNative.syncLocationAutomations?.().catch(()=>undefined);
   }
 });
 
