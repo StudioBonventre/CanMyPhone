@@ -12,10 +12,10 @@ export type HomeAssistantState = {
 
 export type HomeAssistantEntityRegistryEntry = {
   ei: string;
-  pl: string;
-  ai?: string;
-  di?: string;
-  en?: string;
+  pl?: string | null;
+  ai?: string | null;
+  di?: string | null;
+  en?: string | null;
   hb?: boolean;
 };
 
@@ -44,6 +44,67 @@ const stringArray = (value: unknown): string[] =>
 
 const finiteNumber = (value: unknown): number | undefined =>
   typeof value === "number" && Number.isFinite(value) ? value : undefined;
+
+const record = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === "object" && !Array.isArray(value);
+
+export type HomeAssistantDiscoverySnapshot = {
+  states?: unknown;
+  entities?: unknown;
+  areas?: unknown;
+  devices?: unknown;
+};
+
+export function discoverHomeAssistantSnapshot(
+  snapshot: HomeAssistantDiscoverySnapshot,
+  observedAt = new Date().toISOString()
+): DiscoveredDevice[] {
+  const states = Array.isArray(snapshot.states)
+    ? snapshot.states.filter((item): item is HomeAssistantState =>
+        record(item) &&
+        typeof item.entity_id === "string" &&
+        typeof item.state === "string" &&
+        record(item.attributes)
+      )
+    : [];
+
+  const entityEntries: HomeAssistantEntityRegistryEntry[] = Array.isArray(snapshot.entities)
+    ? snapshot.entities.flatMap(item => {
+        if (!record(item) || typeof item.ei !== "string") return [];
+        return [{
+          ei: item.ei,
+          ...(typeof item.pl === "string" ? { pl: item.pl } : {}),
+          ...(typeof item.ai === "string" ? { ai: item.ai } : {}),
+          ...(typeof item.di === "string" ? { di: item.di } : {}),
+          ...(typeof item.en === "string" ? { en: item.en } : {}),
+          ...(typeof item.hb === "boolean" ? { hb: item.hb } : {})
+        }];
+      })
+    : [];
+
+  const areas: HomeAssistantArea[] = Array.isArray(snapshot.areas)
+    ? snapshot.areas.flatMap(item =>
+        record(item) && typeof item.area_id === "string" && typeof item.name === "string"
+          ? [{ area_id: item.area_id, name: item.name }]
+          : []
+      )
+    : [];
+
+  const devices: HomeAssistantDevice[] = Array.isArray(snapshot.devices)
+    ? snapshot.devices.flatMap(item => {
+        if (!record(item) || typeof item.id !== "string") return [];
+        return [{
+          id: item.id,
+          ...(typeof item.area_id === "string" ? { area_id: item.area_id } : {}),
+          ...(typeof item.parent_device_id === "string" ? { parent_device_id: item.parent_device_id } : {}),
+          ...(typeof item.name === "string" ? { name: item.name } : {}),
+          ...(typeof item.name_by_user === "string" ? { name_by_user: item.name_by_user } : {})
+        }];
+      })
+    : [];
+
+  return discoverHomeAssistantEntities(states, entityEntries, areas, devices, observedAt);
+}
 
 export function homeAssistantCapabilitiesForState(state: HomeAssistantState): string[] {
   const domain = state.entity_id.split(".", 1)[0] ?? "";
@@ -135,7 +196,7 @@ export function discoverHomeAssistantEntities(
         reliability: 0.9,
         privacy: 0.9,
         background: false,
-        eventSupport: true,
+        eventSupport: false,
         credentialReady: true
       }]
     }];
