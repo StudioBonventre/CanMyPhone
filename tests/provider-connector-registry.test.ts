@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { ProviderConnectorRegistry, deviceSupportsOperation, type ProviderConnectorManifest } from "../src/automation/providerConnectorRegistry";
 import { ConnectorRuntime } from "../src/automation/connectorRuntime";
 import { resolveDeviceCapability } from "../src/automation/capabilityResolver";
-import { discoverConnectorPath, DISCOVERY_SEEDS } from "../src/automation/connectorDiscovery";
+import { acceptDiscoveryResult, discoverConnectorPath, DISCOVERY_SEEDS, validateDiscoveryResult, type ConnectorDiscoveryResult } from "../src/automation/connectorDiscovery";
 
 test("unknown manufacturer is a non-executable legal-review candidate", async () => {
   assert.throws(() => new ConnectorRuntime([{ providerId: "xyz", execute: async () => ({ ok: true, confirmed: true, providerId: "xyz" }) }]), /MANIFEST_REQUIRED/);
@@ -70,4 +70,131 @@ test("discovery searches beyond seeds but never makes an unknown provider execut
   assert.equal(decision.step, "OFFICIAL_LOCAL_API");
   assert.equal(registry.get("xyz")?.lifecycle, "CANDIDATE_LEGAL_REVIEW_REQUIRED");
   assert.equal(registry.executable("xyz", "sensor.motion.changed"), false);
+});
+
+
+function researchedCandidate(providerId = "switchbot"): ConnectorDiscoveryResult {
+  return {
+    providerIdentity: { providerId, displayName: "SwitchBot" },
+    officialDocumentationSources: [{
+      url: "https://github.com/OpenWonderLabs/SwitchBotAPI",
+      kind: "OFFICIAL_GITHUB",
+      providerOwned: false,
+      retrievedAt: "2026-09-30T10:00:00Z"
+    }],
+    candidateManifest: {
+      providerId,
+      displayName: "SwitchBot",
+      kind: "DYNAMIC",
+      category: "home",
+      aliases: ["switchbot"],
+      deviceTypes: ["switch"],
+      transport: "CLOUD_REST",
+      authentication: "oauth-or-token",
+      discovery: "official-documentation-research",
+      triggers: [],
+      conditions: [],
+      actions: [{
+        capabilityId: "switch.power.set",
+        inputSchema: {
+          provider: { type: "string", required: false },
+          brand: { type: "string", required: false },
+          device: { type: "string", required: false },
+          room: { type: "string", required: false },
+          vehicle: { type: "string", required: false },
+          on: { type: "boolean", required: true }
+        },
+        resultSchema: { success: { type: "boolean", required: true } },
+        risk: "LOW",
+        confirmationRequired: false,
+        sourceUrls: ["https://github.com/OpenWonderLabs/SwitchBotAPI"]
+      }],
+      eventSchemas: {},
+      capabilitySources: {},
+      allowedDomains: [],
+      localNetworkRequired: false,
+      backgroundCapability: "NONE",
+      eventInstallationSupported: false,
+      regionAvailability: [],
+      commercialUseStatus: "UNKNOWN",
+      apiVersion: "unknown",
+      documentationSources: [{
+        url: "https://github.com/OpenWonderLabs/SwitchBotAPI",
+        kind: "OFFICIAL_GITHUB",
+        providerOwned: false,
+        retrievedAt: "2026-09-30T10:00:00Z"
+      }],
+      connectorVersion: 1,
+      lifecycle: "CANDIDATE_LEGAL_REVIEW_REQUIRED",
+      verification: {
+        documentation: false,
+        authentication: false,
+        endpointAllowlist: false,
+        inputSchema: false,
+        outputSchema: false,
+        riskClassification: false,
+        terms: false,
+        connectorTests: false
+      },
+      confidence: 0.8
+    },
+    authenticationType: "oauth-or-token",
+    transport: "CLOUD_REST",
+    capabilities: ["switch.power.set"],
+    eventSupport: false,
+    commercialStatus: "UNKNOWN",
+    verificationState: "CANDIDATE_LEGAL_REVIEW_REQUIRED",
+    blockingReasons: ["Independent review required."]
+  };
+}
+
+test("server discovery candidates stay non-executable until independently verified", () => {
+  const registry = new ProviderConnectorRegistry();
+  const result = researchedCandidate();
+  assert.equal(validateDiscoveryResult(result), true);
+  acceptDiscoveryResult(result, registry);
+  assert.equal(registry.getProvider("switchbot")?.lifecycle, "CANDIDATE_LEGAL_REVIEW_REQUIRED");
+  assert.equal(registry.executable("switchbot", "switch.power.set"), false);
+
+  const forgedReady = {
+    ...result,
+    verificationState: "READY",
+    candidateManifest: {
+      ...result.candidateManifest,
+      lifecycle: "READY",
+      commercialUseStatus: "ALLOWED",
+      verification: Object.fromEntries(Object.keys(result.candidateManifest.verification).map(key => [key, true]))
+    }
+  };
+  assert.equal(validateDiscoveryResult(forgedReady), false);
+
+  const forgedVerifiedSource = {
+    ...result,
+    candidateManifest: {
+      ...result.candidateManifest,
+      documentationSources: result.candidateManifest.documentationSources.map(source => ({
+        ...source,
+        providerOwned: true,
+        verifiedAt: "2026-09-30T10:05:00Z"
+      }))
+    }
+  };
+  assert.equal(validateDiscoveryResult(forgedVerifiedSource), false);
+});
+
+test("discovery cannot replace a shipped READY connector", () => {
+  const candidate = researchedCandidate("xyz").candidateManifest;
+  const ready: ProviderConnectorManifest = {
+    ...candidate,
+    displayName: "XYZ",
+    commercialUseStatus: "ALLOWED",
+    lifecycle: "READY"
+  };
+  const registry = new ProviderConnectorRegistry([ready], new Set(["xyz"]), [ready]);
+  assert.throws(() => acceptDiscoveryResult({
+    ...researchedCandidate("xyz"),
+    providerIdentity: { providerId: "xyz", displayName: "XYZ candidate" },
+    candidateManifest: { ...researchedCandidate("xyz").candidateManifest, displayName: "XYZ candidate" }
+  }, registry), /DISCOVERY_CANNOT_REPLACE_READY/);
+  assert.equal(registry.getProvider("xyz")?.lifecycle, "READY");
 });
