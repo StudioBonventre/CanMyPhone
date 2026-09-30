@@ -54,12 +54,10 @@ function safeHttps(value: unknown): string | null {
   }
 }
 
-function sourceKind(url: string): "OFFICIAL_GITHUB" | "COMMUNITY_HINT" {
-  try {
-    return new URL(url).hostname.toLowerCase() === "github.com" ? "OFFICIAL_GITHUB" : "COMMUNITY_HINT";
-  } catch {
-    return "COMMUNITY_HINT";
-  }
+function sourceKind(_url: string): "COMMUNITY_HINT" {
+  // Automatic research never upgrades provenance. Independent review must
+  // establish provider ownership before a source can become OFFICIAL_*.
+  return "COMMUNITY_HINT";
 }
 
 function schemaForCapability(id: string) {
@@ -151,7 +149,7 @@ async function research(input: {
         type: "web_search",
         filters: { blocked_domains: ["reddit.com","quora.com","wikipedia.org"] }
       }],
-      tool_choice: "auto",
+      tool_choice: "required",
       include: ["web_search_call.action.sources"],
       input: [
         {
