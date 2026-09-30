@@ -14,6 +14,7 @@ import {
   type HomeAssistantState
 } from "../src/automation/homeAssistantModel";
 import { normalizeHomeAssistantStateChangedEvent } from "../src/automation/homeAssistantEvents";
+import { connectorRegistry } from "../src/automation/builtinConnectorManifests";
 
 const state = (entity_id: string, value: string, attributes: Record<string, unknown>): HomeAssistantState => ({
   entity_id,
@@ -150,4 +151,15 @@ test("Home Assistant motion state change normalizes to universal provider event"
   assert.equal(event?.deviceId,"binary_sensor.flur");
   assert.equal(event?.room,"Flur");
   assert.deepEqual(event?.normalizedPayload,{value:true});
+});
+
+
+test("Home Assistant ships action execution without pretending background events are installed",()=>{
+  assert.equal(connectorRegistry.executable("home-assistant","light.power.set"),true);
+  const manifest=connectorRegistry.getProvider("home-assistant");
+  assert.ok(manifest);
+  assert.equal(manifest?.lifecycle,"READY");
+  assert.equal(manifest?.eventInstallationSupported,false);
+  assert.deepEqual(manifest?.triggers,[]);
+  assert.equal(connectorRegistry.executable("home-assistant","sensor.motion.changed"),false);
 });
