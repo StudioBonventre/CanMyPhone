@@ -26,15 +26,15 @@ export function normalizeHomeAssistantBaseUrl(raw: string): string {
     /^127\./.test(hostname);
   const local = hostname === "localhost" || hostname.endsWith(".local") || privateV4;
   if (url.protocol === "http:" && !local) throw new Error("HOME_ASSISTANT_REMOTE_HTTPS_REQUIRED");
-  url.pathname = url.pathname.replace(/\/+$/, "");
-  return url.toString().replace(/\/$/, "");
+  const pathname = url.pathname.replace(/\/+$/, "");
+  return `${url.protocol}//${url.host}${pathname}`;
 }
 
 export function homeAssistantWebSocketUrl(baseUrl: string): string {
   const url = new URL(normalizeHomeAssistantBaseUrl(baseUrl));
-  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  url.pathname = `${url.pathname.replace(/\/$/, "")}/api/websocket`;
-  return url.toString();
+  const protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  const pathname = `${url.pathname.replace(/\/$/, "")}/api/websocket`;
+  return `${protocol}//${url.host}${pathname}`;
 }
 
 export function buildHomeAssistantAuthorizationUrl(input: {
