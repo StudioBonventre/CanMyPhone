@@ -1155,7 +1155,7 @@ export default function App() {
         ? "Der lokale Tesla-Hintergrundzugang wurde entfernt. Der Backend-Zugriff konnte in diesem Build nicht zusätzlich widerrufen werden."
         : confirmed
           ? "Tesla wurde getrennt und der sichere Hintergrundzugang entfernt."
-          : backend.ok === false ? backend.message : "Der Tesla-Hintergrundzugang konnte nicht vollständig entfernt werden.";
+          : backend.ok === false ? (backend.message ?? "Der Tesla-Backend-Zugriff konnte nicht bestätigt entfernt werden.") : "Der Tesla-Hintergrundzugang konnte nicht vollständig entfernt werden.";
     } else if (providerId === "home-assistant") {
       const result = await CanMyPhoneNative?.homeAssistantDisconnect?.().catch(() => null);
       confirmed = result?.success === true;
