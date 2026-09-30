@@ -31,10 +31,8 @@ export function createConnectorDiscoveryServerClient(config: ConnectorDiscoveryS
               providerName: request.providerName.slice(0, 160),
               providerHints: request.providerHints.slice(0, 20),
               requestedCapabilities: request.requestedCapabilities.slice(0, 20),
-              deviceHints: request.deviceHints.slice(0, 20),
               locale: request.locale.slice(0, 10),
-              ...(request.region ? { region: request.region.slice(0, 80) } : {}),
-              ...(request.room ? { room: request.room.slice(0, 120) } : {})
+              ...(request.region ? { region: request.region.slice(0, 80) } : {})
             })
           }
         );
