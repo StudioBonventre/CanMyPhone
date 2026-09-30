@@ -44,7 +44,10 @@
         "NSCalendarsUsageDescription": "CanMyPhone nutzt deinen Kalender nur, wenn eine von dir erstellte Automation einen Termin anlegen soll.",
         "NSCalendarsFullAccessUsageDescription": "CanMyPhone benötigt Kalenderzugriff nur, um von dir angeforderte Termine über Automationen anzulegen.",
         "NSRemindersUsageDescription": "CanMyPhone nutzt Erinnerungen nur, wenn eine von dir erstellte Automation eine Erinnerung anlegen soll.",
-        "NSRemindersFullAccessUsageDescription": "CanMyPhone benötigt Erinnerungszugriff nur, um von dir angeforderte Erinnerungen über Automationen anzulegen."
+        "NSRemindersFullAccessUsageDescription": "CanMyPhone benötigt Erinnerungszugriff nur, um von dir angeforderte Erinnerungen über Automationen anzulegen.",
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        }
       }
     },
     "android": {
