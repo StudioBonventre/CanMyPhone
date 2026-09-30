@@ -125,7 +125,12 @@ test("provider ingress rejects stale, malformed and unready events before execut
 
   const candidateBase = BUILTIN_CONNECTOR_MANIFESTS.find(item => item.providerId === "home-assistant");
   assert.ok(candidateBase);
-  const candidate = new ProviderConnectorRegistry([JSON.parse(JSON.stringify(candidateBase))]);
+  const candidateManifest: ProviderConnectorManifest = {
+    ...JSON.parse(JSON.stringify(candidateBase)),
+    lifecycle: "CANDIDATE",
+    commercialUseStatus: "UNKNOWN"
+  };
+  const candidate = new ProviderConnectorRegistry([candidateManifest]);
   const unready = await ingestProviderEvent(raw, [automation], execute, {
     verifier: verifierFor(normalized()),
     receipts: new MemoryProviderEventReceiptStore(),
