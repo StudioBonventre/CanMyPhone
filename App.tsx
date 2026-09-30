@@ -31,6 +31,7 @@ import { loadConnectorConnections, saveConnectorConnection } from "./src/automat
 import { connectorRegistryRepository, refreshConnectorRegistry, refreshConnectedDeviceInventory } from "./src/lib/connectorRegistryService";
 import { connectorPlanForDefinition } from "./src/automation/connectorPlanning";
 import { connectorRegistry } from "./src/automation/builtinConnectorManifests";
+import { acceptDiscoveryResult } from "./src/automation/connectorDiscovery";
 import { connectedProviderIds, EMPTY_CONNECTOR_CONNECTION_PROFILE, type ConnectorConnectionProfile } from "./src/automation/connectorConnectionState";
 import { resolveConnectedProviders } from "./src/automation/providerResolution";
 import { CanMyPhoneNative, type LocationAuthorizationResult, type NamedLocation } from "./modules/canmyphone-native";
@@ -49,7 +50,7 @@ import { liquidIce } from "./src/theme/liquidIce";
 import { solutions } from "./src/data/solutions";
 import { directActionPlan, runDirectAction, type DirectActionResult } from "./src/lib/actions";
 import { compileVerifiedGoal, planGoal, type PlannerResponse } from "./src/automation/planner";
-import { getSupabasePlannerClient, getSupabaseSemanticClient, getTeslaConnectorService } from "./src/lib/supabasePlanner";
+import { getSupabaseConnectorDiscoveryClient, getSupabasePlannerClient, getSupabaseSemanticClient, getTeslaConnectorService } from "./src/lib/supabasePlanner";
 import { resolveWithOnDeviceAI } from "./src/lib/aiResolver";
 import { resolveConversation } from "./src/lib/conversation";
 import { DEFAULT_ENTITLEMENTS, proFeatureAccess } from "./src/lib/entitlements";
@@ -447,7 +448,34 @@ export default function App() {
     trackProductEvent("automation_materialization_started", { strategy: shortcutDefinition.executionStrategy });
     try {
       await connectorRegistryRepository.hydrate();
-      const resolvedDefinition = resolveConnectedProviders(shortcutDefinition, connectedProviderIds(connectorConnections));
+      let resolvedDefinition = resolveConnectedProviders(shortcutDefinition, connectedProviderIds(connectorConnections));
+      const initialConnectorPlan = connectorPlanForDefinition(resolvedDefinition, connectedProviderIds(connectorConnections));
+      if (initialConnectorPlan.discoveryRequired) {
+        const discoveryClient = getSupabaseConnectorDiscoveryClient();
+        if (discoveryClient) {
+          const requests = initialConnectorPlan.discoveryRequests
+            .filter((request, index, all) => all.findIndex(item =>
+              item.providerName.trim().toLowerCase() === request.providerName.trim().toLowerCase() &&
+              item.requestedCapabilities.join("|") === request.requestedCapabilities.join("|")
+            ) === index)
+            .slice(0, 3);
+          let researched = 0;
+          for (const request of requests) {
+            const result = await discoveryClient.discover(request);
+            if (!result) continue;
+            try {
+              acceptDiscoveryResult(result, connectorRegistry);
+              researched++;
+            } catch {
+              // Untrusted or stale discovery data never blocks local planning or reaches runtime execution.
+            }
+          }
+          if (researched > 0) {
+            trackProductEvent("connector_discovery_candidate_received", { count: researched });
+            resolvedDefinition = resolveConnectedProviders(shortcutDefinition, connectedProviderIds(connectorConnections));
+          }
+        }
+      }
       const stored = await automationRepository.save(materializeShortcutDefinition(resolvedDefinition));
       setInstallingAutomation(stored);
       setAutomations(await automationRepository.list());
