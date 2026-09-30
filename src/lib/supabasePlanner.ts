@@ -4,6 +4,7 @@ import { createSupabasePlannerClient } from "../automation/supabasePlannerClient
 import type { ServerPlannerClient } from "../automation/planner";
 import { createSemanticServerClient } from "../automation/semanticServerClient";
 import { createTeslaConnectorService } from "../automation/teslaConnectorService";
+import { createConnectorDiscoveryServerClient } from "../automation/connectorDiscoveryServerClient";
 
 let supabase: SupabaseClient | null | undefined;
 
@@ -69,6 +70,19 @@ export function getTeslaConnectorService() {
   const key = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
   if (!instance || !url || !key) return null;
   return createTeslaConnectorService({
+    supabaseUrl: url,
+    publishableKey: key,
+    getAccessToken: () => accessToken(instance)
+  });
+}
+
+
+export function getSupabaseConnectorDiscoveryClient() {
+  const instance = client();
+  const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
+  const key = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  if (!instance || !url || !key) return null;
+  return createConnectorDiscoveryServerClient({
     supabaseUrl: url,
     publishableKey: key,
     getAccessToken: () => accessToken(instance)
