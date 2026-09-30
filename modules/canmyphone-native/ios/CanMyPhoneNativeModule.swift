@@ -5,6 +5,7 @@ import UserNotifications
 import AVFoundation
 import Photos
 import StoreKit
+import AppIntents
 
 #if canImport(FoundationModels)
 import FoundationModels
@@ -17,6 +18,9 @@ public final class CanMyPhoneNativeModule: Module {
     OnCreate {
       CanMyPhoneLocationAutomationMonitor.shared.start()
       _ = CanMyPhoneLocationAutomationMonitor.shared.syncAutomations()
+      if #available(iOS 16.0, *) {
+        CanMyPhoneAppShortcuts.updateAppShortcutParameters()
+      }
     }
 
     AsyncFunction("foundationModelStatus") { () async -> [String: Any] in
@@ -379,11 +383,18 @@ public final class CanMyPhoneNativeModule: Module {
     }
 
     AsyncFunction("syncAutomationDefinition") { (json: String) async -> Bool in
-      return CanMyPhoneAutomationStore.save(json: json)
+      let saved = CanMyPhoneAutomationStore.save(json: json)
+      if saved, #available(iOS 16.0, *) {
+        CanMyPhoneAppShortcuts.updateAppShortcutParameters()
+      }
+      return saved
     }
 
     AsyncFunction("deleteAutomationDefinition") { (automationID: String) async -> Void in
       CanMyPhoneAutomationStore.delete(id: automationID)
+      if #available(iOS 16.0, *) {
+        CanMyPhoneAppShortcuts.updateAppShortcutParameters()
+      }
     }
 
     AsyncFunction("runStoredAutomation") { (automationID: String) async -> [String: Any] in
