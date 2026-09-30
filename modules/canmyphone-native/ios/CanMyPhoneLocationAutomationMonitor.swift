@@ -1,5 +1,24 @@
 import CoreLocation
 import Foundation
+import UIKit
+
+@MainActor
+private final class CanMyPhoneBackgroundTaskLease {
+  private var identifier: UIBackgroundTaskIdentifier = .invalid
+
+  func begin(name: String) {
+    guard identifier == .invalid else { return }
+    identifier = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in
+      Task { @MainActor in self?.end() }
+    }
+  }
+
+  func end() {
+    guard identifier != .invalid else { return }
+    UIApplication.shared.endBackgroundTask(identifier)
+    identifier = .invalid
+  }
+}
 
 final class CanMyPhoneLocationAutomationMonitor: NSObject, CLLocationManagerDelegate {
   static let shared = CanMyPhoneLocationAutomationMonitor()
@@ -169,7 +188,10 @@ final class CanMyPhoneLocationAutomationMonitor: NSObject, CLLocationManagerDele
           trigger["capabilityId"] as? String == event
     else { return }
 
-    Task {
+    Task { @MainActor in
+      let lease = CanMyPhoneBackgroundTaskLease()
+      lease.begin(name: "CanMyPhone Geofence Automation")
+      defer { lease.end() }
       _ = await CanMyPhoneAutomationRunner.run(id: id)
     }
   }
