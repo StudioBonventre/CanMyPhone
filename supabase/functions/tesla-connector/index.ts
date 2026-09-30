@@ -31,9 +31,11 @@ function base64url(bytes:Uint8Array):string {
   return btoa(binary).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
 }
 
-function fromBase64(value:string):Uint8Array {
+function fromBase64(value:string):ArrayBuffer {
   const binary=atob(value.replace(/-/g,"+").replace(/_/g,"/").padEnd(Math.ceil(value.length/4)*4,"="));
-  return Uint8Array.from(binary,(char)=>char.charCodeAt(0));
+  const bytes=new Uint8Array(binary.length);
+  for(let index=0;index<binary.length;index++)bytes[index]=binary.charCodeAt(index);
+  return bytes.buffer;
 }
 
 async function sha256Hex(value:string):Promise<string>{
