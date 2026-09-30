@@ -19,7 +19,7 @@ function transportLabel(value:string){
 
 export type ConnectorConnectInput = { hcuSuffix?: string; activationKey?: string; instanceUrl?: string };
 
-export function ConnectorSettingsCard({profile,onConnect}:{profile:ConnectorConnectionProfile;onConnect?:(providerId:string,input?:ConnectorConnectInput)=>void}){
+export function ConnectorSettingsCard({profile,onConnect,onDisconnect}:{profile:ConnectorConnectionProfile;onConnect?:(providerId:string,input?:ConnectorConnectInput)=>void;onDisconnect?:(providerId:string)=>void}){
   useSyncExternalStore(connectorRegistry.subscribe, connectorRegistry.getRevision, connectorRegistry.getRevision);
   const [expanded,setExpanded]=useState<string|null>(null);
   const [hcuSuffix,setHcuSuffix]=useState("");
@@ -102,13 +102,18 @@ export function ConnectorSettingsCard({profile,onConnect}:{profile:ConnectorConn
               />
               <Text style={styles.localHint}>Die Anmeldung öffnet deine eigene Home-Assistant-Instanz. Zugangstokens speichert CanMyPhone ausschließlich im iOS-Keychain.</Text>
             </View>:null}
-            {connectionAvailable&&connection?.status!=="CONNECTED"
+            {connection?.status==="CONNECTED"
               ?<Pressable
-                  disabled={(connection?.status==="CONNECTING"&&!["tesla","home-assistant"].includes(provider.id))||(provider.id==="homematic-ip"&&(hcuSuffix.length!==4||!activationKey.trim()))||(provider.id==="home-assistant"&&!homeAssistantUrl.trim())}
-                  onPress={()=>onConnect?.(provider.id,provider.id==="homematic-ip"?{hcuSuffix,activationKey}:provider.id==="home-assistant"?{instanceUrl:homeAssistantUrl.trim()}:undefined)}
-                  style={[styles.connectButton,((connection?.status==="CONNECTING"&&!["tesla","home-assistant"].includes(provider.id))||(provider.id==="homematic-ip"&&(hcuSuffix.length!==4||!activationKey.trim()))||(provider.id==="home-assistant"&&!homeAssistantUrl.trim()))&&styles.connectButtonDisabled]}
-                ><Text style={styles.connectButtonText}>{connection?.status==="CONNECTING"?(provider.id==="tesla"?"Kopplung fortsetzen":provider.id==="home-assistant"?"Anmeldung erneut öffnen":"Verbindung läuft …"):"Verbinden"}</Text></Pressable>
-              :null}
+                  onPress={()=>onDisconnect?.(provider.id)}
+                  style={styles.disconnectButton}
+                ><Text style={styles.disconnectButtonText}>Verbindung trennen</Text></Pressable>
+              :connectionAvailable
+                ?<Pressable
+                    disabled={(connection?.status==="CONNECTING"&&!["tesla","home-assistant"].includes(provider.id))||(provider.id==="homematic-ip"&&(hcuSuffix.length!==4||!activationKey.trim()))||(provider.id==="home-assistant"&&!homeAssistantUrl.trim())}
+                    onPress={()=>onConnect?.(provider.id,provider.id==="homematic-ip"?{hcuSuffix,activationKey}:provider.id==="home-assistant"?{instanceUrl:homeAssistantUrl.trim()}:undefined)}
+                    style={[styles.connectButton,((connection?.status==="CONNECTING"&&!["tesla","home-assistant"].includes(provider.id))||(provider.id==="homematic-ip"&&(hcuSuffix.length!==4||!activationKey.trim()))||(provider.id==="home-assistant"&&!homeAssistantUrl.trim()))&&styles.connectButtonDisabled]}
+                  ><Text style={styles.connectButtonText}>{connection?.status==="CONNECTING"?(provider.id==="tesla"?"Kopplung fortsetzen":provider.id==="home-assistant"?"Anmeldung erneut öffnen":"Verbindung läuft …"):"Verbinden"}</Text></Pressable>
+                :null}
           </View>:null}
         </View>;
       })}
@@ -143,5 +148,7 @@ const styles=StyleSheet.create({
   localHint:{fontSize:10,lineHeight:15,color:liquidIce.color.textTertiary},
   connectButton:{marginTop:4,alignSelf:"flex-start",paddingHorizontal:14,paddingVertical:9,borderRadius:999,backgroundColor:liquidIce.color.textPrimary},
   connectButtonDisabled:{opacity:0.38},
-  connectButtonText:{fontSize:12,fontWeight:"800",color:"#FFFFFF"}
+  connectButtonText:{fontSize:12,fontWeight:"800",color:"#FFFFFF"},
+  disconnectButton:{marginTop:4,alignSelf:"flex-start",paddingHorizontal:14,paddingVertical:9,borderRadius:999,borderWidth:StyleSheet.hairlineWidth,borderColor:"rgba(146,58,58,0.28)",backgroundColor:"rgba(146,58,58,0.06)"},
+  disconnectButtonText:{fontSize:12,fontWeight:"800",color:"#923A3A"}
 });
