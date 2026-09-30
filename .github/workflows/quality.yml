@@ -23,6 +23,11 @@ jobs:
         with:
           node-version: 24
 
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
       - name: Install dependencies
         run: npm install
 
@@ -34,6 +39,13 @@ jobs:
 
       - name: Expo doctor
         run: npx expo-doctor
+
+      - name: Edge Function typecheck
+        run: |
+          deno check supabase/functions/plan-automation/index.ts
+          deno check supabase/functions/interpret-automation/index.ts
+          deno check supabase/functions/tesla-connector/index.ts
+          deno check supabase/functions/discover-connector/index.ts
 
 
   ios-native-compile:
