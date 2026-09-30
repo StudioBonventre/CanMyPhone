@@ -180,6 +180,10 @@ test("server discovery candidates stay non-executable until independently verifi
     }
   };
   assert.equal(validateDiscoveryResult(forgedVerifiedSource), false);
+
+  assert.equal(validateDiscoveryResult({ ...result, transport: "LOCAL_REST" }), false);
+  assert.equal(validateDiscoveryResult({ ...result, commercialStatus: "BLOCKED" }), false);
+  assert.equal(validateDiscoveryResult({ ...result, capabilities: ["light.power.set"] }), false);
 });
 
 test("discovery cannot replace a shipped READY connector", () => {
