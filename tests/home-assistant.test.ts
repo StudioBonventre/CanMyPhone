@@ -9,6 +9,7 @@ import {
 } from "../src/automation/homeAssistantApi";
 import {
   discoverHomeAssistantEntities,
+  discoverHomeAssistantSnapshot,
   homeAssistantCapabilitiesForState,
   homeAssistantServiceCallForRequest,
   type HomeAssistantState
@@ -162,4 +163,28 @@ test("Home Assistant ships action execution without pretending background events
   assert.equal(manifest?.eventInstallationSupported,false);
   assert.deepEqual(manifest?.triggers,[]);
   assert.equal(connectorRegistry.executable("home-assistant","sensor.motion.changed"),false);
+});
+
+
+test("Home Assistant discovery snapshot preserves registry rooms and rejects malformed metadata",()=>{
+  const devices=discoverHomeAssistantSnapshot({
+    states:[
+      state("light.flur","on",{friendly_name:"Flurlicht",supported_color_modes:["brightness"]}),
+      {entity_id:"broken",state:"on",attributes:null}
+    ],
+    entities:[
+      {ei:"light.flur",pl:"hue",di:"child",en:"Flurlicht"},
+      {bad:true}
+    ],
+    areas:[{area_id:"hall",name:"Flur"},{area_id:42,name:"invalid"}],
+    devices:[
+      {id:"parent",area_id:"hall",name:"Bridge"},
+      {id:"child",parent_device_id:"parent",name:"Light"}
+    ]
+  },"2026-09-30T10:00:00Z");
+  assert.equal(devices.length,1);
+  assert.equal(devices[0]?.room,"Flur");
+  assert.equal(devices[0]?.paths?.[0]?.providerDeviceId,"light.flur");
+  assert.equal(devices[0]?.paths?.[0]?.eventSupport,false);
+  assert.equal(devices[0]?.metadata?.platform,"hue");
 });
