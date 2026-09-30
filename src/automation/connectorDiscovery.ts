@@ -1,4 +1,4 @@
-import { ProviderConnectorRegistry, type DiscoveredDevice } from "./providerConnectorRegistry";
+import { ProviderConnectorRegistry, validateConnectorManifest, type DiscoveredDevice } from "./providerConnectorRegistry";
 import { resolveDeviceCapability, type CapabilityResolution } from "./capabilityResolver";
 
 export type ConnectorDiscoveryRequest = {
@@ -14,10 +14,38 @@ export type ConnectorDiscoveryResult = {
   verificationState: "DISCOVERED" | "CANDIDATE" | "CANDIDATE_LEGAL_REVIEW_REQUIRED";
   blockingReasons: string[];
 };
+const object = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === "object" && !Array.isArray(value);
+
+export function validateDiscoveryResult(value: unknown): value is ConnectorDiscoveryResult {
+  if (!object(value)) return false;
+  const result = value as unknown as ConnectorDiscoveryResult;
+  const candidateStates = ["DISCOVERED", "CANDIDATE", "CANDIDATE_LEGAL_REVIEW_REQUIRED"];
+  return object(result.providerIdentity) &&
+    typeof result.providerIdentity.providerId === "string" &&
+    typeof result.providerIdentity.displayName === "string" &&
+    Array.isArray(result.officialDocumentationSources) &&
+    validateConnectorManifest(result.candidateManifest) &&
+    candidateStates.includes(result.verificationState) &&
+    result.candidateManifest.lifecycle === result.verificationState &&
+    result.providerIdentity.providerId === result.candidateManifest.providerId &&
+    result.candidateManifest.commercialUseStatus !== "ALLOWED" &&
+    Object.values(result.candidateManifest.verification).every(value => value === false) &&
+    result.candidateManifest.documentationSources.every(source => source.providerOwned !== true && !source.verifiedAt) &&
+    typeof result.authenticationType === "string" &&
+    typeof result.transport === "string" &&
+    Array.isArray(result.capabilities) && result.capabilities.every(capability => typeof capability === "string") &&
+    typeof result.eventSupport === "boolean" &&
+    typeof result.commercialStatus === "string" &&
+    Array.isArray(result.blockingReasons) && result.blockingReasons.every(reason => typeof reason === "string");
+}
+
 export function acceptDiscoveryResult(result: ConnectorDiscoveryResult, registry: ProviderConnectorRegistry): void {
-  if (!["DISCOVERED", "CANDIDATE", "CANDIDATE_LEGAL_REVIEW_REQUIRED"].includes(result.verificationState) ||
-      result.candidateManifest.lifecycle !== result.verificationState || result.providerIdentity.providerId !== result.candidateManifest.providerId) throw new Error("DISCOVERY_RESULT_NOT_CANDIDATE");
-  registry.registerCandidate(result.candidateManifest);
+  if (!validateDiscoveryResult(result)) throw new Error("DISCOVERY_RESULT_NOT_CANDIDATE");
+  const existing = registry.getProvider(result.providerIdentity.providerId);
+  if (existing?.lifecycle === "READY") throw new Error("DISCOVERY_CANNOT_REPLACE_READY");
+  const version = Math.max(result.candidateManifest.connectorVersion, (existing?.connectorVersion ?? 0) + 1);
+  registry.registerCandidate({ ...result.candidateManifest, connectorVersion: version });
 }
 
 /** Search hints only. This is not an allowlist or a claim of working integrations. */
