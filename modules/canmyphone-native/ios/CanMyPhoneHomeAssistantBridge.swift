@@ -96,6 +96,18 @@ final class CanMyPhoneHomeAssistantBridge {
     guard let token = await validAccessToken(instanceURL: instanceURL) else {
       return failure("HOME_ASSISTANT_AUTH_FAILED", "Die Home-Assistant-Anmeldung ist abgelaufen.")
     }
+
+    if let discovery = try? await webSocketDiscoverySnapshot(instanceURL: instanceURL, accessToken: token) {
+      return [
+        "success": true,
+        "states": discovery.states,
+        "areas": discovery.areas,
+        "devices": discovery.devices,
+        "entities": discovery.entities,
+        "instanceUrl": instanceURL.absoluteString
+      ]
+    }
+
     guard let url = endpointURL(instanceURL, path: "api/states") else {
       return failure("HOME_ASSISTANT_URL_INVALID", "Die Home-Assistant-Adresse ist ungültig.")
     }
@@ -103,6 +115,7 @@ final class CanMyPhoneHomeAssistantBridge {
     do {
       var request = URLRequest(url: url)
       request.httpMethod = "GET"
+      request.timeoutInterval = 15
       request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
       request.setValue("application/json", forHTTPHeaderField: "Accept")
       let (data, response) = try await URLSession.shared.data(for: request)
@@ -115,10 +128,115 @@ final class CanMyPhoneHomeAssistantBridge {
       guard let states = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
         return failure("HOME_ASSISTANT_INVALID_STATES", "Home Assistant hat ungültige Gerätedaten geliefert.")
       }
-      return ["success": true, "states": states, "instanceUrl": instanceURL.absoluteString]
+      return [
+        "success": true,
+        "states": states,
+        "areas": [],
+        "devices": [],
+        "entities": [],
+        "instanceUrl": instanceURL.absoluteString,
+        "discoveryFallback": true
+      ]
     } catch {
       return failure("HOME_ASSISTANT_NETWORK_ERROR", "Home Assistant ist momentan nicht erreichbar.")
     }
+  }
+
+  private func webSocketDiscoverySnapshot(
+    instanceURL: URL,
+    accessToken: String
+  ) async throws -> (states: [[String: Any]], areas: [[String: Any]], devices: [[String: Any]], entities: [[String: Any]]) {
+    guard let socketURL = homeAssistantWebSocketURL(instanceURL) else {
+      throw NSError(domain: "CanMyPhoneHomeAssistant", code: 1)
+    }
+    var request = URLRequest(url: socketURL)
+    request.timeoutInterval = 15
+    let task = URLSession.shared.webSocketTask(with: request)
+    task.resume()
+    defer { task.cancel(with: .goingAway, reason: nil) }
+
+    let required = try await receiveWebSocketObject(task)
+    guard required["type"] as? String == "auth_required" else {
+      throw NSError(domain: "CanMyPhoneHomeAssistant", code: 2)
+    }
+    try await sendWebSocketObject(task, ["type": "auth", "access_token": accessToken])
+    let auth = try await receiveWebSocketObject(task)
+    guard auth["type"] as? String == "auth_ok" else {
+      throw NSError(domain: "CanMyPhoneHomeAssistant", code: 3)
+    }
+
+    let statesValue = try await webSocketCommand(task, id: 1, type: "get_states")
+    let areasValue = try await webSocketCommand(task, id: 2, type: "config/area_registry/list")
+    let devicesValue = try await webSocketCommand(task, id: 3, type: "config/device_registry/list")
+    let entitiesValue = try await webSocketCommand(task, id: 4, type: "config/entity_registry/list_for_display")
+
+    guard
+      let states = statesValue as? [[String: Any]],
+      let areas = areasValue as? [[String: Any]],
+      let devices = devicesValue as? [[String: Any]],
+      let entityRoot = entitiesValue as? [String: Any],
+      let entities = entityRoot["entities"] as? [[String: Any]]
+    else {
+      throw NSError(domain: "CanMyPhoneHomeAssistant", code: 4)
+    }
+    return (states, areas, devices, entities)
+  }
+
+  private func homeAssistantWebSocketURL(_ base: URL) -> URL? {
+    guard var components = URLComponents(url: base, resolvingAgainstBaseURL: false) else { return nil }
+    components.scheme = base.scheme?.lowercased() == "https" ? "wss" : "ws"
+    var path = components.path
+    while path.count > 1 && path.hasSuffix("/") { path.removeLast() }
+    if path == "/" { path = "" }
+    components.path = path + "/api/websocket"
+    components.query = nil
+    components.fragment = nil
+    return components.url
+  }
+
+  private func sendWebSocketObject(_ task: URLSessionWebSocketTask, _ object: [String: Any]) async throws {
+    guard JSONSerialization.isValidJSONObject(object) else {
+      throw NSError(domain: "CanMyPhoneHomeAssistant", code: 5)
+    }
+    let data = try JSONSerialization.data(withJSONObject: object)
+    guard let text = String(data: data, encoding: .utf8) else {
+      throw NSError(domain: "CanMyPhoneHomeAssistant", code: 6)
+    }
+    try await task.send(.string(text))
+  }
+
+  private func receiveWebSocketObject(_ task: URLSessionWebSocketTask) async throws -> [String: Any] {
+    let message = try await task.receive()
+    let data: Data
+    switch message {
+    case .string(let text):
+      guard let value = text.data(using: .utf8) else {
+        throw NSError(domain: "CanMyPhoneHomeAssistant", code: 7)
+      }
+      data = value
+    case .data(let value):
+      data = value
+    @unknown default:
+      throw NSError(domain: "CanMyPhoneHomeAssistant", code: 8)
+    }
+    guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+      throw NSError(domain: "CanMyPhoneHomeAssistant", code: 9)
+    }
+    return object
+  }
+
+  private func webSocketCommand(_ task: URLSessionWebSocketTask, id: Int, type: String) async throws -> Any {
+    try await sendWebSocketObject(task, ["id": id, "type": type])
+    let response = try await receiveWebSocketObject(task)
+    guard
+      response["type"] as? String == "result",
+      response["id"] as? Int == id,
+      response["success"] as? Bool == true,
+      let result = response["result"]
+    else {
+      throw NSError(domain: "CanMyPhoneHomeAssistant", code: 10)
+    }
+    return result
   }
 
   func execute(capability: String, entityID: String, parametersJSON: String) async -> [String: Any] {
