@@ -1178,6 +1178,18 @@ export default function App() {
 
     const profile = await removeConnectorConnection(providerId);
     setConnectorConnections(profile);
+
+    const connected = connectedProviderIds(profile);
+    const currentAutomations = await automationRepository.list();
+    for (const item of currentAutomations) {
+      if (!item.enabled) continue;
+      const plan = connectorPlanForDefinition(item.definition, connected);
+      if (!plan.ready) {
+        await automationRepository.save({ ...item, enabled:false, materializationState:"DISABLED" });
+      }
+    }
+
+    setAutomations(await automationRepository.list());
     await refreshConnectedDeviceInventory().catch(() => undefined);
     setActionResult({ handled:true, succeeded:confirmed, message:detail });
   };
