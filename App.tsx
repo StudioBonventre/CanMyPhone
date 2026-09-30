@@ -27,7 +27,7 @@ import { buildAppleIntelligenceAutomationDescription } from "./src/automation/ap
 import { compileAutomationRuntime } from "./src/automation/engine";
 import { approveSensitiveAutomation, homekitInstallationFingerprint, materializeShortcutDefinition, type StoredAutomation } from "./src/automation/materialization";
 import { automationRepository, syncNativeRunnerResults } from "./src/automation/automationRepository";
-import { loadConnectorConnections, saveConnectorConnection } from "./src/automation/connectorConnectionRepository";
+import { loadConnectorConnections, removeConnectorConnection, saveConnectorConnection } from "./src/automation/connectorConnectionRepository";
 import { connectorRegistryRepository, refreshConnectorRegistry, refreshConnectedDeviceInventory } from "./src/lib/connectorRegistryService";
 import { connectorPlanForDefinition } from "./src/automation/connectorPlanning";
 import { connectorRegistry } from "./src/automation/builtinConnectorManifests";
@@ -1142,6 +1142,46 @@ export default function App() {
     setConnectorConnections(profile);
   };
 
+  const disconnectProvider = async (providerId: string) => {
+    let confirmed = true;
+    let detail = "";
+
+    if (providerId === "tesla") {
+      const service = getTeslaConnectorService();
+      const backend = service ? await service.disconnect().catch(() => ({ ok:false as const, code:"TESLA_DISCONNECT_FAILED", message:"Der Tesla-Backend-Zugriff konnte nicht bestätigt entfernt werden." })) : null;
+      const native = await CanMyPhoneNative?.clearTeslaExecutionGrant?.().catch(() => null);
+      confirmed = Boolean(native?.success) && (backend === null || backend.ok === true);
+      detail = backend === null
+        ? "Der lokale Tesla-Hintergrundzugang wurde entfernt. Der Backend-Zugriff konnte in diesem Build nicht zusätzlich widerrufen werden."
+        : confirmed
+          ? "Tesla wurde getrennt und der sichere Hintergrundzugang entfernt."
+          : backend.ok === false ? backend.message : "Der Tesla-Hintergrundzugang konnte nicht vollständig entfernt werden.";
+    } else if (providerId === "home-assistant") {
+      const result = await CanMyPhoneNative?.homeAssistantDisconnect?.().catch(() => null);
+      confirmed = result?.success === true;
+      detail = result?.message ?? "Die Home-Assistant-Verbindung konnte nicht entfernt werden.";
+    } else if (providerId === "homematic-ip") {
+      const result = await CanMyPhoneNative?.homematicDisconnect?.().catch(() => null);
+      confirmed = result?.success === true;
+      detail = result?.message ?? "Die Homematic-Verbindung konnte nicht entfernt werden.";
+    } else if (providerId === "apple-home") {
+      detail = "Apple Home wurde aus CanMyPhone getrennt. Die iOS-Home-Berechtigung bleibt in den Systemeinstellungen verwaltet.";
+    } else {
+      confirmed = false;
+      detail = "Dieser Connector kann noch nicht sicher getrennt werden.";
+    }
+
+    if (!confirmed && providerId !== "tesla") {
+      setActionResult({ handled:true, succeeded:false, message:detail });
+      return;
+    }
+
+    const profile = await removeConnectorConnection(providerId);
+    setConnectorConnections(profile);
+    await refreshConnectedDeviceInventory().catch(() => undefined);
+    setActionResult({ handled:true, succeeded:confirmed, message:detail });
+  };
+
   useEffect(() => {
     refreshTeslaConnection().catch(() => undefined);
     refreshHomeAssistantConnection().catch(() => undefined);
@@ -1592,7 +1632,7 @@ export default function App() {
                   await automationRepository.save(updated);setAutomations(await automationRepository.list());trackProductEvent(updated.enabled?"automation_enabled":"automation_disabled",{});
                 })().catch(()=>setActionResult({handled:true,succeeded:false,message:"Der Status der Automation konnte nicht geändert werden."}));}} onDelete={(id)=>automationRepository.remove(id).then(async()=>setAutomations(await automationRepository.list())).catch(()=>setActionResult({handled:true,succeeded:false,message:"Die Automation konnte nicht entfernt werden."}))} />
 
-                <ConnectorSettingsCard profile={connectorConnections} onConnect={(providerId,input)=>connectProvider(providerId,input).catch(()=>undefined)} />
+                <ConnectorSettingsCard profile={connectorConnections} onConnect={(providerId,input)=>connectProvider(providerId,input).catch(()=>undefined)} onDisconnect={(providerId)=>disconnectProvider(providerId).catch(()=>undefined)} />
 
                 <ContentSurface emphasis="active" style={styles.youCard}>
                   <View style={styles.youRow}>
