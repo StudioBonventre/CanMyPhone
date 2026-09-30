@@ -1176,19 +1176,29 @@ export default function App() {
       return;
     }
 
-    const profile = await removeConnectorConnection(providerId);
-    setConnectorConnections(profile);
-
-    const connected = connectedProviderIds(profile);
-    const currentAutomations = await automationRepository.list();
-    for (const item of currentAutomations) {
-      if (!item.enabled) continue;
-      const plan = connectorPlanForDefinition(item.definition, connected);
-      if (!plan.ready) {
-        await automationRepository.save({ ...item, enabled:false, materializationState:"DISABLED" });
+    const remainingConnected = new Set(
+      [...connectedProviderIds(connectorConnections)].filter((id) => id !== providerId)
+    );
+    try {
+      const currentAutomations = await automationRepository.list();
+      for (const item of currentAutomations) {
+        if (!item.enabled) continue;
+        const plan = connectorPlanForDefinition(item.definition, remainingConnected);
+        if (!plan.ready) {
+          await automationRepository.save({ ...item, enabled:false, materializationState:"DISABLED" });
+        }
       }
+    } catch {
+      setActionResult({
+        handled:true,
+        succeeded:false,
+        message:"Die Verbindung wurde noch nicht als getrennt gespeichert, weil mindestens eine aktive Automation nicht sicher deaktiviert werden konnte."
+      });
+      return;
     }
 
+    const profile = await removeConnectorConnection(providerId);
+    setConnectorConnections(profile);
     setAutomations(await automationRepository.list());
     await refreshConnectedDeviceInventory().catch(() => undefined);
     setActionResult({ handled:true, succeeded:confirmed, message:detail });
