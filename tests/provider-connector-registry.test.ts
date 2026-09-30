@@ -206,7 +206,7 @@ test("discovery cannot replace a shipped READY connector", () => {
 
 
 test("connector discovery client excludes household details from cloud research", async () => {
-  let body: Record<string, unknown> | null = null;
+  let body: Record<string, unknown> = {};
   const candidate = researchedCandidate();
   const client = createConnectorDiscoveryServerClient({
     supabaseUrl: "https://example.supabase.co",
@@ -234,6 +234,6 @@ test("connector discovery client excludes household details from cloud research"
   assert.ok(result);
   assert.equal(body?.providerName, "SwitchBot");
   assert.deepEqual(body?.requestedCapabilities, ["switch.power.set"]);
-  assert.equal("deviceHints" in (body ?? {}), false);
-  assert.equal("room" in (body ?? {}), false);
+  assert.equal("deviceHints" in body, false);
+  assert.equal("room" in body, false);
 });
