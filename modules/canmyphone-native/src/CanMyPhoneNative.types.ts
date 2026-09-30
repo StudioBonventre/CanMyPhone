@@ -76,6 +76,10 @@ export type HomeAssistantActionResult = {
   state?: string;
   expiresAt?: number;
   states?: Array<Record<string, unknown>>;
+  areas?: Array<Record<string, unknown>>;
+  devices?: Array<Record<string, unknown>>;
+  entities?: Array<Record<string, unknown>>;
+  discoveryFallback?: boolean;
   confirmed?: boolean;
   message?: string;
 };
