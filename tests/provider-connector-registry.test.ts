@@ -4,6 +4,7 @@ import { ProviderConnectorRegistry, deviceSupportsOperation, type ProviderConnec
 import { ConnectorRuntime } from "../src/automation/connectorRuntime";
 import { resolveDeviceCapability } from "../src/automation/capabilityResolver";
 import { acceptDiscoveryResult, discoverConnectorPath, DISCOVERY_SEEDS, validateDiscoveryResult, type ConnectorDiscoveryResult } from "../src/automation/connectorDiscovery";
+import { createConnectorDiscoveryServerClient } from "../src/automation/connectorDiscoveryServerClient";
 
 test("unknown manufacturer is a non-executable legal-review candidate", async () => {
   assert.throws(() => new ConnectorRuntime([{ providerId: "xyz", execute: async () => ({ ok: true, confirmed: true, providerId: "xyz" }) }]), /MANIFEST_REQUIRED/);
@@ -201,4 +202,38 @@ test("discovery cannot replace a shipped READY connector", () => {
     candidateManifest: { ...researchedCandidate("xyz").candidateManifest, displayName: "XYZ candidate" }
   }, registry), /DISCOVERY_CANNOT_REPLACE_READY/);
   assert.equal(registry.getProvider("xyz")?.lifecycle, "READY");
+});
+
+
+test("connector discovery client excludes household details from cloud research", async () => {
+  let body: Record<string, unknown> | null = null;
+  const candidate = researchedCandidate();
+  const client = createConnectorDiscoveryServerClient({
+    supabaseUrl: "https://example.supabase.co",
+    publishableKey: "publishable",
+    getAccessToken: async () => "session-token",
+    fetcher: async (_input, init) => {
+      body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+      return new Response(JSON.stringify({ ok: true, ...candidate }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+  });
+
+  const result = await client.discover({
+    providerName: "SwitchBot",
+    providerHints: ["SwitchBot"],
+    requestedCapabilities: ["switch.power.set"],
+    deviceHints: ["Gas Wohnzimmer Schalter"],
+    locale: "de",
+    region: "DE",
+    room: "Privates Wohnzimmer"
+  });
+
+  assert.ok(result);
+  assert.equal(body?.providerName, "SwitchBot");
+  assert.deepEqual(body?.requestedCapabilities, ["switch.power.set"]);
+  assert.equal("deviceHints" in (body ?? {}), false);
+  assert.equal("room" in (body ?? {}), false);
 });
