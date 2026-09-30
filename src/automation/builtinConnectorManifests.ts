@@ -34,7 +34,7 @@ export const BUILTIN_CONNECTOR_MANIFESTS: readonly ProviderConnectorManifest[] =
     triggers: ["sensor.motion.changed", "sensor.contact.changed", "trigger.homekit-characteristic", "trigger.homekit-time"], eventInstallationSupported: true,
     actions: [...smartHome.map(id => operation(id, true)), { capabilityId: "smart-home.scene.run", inputSchema: { scene: "string", home: { type: "string", required: false } }, resultSchema: { ok: "boolean", confirmed: "boolean", providerId: "string" }, risk: "MEDIUM", confirmationRequired: false }] },
   builtin("matter", "Matter", "MATTER", smartHome, ["matter"], false, "ECOSYSTEM"),
-  { ...builtin("home-assistant", "Home Assistant", "LOCAL_REST", ["light.power.set", "light.brightness.set", "light.color-temperature.set", "switch.power.set", "cover.open", "cover.close", "cover.position.set", "climate.temperature.set", "climate.mode.set", "lock.lock", "lock.unlock", "media.play", "media.pause", "media.volume.set"], ["home assistant", "hass"], false, "ECOSYSTEM"),
+  { ...builtin("home-assistant", "Home Assistant", "LOCAL_REST", ["light.power.set", "light.brightness.set", "light.color-temperature.set", "switch.power.set", "cover.open", "cover.close", "cover.position.set", "climate.temperature.set", "climate.mode.set", "lock.lock", "lock.unlock", "media.play", "media.pause", "media.volume.set"], ["home assistant", "hass"], true, "ECOSYSTEM"),
     authentication: "oauth2-indieauth",
     discovery: "HOME_ASSISTANT_REGISTRIES",
     actions: ["light.power.set", "light.brightness.set", "light.color-temperature.set", "switch.power.set", "cover.open", "cover.close", "cover.position.set", "climate.temperature.set", "climate.mode.set", "lock.lock", "lock.unlock", "media.play", "media.pause", "media.volume.set"].map(id => operation(id, false)),
@@ -56,6 +56,6 @@ export const BUILTIN_CONNECTOR_MANIFESTS: readonly ProviderConnectorManifest[] =
   builtin("tuya", "Tuya / Smart Life", "CLOUD_REST", smartHome, ["tuya", "smart life"], false, "ECOSYSTEM")
 ];
 export function createDefaultConnectorRegistry(): ProviderConnectorRegistry {
-  return new ProviderConnectorRegistry([...BUILTIN_CONNECTOR_MANIFESTS], new Set(["tesla", "homematic-ip", "apple-home"]), BUILTIN_CONNECTOR_MANIFESTS);
+  return new ProviderConnectorRegistry([...BUILTIN_CONNECTOR_MANIFESTS], new Set(["tesla", "homematic-ip", "apple-home", "home-assistant"]), BUILTIN_CONNECTOR_MANIFESTS);
 }
 export const connectorRegistry = createDefaultConnectorRegistry();
