@@ -8,10 +8,8 @@ type Input = {
   providerName?: unknown;
   providerHints?: unknown;
   requestedCapabilities?: unknown;
-  deviceHints?: unknown;
   locale?: unknown;
   region?: unknown;
-  room?: unknown;
 };
 
 type Research = {
@@ -128,10 +126,8 @@ async function research(input: {
   providerName: string;
   providerHints: string[];
   requestedCapabilities: string[];
-  deviceHints: string[];
   locale: string;
   region?: string;
-  room?: string;
 }, signal: AbortSignal): Promise<{ research: Research; sources: string[] }> {
   const key = Deno.env.get("OPENAI_API_KEY");
   if (!key) throw new Error("missing_ai_secret");
@@ -170,10 +166,8 @@ async function research(input: {
             providerName: input.providerName,
             providerHints: input.providerHints,
             requestedCapabilities: capabilities,
-            deviceHints: input.deviceHints,
             locale: input.locale,
             region: input.region ?? null,
-            room: input.room ?? null,
             universalCapabilityDefinitions: UNIVERSAL_CAPABILITIES.filter(cap => capabilities.includes(cap.id))
           })
         }
@@ -209,10 +203,8 @@ Deno.serve(async request => {
   const requestedCapabilities = safeStringArray(raw?.requestedCapabilities, 20)
     ? [...new Set(raw.requestedCapabilities)].filter(id => Boolean(universalCapability(id)))
     : [];
-  const deviceHints = safeStringArray(raw?.deviceHints, 20) ? raw.deviceHints.map(v => v.trim()).filter(Boolean) : [];
   const locale = typeof raw?.locale === "string" ? raw.locale.slice(0, 10) : "de";
   const region = typeof raw?.region === "string" && raw.region.length <= 80 ? raw.region : undefined;
-  const room = typeof raw?.room === "string" && raw.room.length <= 120 ? raw.room : undefined;
 
   if (!providerName || providerName.length > 160 || requestedCapabilities.length === 0) {
     return json({ ok: false, code: "invalid_request" }, 400);
@@ -221,7 +213,7 @@ Deno.serve(async request => {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const found = await research({ providerName, providerHints, requestedCapabilities, deviceHints, locale, region, room }, controller.signal);
+    const found = await research({ providerName, providerHints, requestedCapabilities, locale, region }, controller.signal);
     const supported = found.research.supportedCapabilities.filter(id => requestedCapabilities.includes(id) && Boolean(universalCapability(id)));
     const now = new Date().toISOString();
     const sources = found.sources.map(url => ({
