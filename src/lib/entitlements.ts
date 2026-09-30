@@ -19,6 +19,17 @@ export function automaticActionAccess(state: EntitlementState): AutomaticActionA
   return { allowed: false, costCredits: 1, reason: "locked" };
 }
 
+export function proFeatureAccess(state: EntitlementState): boolean {
+  return state.pro;
+}
+
+export type AutomationTier = "basic-plan" | "single-step" | "advanced-multi-step" | "third-party" | "proactive-suggestions";
+
+export function automationTierAccess(state: EntitlementState, tier: AutomationTier): boolean {
+  if (tier === "basic-plan" || tier === "single-step") return true;
+  return state.pro;
+}
+
 /** Only call after an automatic action actually succeeds. */
 export function consumeAutomaticAction(state: EntitlementState): EntitlementState {
   const access = automaticActionAccess(state);

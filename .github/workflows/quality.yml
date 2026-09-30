@@ -1,5 +1,9 @@
 name: CanMyPhone Quality
 
+concurrency:
+  group: canmyphone-quality-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 on:
   pull_request:
     branches: [main]
@@ -19,6 +23,11 @@ jobs:
         with:
           node-version: 24
 
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
       - name: Install dependencies
         run: npm install
 
@@ -30,3 +39,50 @@ jobs:
 
       - name: Expo doctor
         run: npx expo-doctor
+
+      - name: Edge Function typecheck
+        run: |
+          deno check supabase/functions/plan-automation/index.ts
+          deno check supabase/functions/interpret-automation/index.ts
+          deno check supabase/functions/tesla-connector/index.ts
+          deno check supabase/functions/discover-connector/index.ts
+
+
+  ios-native-compile:
+    runs-on: macos-26
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Select Xcode 26.6
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
+          xcodebuild -version
+          swift --version
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Generate native iOS project
+        run: npx expo prebuild --platform ios --clean --no-install
+
+      - name: Install CocoaPods
+        run: cd ios && pod install
+
+      - name: Compile iOS simulator build
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -workspace ios/CanMyPhone.xcworkspace \
+            -scheme CanMyPhone \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            build

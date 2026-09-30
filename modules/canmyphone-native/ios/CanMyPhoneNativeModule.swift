@@ -4,6 +4,8 @@ import UIKit
 import UserNotifications
 import AVFoundation
 import Photos
+import StoreKit
+import AppIntents
 
 #if canImport(FoundationModels)
 import FoundationModels
@@ -12,6 +14,14 @@ import FoundationModels
 public final class CanMyPhoneNativeModule: Module {
   public func definition() -> ModuleDefinition {
     Name("CanMyPhoneNative")
+
+    OnCreate {
+      CanMyPhoneLocationAutomationMonitor.shared.start()
+      _ = CanMyPhoneLocationAutomationMonitor.shared.syncAutomations()
+      if #available(iOS 16.0, *) {
+        CanMyPhoneAppShortcuts.updateAppShortcutParameters()
+      }
+    }
 
     AsyncFunction("foundationModelStatus") { () async -> [String: Any] in
       #if canImport(FoundationModels)
@@ -70,6 +80,255 @@ public final class CanMyPhoneNativeModule: Module {
       return await self.requestPermission(kind: kind)
     }
 
+    AsyncFunction("locationAuthorizationStatus") { () -> [String: Any] in
+      return CanMyPhoneLocationAutomationMonitor.shared.authorizationSnapshot()
+    }
+
+    AsyncFunction("requestLocationAutomationPermission") { () -> [String: Any] in
+      return CanMyPhoneLocationAutomationMonitor.shared.requestAlwaysAuthorization()
+    }
+
+    AsyncFunction("saveCurrentLocationAs") { (name: String, radius: Double) async -> [String: Any] in
+      return await CanMyPhoneLocationAutomationMonitor.shared.saveCurrentLocation(name: name, radius: radius)
+    }
+
+    AsyncFunction("namedLocationsSnapshot") { () -> [[String: Any]] in
+      return CanMyPhoneLocationAutomationMonitor.shared.namedLocationsSnapshot()
+    }
+
+    AsyncFunction("syncLocationAutomations") { () -> [String: Any] in
+      return CanMyPhoneLocationAutomationMonitor.shared.syncAutomations()
+    }
+
+    AsyncFunction("homeKitSnapshot") { () async -> [String: Any] in
+      return await CanMyPhoneHomeKitBridge.shared.snapshot()
+    }
+
+    AsyncFunction("installHomeKitCharacteristicAutomation") { (id: String, fingerprint: String, name: String, home: String, sensorName: String, sensorType: String, sensorValue: Bool, room: String, lightValue: String) async -> [String: Any] in
+      return await CanMyPhoneHomeKitBridge.shared.installCharacteristicAutomation(id: id, fingerprint: fingerprint, name: name, homeName: home, sensorName: sensorName, sensorType: sensorType, sensorValue: sensorValue, room: room, lightValue: lightValue)
+    }
+
+    AsyncFunction("installHomeKitDailyLightAutomation") { (id: String, fingerprint: String, name: String, home: String, time: String, room: String, lightValue: String) async -> [String: Any] in
+      return await CanMyPhoneHomeKitBridge.shared.installDailyLightAutomation(id: id, fingerprint: fingerprint, name: name, homeName: home, time: time, room: room, lightValue: lightValue)
+    }
+
+    AsyncFunction("removeHomeKitAutomation") { (id: String) async -> [String: Any] in
+      return await CanMyPhoneHomeKitBridge.shared.removeAutomation(id: id)
+    }
+    AsyncFunction("installRegistryHomeKitAutomation") { (json: String) async -> [String: Any] in
+      guard let data = json.data(using: .utf8), let p = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        let id = p["id"] as? String, let fingerprint = p["fingerprint"] as? String, let name = p["name"] as? String,
+        let trigger = p["trigger"] as? String, let operation = p["operation"] as? String,
+        ["light.power.set", "light.brightness.set"].contains(operation),
+        let room = p["room"] as? String, let value = p["lightValue"] as? String,
+        CanMyPhoneConnectorRegistryPolicy.allows(providerHint: "apple-home", capability: operation)
+      else { return ["success": false, "code": "CONNECTOR_NOT_READY", "message": "Der HomeKit-Ausführungsweg ist nicht freigegeben."] }
+      if trigger == "trigger.homekit-time", let time = p["time"] as? String {
+        return await CanMyPhoneHomeKitBridge.shared.installDailyLightAutomation(id: id, fingerprint: fingerprint, name: name, homeName: p["home"] as? String ?? "", time: time, room: room, lightValue: value, device: p["device"] as? String)
+      }
+      guard let sensor = p["sensor"] as? String, let type = p["sensorType"] as? String, ["motion", "contact"].contains(type), let sensorValue = p["value"] as? Bool else { return ["success": false, "code": "INVALID_SENSOR", "message": "Der Sensor ist nicht eindeutig festgelegt."] }
+      return await CanMyPhoneHomeKitBridge.shared.installCharacteristicAutomation(id: id, fingerprint: fingerprint, name: name, homeName: p["home"] as? String ?? "", sensorName: sensor, sensorType: type, sensorValue: sensorValue, room: room, lightValue: value, device: p["device"] as? String)
+    }
+
+    AsyncFunction("homeKitSetCover") { (room: String, device: String?, position: Int) async -> [String: Any] in
+      return await CanMyPhoneHomeKitBridge.shared.setCover(room: room, device: device, position: position)
+    }
+
+    AsyncFunction("homeKitSetLight") { (room: String, device: String?, value: String) async -> [String: Any] in
+      return await CanMyPhoneHomeKitBridge.shared.setLight(room: room, device: device, value: value)
+    }
+
+    AsyncFunction("homeKitSetClimate") { (room: String, device: String?, value: String) async -> [String: Any] in
+      return await CanMyPhoneHomeKitBridge.shared.setClimate(room: room, device: device, value: value)
+    }
+
+    AsyncFunction("homematicPair") { (lastFourSGTIN: String, activationKey: String) async -> [String: Any] in
+      return await CanMyPhoneHomematicBridge.shared.pair(lastFourSGTIN: lastFourSGTIN, activationKey: activationKey)
+    }
+
+    AsyncFunction("homematicSnapshot") { () async -> [String: Any] in
+      return await CanMyPhoneHomematicBridge.shared.snapshot()
+    }
+
+    AsyncFunction("homematicExecute") { (path: String, bodyJSON: String) async -> [String: Any] in
+      return await CanMyPhoneHomematicBridge.shared.execute(path: path, bodyJSON: bodyJSON)
+    }
+
+    AsyncFunction("homematicDisconnect") { () -> [String: Any] in
+      return CanMyPhoneHomematicBridge.shared.disconnect()
+    }
+
+    AsyncFunction("homeAssistantStatus") { () -> [String: Any] in
+      return CanMyPhoneHomeAssistantBridge.shared.status()
+    }
+
+    AsyncFunction("homeAssistantBeginOAuth") { (instanceUrl: String, clientId: String, redirectUri: String) -> [String: Any] in
+      return CanMyPhoneHomeAssistantBridge.shared.beginOAuth(instanceURL: instanceUrl, clientID: clientId, redirectURI: redirectUri)
+    }
+
+    AsyncFunction("homeAssistantCompleteOAuth") { (callbackUrl: String) async -> [String: Any] in
+      return await CanMyPhoneHomeAssistantBridge.shared.completeOAuth(callbackURL: callbackUrl)
+    }
+
+    AsyncFunction("homeAssistantSnapshot") { () async -> [String: Any] in
+      return await CanMyPhoneHomeAssistantBridge.shared.snapshot()
+    }
+
+    AsyncFunction("homeAssistantExecute") { (capability: String, entityId: String, parametersJson: String) async -> [String: Any] in
+      return await CanMyPhoneHomeAssistantBridge.shared.execute(capability: capability, entityID: entityId, parametersJSON: parametersJson)
+    }
+
+    AsyncFunction("homeAssistantDisconnect") { () async -> [String: Any] in
+      return await CanMyPhoneHomeAssistantBridge.shared.disconnect()
+    }
+
+    AsyncFunction("configureTeslaExecutionGrant") { (endpoint: String, token: String) -> [String: Any] in
+      return CanMyPhoneTeslaBridge.shared.configure(endpoint: endpoint, token: token)
+    }
+
+    AsyncFunction("clearTeslaExecutionGrant") { () -> [String: Any] in
+      return CanMyPhoneTeslaBridge.shared.clear()
+    }
+
+    AsyncFunction("setBrightness") { (level: Double) async -> [String: Any] in
+      guard level.isFinite, (0.0...1.0).contains(level) else {
+        return [
+          "success": false,
+          "requested": level,
+          "applied": -1.0,
+          "message": "Bitte wähle eine Helligkeit zwischen 0 und 100 %."
+        ]
+      }
+
+      return await MainActor.run {
+        UIScreen.main.brightness = CGFloat(level)
+        let applied = Double(UIScreen.main.brightness)
+        return [
+          "success": abs(applied - level) < 0.02,
+          "requested": level,
+          "applied": applied,
+          "message": "Helligkeit auf \(Int(round(applied * 100))) % gestellt."
+        ]
+      }
+    }
+
+    AsyncFunction("setPremiumEntitlement") { (enabled: Bool) async -> Void in
+      UserDefaults.standard.set(enabled, forKey: "CanMyPhoneProEnabled")
+      CanMyPhoneAutomationStore.defaults?.set(enabled, forKey: "CanMyPhoneProEnabled")
+    }
+
+    AsyncFunction("storeProducts") { (productIDs: [String]) async throws -> [[String: Any]] in
+      guard #available(iOS 15.0, *) else { return [] }
+      let products = try await Product.products(for: productIDs)
+      return products.map { product in
+        var value: [String: Any] = [
+          "id": product.id,
+          "displayName": product.displayName,
+          "description": product.description,
+          "displayPrice": product.displayPrice,
+          "price": NSDecimalNumber(decimal: product.price).doubleValue,
+          "type": self.storeProductType(product.type)
+        ]
+
+        if let subscription = product.subscription {
+          value["subscriptionPeriodValue"] = subscription.subscriptionPeriod.value
+          value["subscriptionPeriodUnit"] = self.storeSubscriptionUnit(subscription.subscriptionPeriod.unit)
+        }
+
+        return value
+      }
+    }
+
+    AsyncFunction("purchaseProduct") { (productID: String) async -> [String: Any] in
+      guard #available(iOS 15.0, *) else {
+        return [
+          "status": "failed",
+          "productId": productID,
+          "message": "StoreKit 2 wird von diesem iOS-Build nicht unterstützt."
+        ]
+      }
+
+      do {
+        guard let product = try await Product.products(for: [productID]).first else {
+          return [
+            "status": "failed",
+            "productId": productID,
+            "message": "Dieses Produkt ist im App Store momentan nicht verfügbar."
+          ]
+        }
+
+        let purchaseResult = try await product.purchase()
+        switch purchaseResult {
+        case .success(let verification):
+          switch verification {
+          case .verified(let transaction):
+            await transaction.finish()
+            UserDefaults.standard.set(true, forKey: "CanMyPhoneProEnabled")
+            CanMyPhoneAutomationStore.defaults?.set(true, forKey: "CanMyPhoneProEnabled")
+            return [
+              "status": "purchased",
+              "productId": productID,
+              "message": "CanMyPhone Pro ist jetzt aktiv."
+            ]
+          case .unverified:
+            return [
+              "status": "failed",
+              "productId": productID,
+              "message": "Der Kauf konnte nicht sicher verifiziert werden."
+            ]
+          }
+        case .pending:
+          return [
+            "status": "pending",
+            "productId": productID,
+            "message": "Der Kauf wartet noch auf Bestätigung."
+          ]
+        case .userCancelled:
+          return [
+            "status": "cancelled",
+            "productId": productID,
+            "message": "Der Kauf wurde abgebrochen."
+          ]
+        @unknown default:
+          return [
+            "status": "failed",
+            "productId": productID,
+            "message": "Der App Store hat einen unbekannten Kaufstatus gemeldet."
+          ]
+        }
+      } catch {
+        return [
+          "status": "failed",
+          "productId": productID,
+          "message": "Der Kauf konnte gerade nicht abgeschlossen werden."
+        ]
+      }
+    }
+
+    AsyncFunction("currentStoreEntitlements") { (productIDs: [String]) async -> [String: Any] in
+      guard #available(iOS 15.0, *) else {
+        UserDefaults.standard.set(false, forKey: "CanMyPhoneProEnabled")
+        return ["pro": false, "activeProductIds": []]
+      }
+
+      let result = await self.storeEntitlementState(productIDs: productIDs)
+      UserDefaults.standard.set(result.pro, forKey: "CanMyPhoneProEnabled")
+      CanMyPhoneAutomationStore.defaults?.set(result.pro, forKey: "CanMyPhoneProEnabled")
+      return ["pro": result.pro, "activeProductIds": result.activeProductIDs]
+    }
+
+    AsyncFunction("restorePurchases") { (productIDs: [String]) async throws -> [String: Any] in
+      guard #available(iOS 15.0, *) else {
+        return ["pro": false, "activeProductIds": []]
+      }
+
+      try await AppStore.sync()
+      let result = await self.storeEntitlementState(productIDs: productIDs)
+      UserDefaults.standard.set(result.pro, forKey: "CanMyPhoneProEnabled")
+      CanMyPhoneAutomationStore.defaults?.set(result.pro, forKey: "CanMyPhoneProEnabled")
+      return ["pro": result.pro, "activeProductIds": result.activeProductIDs]
+    }
+
     AsyncFunction("openAppSettings") { () async -> Bool in
       guard let url = URL(string: UIApplication.openSettingsURLString) else { return false }
       return await self.open(url: url)
@@ -82,6 +341,71 @@ public final class CanMyPhoneNativeModule: Module {
       }
       guard let url = URL(string: UIApplication.openSettingsURLString) else { return false }
       return await self.open(url: url)
+    }
+
+    AsyncFunction("openShortcuts") { (destination: String) async -> Bool in
+      let urlString = destination == "create" ? "shortcuts://create-shortcut" : "shortcuts://"
+      guard let url = URL(string: urlString) else { return false }
+      return await self.open(url: url)
+    }
+
+    AsyncFunction("prepareShortcutDescription") { (description: String) async -> [String: Any] in
+      let trimmed = description.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !trimmed.isEmpty else {
+        return [
+          "opened": false,
+          "copied": false,
+          "message": "Die Kurzbefehle-Beschreibung ist leer."
+        ]
+      }
+
+      let copied = await MainActor.run { () -> Bool in
+        UIPasteboard.general.string = trimmed
+        return UIPasteboard.general.string == trimmed
+      }
+
+      guard let url = URL(string: "shortcuts://create-shortcut") else {
+        return [
+          "opened": false,
+          "copied": copied,
+          "message": "Der Kurzbefehle-Editor konnte nicht vorbereitet werden."
+        ]
+      }
+
+      let opened = await self.open(url: url)
+      return [
+        "opened": opened,
+        "copied": copied,
+        "message": opened
+          ? "Kurzbefehle wurde geöffnet. Die fertige Beschreibung liegt in der Zwischenablage."
+          : "Kurzbefehle konnte nicht geöffnet werden."
+      ]
+    }
+
+    AsyncFunction("syncAutomationDefinition") { (json: String) async -> Bool in
+      let saved = CanMyPhoneAutomationStore.save(json: json)
+      if saved, #available(iOS 16.0, *) {
+        CanMyPhoneAppShortcuts.updateAppShortcutParameters()
+      }
+      return saved
+    }
+
+    AsyncFunction("deleteAutomationDefinition") { (automationID: String) async -> Void in
+      CanMyPhoneAutomationStore.delete(id: automationID)
+      if #available(iOS 16.0, *) {
+        CanMyPhoneAppShortcuts.updateAppShortcutParameters()
+      }
+    }
+
+    AsyncFunction("runStoredAutomation") { (automationID: String) async -> [String: Any] in
+      return await CanMyPhoneAutomationRunner.run(id: automationID)
+    }
+
+    AsyncFunction("automationRunnerSnapshots") { () async -> String in
+      return CanMyPhoneAutomationStore.snapshotsJSON()
+    }
+    AsyncFunction("syncConnectorRegistry") { (json: String) -> Bool in
+      return CanMyPhoneConnectorRegistryPolicy.save(json: json)
     }
   }
 
@@ -206,6 +530,55 @@ public final class CanMyPhoneNativeModule: Module {
       return permissionResult(granted: false, status: "notDetermined", canOpenSettings: true, message: "CanMyPhone hat noch nicht nach Fotozugriff gefragt.")
     @unknown default:
       return permissionResult(granted: false, status: "restricted", canOpenSettings: true, message: "Der Fotozugriffsstatus ist unbekannt.")
+    }
+  }
+
+  @available(iOS 15.0, *)
+  private func storeEntitlementState(productIDs: [String]) async -> (pro: Bool, activeProductIDs: [String]) {
+    var active: [String] = []
+    let now = Date()
+
+    for await verification in Transaction.currentEntitlements {
+      guard case .verified(let transaction) = verification else { continue }
+      guard productIDs.contains(transaction.productID) else { continue }
+      guard transaction.revocationDate == nil else { continue }
+      guard transaction.isUpgraded == false else { continue }
+      if let expirationDate = transaction.expirationDate, expirationDate <= now { continue }
+      active.append(transaction.productID)
+    }
+
+    return (!active.isEmpty, Array(Set(active)).sorted())
+  }
+
+  @available(iOS 15.0, *)
+  private func storeProductType(_ type: Product.ProductType) -> String {
+    switch type {
+    case .consumable:
+      return "consumable"
+    case .nonConsumable:
+      return "non-consumable"
+    case .autoRenewable:
+      return "auto-renewable"
+    case .nonRenewable:
+      return "non-renewing"
+    default:
+      return "unknown"
+    }
+  }
+
+  @available(iOS 15.0, *)
+  private func storeSubscriptionUnit(_ unit: Product.SubscriptionPeriod.Unit) -> String {
+    switch unit {
+    case .day:
+      return "day"
+    case .week:
+      return "week"
+    case .month:
+      return "month"
+    case .year:
+      return "year"
+    @unknown default:
+      return "unknown"
     }
   }
 

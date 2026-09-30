@@ -9,7 +9,7 @@ export const actionSolutions: Solution[] = [
     id: "ios-set-brightness",
     platform: "ios",
     title: "Displayhelligkeit direkt einstellen",
-    summary: "CanMyPhone kann die Helligkeit seiner aktuellen iPhone-Sitzung über die öffentliche iOS-Helligkeits-API setzen.",
+    summary: "CanMyPhone kann die Displayhelligkeit direkt über die öffentliche iOS-Bildschirm-API setzen. iOS behält diesen Wert bis zum nächsten Sperren des Geräts bei.",
     aliases: [
       "helligkeit einstellen",
       "helligkeit auf",
@@ -26,7 +26,7 @@ export const actionSolutions: Solution[] = [
     intents: ["enable", "howto", "general"],
     steps: ["Wähle die gewünschte Helligkeit", "CanMyPhone setzt sie direkt"],
     sources: [
-      { label: "Expo Brightness — System brightness", url: "https://docs.expo.dev/versions/latest/sdk/brightness/" }
+      { label: "Apple Developer — UIScreen brightness", url: "https://developer.apple.com/documentation/uikit/uiscreen/brightness" }
     ]
   },
   {

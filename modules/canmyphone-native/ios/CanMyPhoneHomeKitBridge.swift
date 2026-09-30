@@ -1,0 +1,459 @@
+import Foundation
+import HomeKit
+
+@MainActor
+final class CanMyPhoneHomeKitBridge: NSObject, HMHomeManagerDelegate {
+  static let shared = CanMyPhoneHomeKitBridge()
+
+  private let manager: HMHomeManager
+  private var ready = false
+  private var waiters: [CheckedContinuation<Void, Never>] = []
+
+  private override init() {
+    manager = HMHomeManager()
+    super.init()
+    manager.delegate = self
+  }
+
+  func homeManagerDidUpdateHomes(_ manager: HMHomeManager) {
+    ready = true
+    let pending = waiters
+    waiters.removeAll()
+    pending.forEach { $0.resume() }
+  }
+
+  private func waitUntilReady() async {
+    if ready { return }
+    await withCheckedContinuation { continuation in
+      waiters.append(continuation)
+    }
+  }
+
+  func snapshot() async -> [String: Any] {
+    await waitUntilReady()
+    let status = manager.authorizationStatus
+    let authorized = status.contains(.authorized)
+    let determined = status.contains(.determined)
+    let restricted = status.contains(.restricted)
+
+    guard authorized else {
+      return [
+        "authorized": false,
+        "determined": determined,
+        "restricted": restricted,
+        "homes": [],
+        "message": determined
+          ? "Apple Home-Zugriff ist nicht erlaubt."
+          : "Bitte erlaube CanMyPhone den Zugriff auf Apple Home."
+      ]
+    }
+
+    let homes: [[String: Any]] = manager.homes.map { home in
+      let rooms: [[String: Any]] = home.rooms.map { room in
+        let accessories: [[String: Any]] = room.accessories.map { accessory in
+          let characteristicTypes = Set(
+            accessory.services.flatMap { service in
+              service.characteristics.map { $0.characteristicType }
+            }
+          )
+          let writableTypes = Set(accessory.services.flatMap { $0.characteristics }.filter { $0.properties.contains(HMCharacteristicPropertyWritable) }.map { $0.characteristicType })
+          let lightTypes = Set(accessory.services.filter { $0.serviceType == HMServiceTypeLightbulb }.flatMap { $0.characteristics }.filter { $0.properties.contains(HMCharacteristicPropertyWritable) }.map { $0.characteristicType })
+          let eventTypes = Set(accessory.services.flatMap { $0.characteristics }.filter { $0.properties.contains(HMCharacteristicPropertySupportsEventNotification) }.map { $0.characteristicType })
+          var capabilities: [String] = []
+          if lightTypes.contains(HMCharacteristicTypePowerState) { capabilities.append("light.power.set") }
+          if lightTypes.contains(HMCharacteristicTypeBrightness) { capabilities.append("light.brightness.set") }
+          if writableTypes.contains(HMCharacteristicTypeTargetPosition) { capabilities += ["cover.open", "cover.close"] }
+          if writableTypes.contains(HMCharacteristicTypeTargetTemperature) { capabilities.append("climate.temperature.set") }
+          if eventTypes.contains(HMCharacteristicTypeMotionDetected) { capabilities.append("sensor.motion.changed") }
+          if eventTypes.contains(HMCharacteristicTypeContactState) { capabilities.append("sensor.contact.changed") }
+          return [
+            "id": accessory.uniqueIdentifier.uuidString,
+            "name": accessory.name,
+            "reachable": accessory.isReachable,
+            "characteristics": Array(characteristicTypes).sorted(),
+            "capabilities": capabilities
+          ]
+        }
+        return [
+          "id": room.uniqueIdentifier.uuidString,
+          "name": room.name,
+          "accessories": accessories
+        ]
+      }
+      return [
+        "id": home.uniqueIdentifier.uuidString,
+        "name": home.name,
+        "primary": home.isPrimary,
+        "rooms": rooms
+      ]
+    }
+
+    return [
+      "authorized": true,
+      "determined": determined,
+      "restricted": restricted,
+      "homes": homes,
+      "message": "Apple Home ist verbunden."
+    ]
+  }
+
+  func runScene(scene: String, homeName: String?) async -> [String: Any] {
+    await waitUntilReady()
+    guard manager.authorizationStatus.contains(.authorized) else {
+      return failure("HOMEKIT_NOT_AUTHORIZED", "Apple Home-Zugriff ist nicht erlaubt.")
+    }
+
+    let cleanScene = scene.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !cleanScene.isEmpty else {
+      return failure("HOMEKIT_SCENE_REQUIRED", "Der Szenenname fehlt.")
+    }
+
+    let homes: [HMHome]
+    if let homeName, !homeName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      let query = homeName.trimmingCharacters(in: .whitespacesAndNewlines)
+      homes = manager.homes.filter {
+        $0.name.compare(query, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+      }
+    } else if let primary = manager.primaryHome {
+      homes = [primary]
+    } else {
+      homes = manager.homes
+    }
+
+    for home in homes {
+      if let actionSet = home.actionSets.first(where: {
+        $0.name.compare(cleanScene, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+      }) {
+        let success = await withCheckedContinuation { continuation in
+          home.executeActionSet(actionSet) { error in
+            continuation.resume(returning: error == nil)
+          }
+        }
+        return success
+          ? ["success": true, "message": "Szene „\(cleanScene)“ wurde ausgeführt."]
+          : failure("HOMEKIT_SCENE_FAILED", "Die Szene konnte nicht ausgeführt werden.")
+      }
+    }
+
+    return failure("HOMEKIT_SCENE_NOT_FOUND", "Die Apple-Home-Szene „\(cleanScene)“ wurde nicht gefunden.")
+  }
+
+  func installCharacteristicAutomation(id: String, fingerprint: String, name: String, homeName: String, sensorName: String, sensorType: String, sensorValue: Bool, room: String, lightValue: String, device: String? = nil) async -> [String: Any] {
+    await waitUntilReady()
+    guard manager.authorizationStatus.contains(.authorized) else { return failure("HOMEKIT_NOT_AUTHORIZED", "Apple Home-Zugriff ist nicht erlaubt.") }
+    let homes = homeName.isEmpty ? manager.homes : manager.homes.filter { $0.name.compare(homeName, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }
+    guard CanMyPhoneAutomationStore.validID(id), homes.count == 1, let home = homes.first else { return failure("HOMEKIT_HOME_AMBIGUOUS", "Wähle genau ein Apple-Home-Zuhause aus.") }
+    let triggerName = "CanMyPhone \(id)"
+    if home.triggers.contains(where: { $0.name == triggerName }) {
+      guard CanMyPhoneAutomationStore.defaults?.string(forKey: "CanMyPhoneHomeKitFingerprint.\(id)") == fingerprint else { return failure("HOMEKIT_DEFINITION_CHANGED", "Die Apple-Home-Automation wurde verändert und muss zuerst entfernt werden.") }
+      return ["success": true, "alreadyInstalled": true, "message": "Die Apple-Home-Automation ist bereits installiert."]
+    }
+    let sensorMatches=home.accessories.filter { $0.uniqueIdentifier.uuidString.caseInsensitiveCompare(sensorName) == .orderedSame || $0.name.compare(sensorName, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }
+    let characteristicType = sensorType == "contact" ? HMCharacteristicTypeContactState : sensorType == "motion" ? HMCharacteristicTypeMotionDetected : ""
+    guard sensorMatches.count == 1, let sensor = sensorMatches.first,
+          let observed = sensor.services.flatMap({ $0.characteristics }).first(where: { $0.characteristicType == characteristicType && $0.properties.contains(HMCharacteristicPropertySupportsEventNotification) }) else {
+      return failure("HOMEKIT_SENSOR_NOT_FOUND", "Der HomeKit-Sensor oder sein Ereignis wurde nicht gefunden.")
+    }
+    let normalized = lightValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    let percent = parsePercent(normalized)
+    let power: Bool? = ["on", "an", "ein"].contains(normalized) ? true : ["off", "aus"].contains(normalized) ? false : percent.map { $0 > 0 }
+    guard let power else { return failure("INVALID_LIGHT_VALUE", "Für Licht werden an, aus oder ein Prozentwert unterstützt.") }
+    let matchingRooms = home.rooms.filter { $0.name.compare(room, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }
+    guard matchingRooms.count == 1, let targetRoom = matchingRooms.first else { return failure("HOMEKIT_ROOM_AMBIGUOUS", "Wähle genau einen Apple-Home-Raum aus.") }
+    let targets = targetRoom.accessories.filter { accessory in
+      accessory.services.contains(where: { $0.serviceType == HMServiceTypeLightbulb }) &&
+        (device == nil || accessory.uniqueIdentifier.uuidString == device || accessory.name == device)
+    }
+    if device != nil && targets.count != 1 { return failure("HOMEKIT_DEVICE_AMBIGUOUS", "Das ausgewählte Gerät ist nicht eindeutig erreichbar.") }
+    if percent != nil && !targets.allSatisfy({ $0.services.flatMap { $0.characteristics }.contains(where: { $0.characteristicType == HMCharacteristicTypeBrightness && $0.properties.contains(HMCharacteristicPropertyWritable) }) }) { return failure("DEVICE_CAPABILITY_MISMATCH", "Das ausgewählte Licht unterstützt keine Helligkeitssteuerung.") }
+    let lights = targets.flatMap { $0.services.filter { $0.serviceType == HMServiceTypeLightbulb }.flatMap { $0.characteristics } }
+    let powerCharacteristics = lights.filter { $0.characteristicType == HMCharacteristicTypePowerState }
+    guard !powerCharacteristics.isEmpty else { return failure("HOMEKIT_TARGET_NOT_FOUND", "In diesem Raum wurde kein steuerbares Licht gefunden.") }
+    do {
+      let actionSet = try await home.addActionSet(named: "\(name.prefix(50)) [\(id)]")
+      do {
+        for characteristic in powerCharacteristics {
+          try await actionSet.addAction(HMCharacteristicWriteAction(characteristic: characteristic, targetValue: NSNumber(value: power)))
+        }
+        if let percent {
+          for characteristic in lights where characteristic.characteristicType == HMCharacteristicTypeBrightness {
+            try await actionSet.addAction(HMCharacteristicWriteAction(characteristic: characteristic, targetValue: NSNumber(value: percent)))
+          }
+        }
+        let event = HMCharacteristicEvent(characteristic: observed, triggerValue: NSNumber(value: sensorValue))
+        let trigger = HMEventTrigger(name: triggerName, events: [event], predicate: nil)
+        try await home.addTrigger(trigger)
+        do {
+          try await trigger.addActionSet(actionSet)
+          try await trigger.enable(true)
+          CanMyPhoneAutomationStore.defaults?.set(fingerprint, forKey: "CanMyPhoneHomeKitFingerprint.\(id)")
+          return ["success": true, "message": "Apple Home überwacht den Sensor und führt die Lichtaktion aus."]
+        } catch {
+          try? await home.removeTrigger(trigger)
+          throw error
+        }
+      } catch {
+        try? await home.removeActionSet(actionSet)
+        throw error
+      }
+    } catch {
+      return failure("HOMEKIT_INSTALL_FAILED", "Die Apple-Home-Automation konnte nicht installiert werden.")
+    }
+  }
+
+  func removeAutomation(id: String) async -> [String: Any] {
+    await waitUntilReady()
+    guard manager.authorizationStatus.contains(.authorized), CanMyPhoneAutomationStore.validID(id) else {
+      return failure("HOMEKIT_NOT_AUTHORIZED", "Apple Home-Zugriff fehlt.")
+    }
+    let triggerName = "CanMyPhone \(id)"
+    for home in manager.homes {
+      for trigger in home.triggers where trigger.name == triggerName {
+        do { try await home.removeTrigger(trigger) }
+        catch { return failure("HOMEKIT_REMOVE_FAILED", "Die Apple-Home-Automation konnte nicht entfernt werden.") }
+      }
+      for actionSet in home.actionSets where actionSet.name.hasSuffix("[\(id)]") {
+        try? await home.removeActionSet(actionSet)
+      }
+    }
+    CanMyPhoneAutomationStore.defaults?.removeObject(forKey: "CanMyPhoneHomeKitFingerprint.\(id)")
+    return ["success": true, "message": "Apple-Home-Automation entfernt."]
+  }
+
+  func installDailyLightAutomation(id: String, fingerprint: String, name: String, homeName: String, time: String, room: String, lightValue: String, device: String? = nil) async -> [String: Any] {
+    await waitUntilReady()
+    guard manager.authorizationStatus.contains(.authorized) else { return failure("HOMEKIT_NOT_AUTHORIZED", "Apple Home-Zugriff ist nicht erlaubt.") }
+    let homes = homeName.isEmpty ? manager.homes : manager.homes.filter { $0.name.compare(homeName, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }
+    guard CanMyPhoneAutomationStore.validID(id), homes.count == 1, let home = homes.first else { return failure("HOMEKIT_HOME_AMBIGUOUS", "Wähle genau ein Apple-Home-Zuhause aus.") }
+    let parts=time.split(separator: ":")
+    guard parts.count == 2, let hour=Int(parts[0]), let minute=Int(parts[1]), (0...23).contains(hour), (0...59).contains(minute) else { return failure("HOMEKIT_TIME_INVALID", "Die Uhrzeit muss im Format HH:MM vorliegen.") }
+    let triggerName="CanMyPhone \(id)"
+    if home.triggers.contains(where: { $0.name == triggerName }) {
+      guard CanMyPhoneAutomationStore.defaults?.string(forKey: "CanMyPhoneHomeKitFingerprint.\(id)") == fingerprint else { return failure("HOMEKIT_DEFINITION_CHANGED", "Die Apple-Home-Automation wurde verändert und muss zuerst entfernt werden.") }
+      return ["success": true, "alreadyInstalled": true, "message": "Die Apple-Home-Automation ist bereits installiert."]
+    }
+    let matchingRooms=home.rooms.filter { $0.name.compare(room, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame }
+    guard matchingRooms.count == 1, let targetRoom=matchingRooms.first else { return failure("HOMEKIT_ROOM_AMBIGUOUS", "Wähle genau einen Apple-Home-Raum aus.") }
+    let targets = targetRoom.accessories.filter { accessory in
+      accessory.services.contains(where: { $0.serviceType == HMServiceTypeLightbulb }) &&
+        (device == nil || accessory.uniqueIdentifier.uuidString == device || accessory.name == device)
+    }
+    if device != nil && targets.count != 1 { return failure("HOMEKIT_DEVICE_AMBIGUOUS", "Das ausgewählte Gerät ist nicht eindeutig erreichbar.") }
+    let lights=targets.flatMap { $0.services.filter { $0.serviceType == HMServiceTypeLightbulb }.flatMap { $0.characteristics } }
+    let powerCharacteristics=lights.filter { $0.characteristicType == HMCharacteristicTypePowerState }
+    guard !powerCharacteristics.isEmpty else { return failure("HOMEKIT_TARGET_NOT_FOUND", "In diesem Raum wurde kein steuerbares Licht gefunden.") }
+    let normalized=lightValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    let percent=parsePercent(normalized)
+    if percent != nil && !targets.allSatisfy({ $0.services.flatMap { $0.characteristics }.contains(where: { $0.characteristicType == HMCharacteristicTypeBrightness && $0.properties.contains(HMCharacteristicPropertyWritable) }) }) { return failure("DEVICE_CAPABILITY_MISMATCH", "Das ausgewählte Licht unterstützt keine Helligkeitssteuerung.") }
+    let power: Bool?=["on","an","ein"].contains(normalized) ? true : ["off","aus"].contains(normalized) ? false : percent.map { $0 > 0 }
+    guard let power else { return failure("INVALID_LIGHT_VALUE", "Für Licht werden an, aus oder ein Prozentwert unterstützt.") }
+    var calendar=Calendar.current
+    calendar.timeZone=TimeZone.current
+    guard let fireDate=calendar.nextDate(after: Date(), matching: DateComponents(hour: hour, minute: minute), matchingPolicy: .nextTime) else { return failure("HOMEKIT_TIME_INVALID", "Die nächste Ausführung konnte nicht berechnet werden.") }
+    do {
+      let actionSet=try await home.addActionSet(named: "\(name.prefix(50)) [\(id)]")
+      do {
+        for characteristic in powerCharacteristics {
+          try await actionSet.addAction(HMCharacteristicWriteAction(characteristic: characteristic, targetValue: NSNumber(value: power)))
+        }
+        if let percent {
+          for characteristic in lights where characteristic.characteristicType == HMCharacteristicTypeBrightness {
+            try await actionSet.addAction(HMCharacteristicWriteAction(characteristic: characteristic, targetValue: NSNumber(value: percent)))
+          }
+        }
+        let trigger=HMTimerTrigger(name: triggerName, fireDate: fireDate, recurrence: DateComponents(day: 1))
+        try await home.addTrigger(trigger)
+        do {
+          try await trigger.addActionSet(actionSet)
+          try await trigger.enable(true)
+          CanMyPhoneAutomationStore.defaults?.set(fingerprint, forKey: "CanMyPhoneHomeKitFingerprint.\(id)")
+          return ["success": true, "message": "Apple Home führt die Lichtaktion täglich um \(time) aus."]
+        } catch {
+          try? await home.removeTrigger(trigger)
+          throw error
+        }
+      } catch {
+        try? await home.removeActionSet(actionSet)
+        throw error
+      }
+    } catch {
+      return failure("HOMEKIT_INSTALL_FAILED", "Die Apple-Home-Zeitautomation konnte nicht installiert werden.")
+    }
+  }
+
+  func setCover(room: String, device: String?, position: Int) async -> [String: Any] {
+    await waitUntilReady()
+    guard manager.authorizationStatus.contains(.authorized) else {
+      return failure("HOMEKIT_NOT_AUTHORIZED", "Apple Home-Zugriff ist nicht erlaubt.")
+    }
+    guard (0...100).contains(position) else {
+      return failure("INVALID_POSITION", "Die Rollladenposition muss zwischen 0 und 100 liegen.")
+    }
+
+    let accessories = matchingAccessories(room: room, device: device)
+    let characteristics = accessories.flatMap { accessory in
+      accessory.services.flatMap { service in
+        service.characteristics.filter { $0.characteristicType == HMCharacteristicTypeTargetPosition }
+      }
+    }
+
+    guard !characteristics.isEmpty else {
+      return failure("HOMEKIT_TARGET_NOT_FOUND", "In diesem Raum wurde kein steuerbarer Rollladen gefunden.")
+    }
+
+    var succeeded = 0
+    for characteristic in characteristics {
+      if await write(characteristic, value: NSNumber(value: position)) {
+        succeeded += 1
+      }
+    }
+
+    guard succeeded > 0 else {
+      return failure("HOMEKIT_WRITE_FAILED", "Die Rollläden konnten nicht geändert werden.")
+    }
+    return [
+      "success": succeeded == characteristics.count,
+      "changed": succeeded,
+      "matched": characteristics.count,
+      "message": succeeded == characteristics.count
+        ? "Rollläden in \(room) wurden gesetzt."
+        : "\(succeeded) von \(characteristics.count) Rollläden wurden gesetzt."
+    ]
+  }
+
+  func setLight(room: String, device: String?, value: String) async -> [String: Any] {
+    await waitUntilReady()
+    guard manager.authorizationStatus.contains(.authorized) else {
+      return failure("HOMEKIT_NOT_AUTHORIZED", "Apple Home-Zugriff ist nicht erlaubt.")
+    }
+
+    let accessories = matchingAccessories(room: room, device: device).filter { $0.services.contains(where: { $0.serviceType == HMServiceTypeLightbulb }) }
+    guard !accessories.isEmpty else {
+      return failure("HOMEKIT_TARGET_NOT_FOUND", "In diesem Raum wurde kein passendes Licht gefunden.")
+    }
+
+    let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    let percent = parsePercent(normalized)
+    let requestedPower: Bool? = {
+      if ["on", "an", "ein", "true"].contains(normalized) { return true }
+      if ["off", "aus", "false"].contains(normalized) { return false }
+      if let percent { return percent > 0 }
+      return nil
+    }()
+
+    guard requestedPower != nil || percent != nil else {
+      return failure("INVALID_LIGHT_VALUE", "Für Licht werden an, aus oder ein Prozentwert unterstützt.")
+    }
+
+    guard device == nil || accessories.count == 1 else {
+      return failure("HOMEKIT_TARGET_AMBIGUOUS", "Wähle genau ein Licht aus.")
+    }
+    if percent != nil && !accessories.allSatisfy({ $0.services.flatMap { $0.characteristics }.contains(where: { $0.characteristicType == HMCharacteristicTypeBrightness && $0.properties.contains(HMCharacteristicPropertyWritable) }) }) {
+      return failure("DEVICE_CAPABILITY_MISMATCH", "Nicht alle ausgewählten Lichter unterstützen Helligkeitssteuerung.")
+    }
+
+    var writes = 0
+    var successes = 0
+    for accessory in accessories {
+      let chars = accessory.services.flatMap { $0.characteristics }
+      if let power = requestedPower {
+        for characteristic in chars where characteristic.characteristicType == HMCharacteristicTypePowerState {
+          writes += 1
+          if await write(characteristic, value: NSNumber(value: power)) { successes += 1 }
+        }
+      }
+      if let percent {
+        for characteristic in chars where characteristic.characteristicType == HMCharacteristicTypeBrightness {
+          writes += 1
+          if await write(characteristic, value: NSNumber(value: percent)) { successes += 1 }
+        }
+      }
+    }
+
+    guard writes > 0 else {
+      return failure("HOMEKIT_TARGET_NOT_FOUND", "In diesem Raum wurde kein steuerbares Licht gefunden.")
+    }
+    return [
+      "success": successes == writes,
+      "changed": successes,
+      "matched": writes,
+      "message": successes == writes ? "Licht in \(room) wurde gesetzt." : "Nicht alle Lichtwerte konnten gesetzt werden."
+    ]
+  }
+
+  func setClimate(room: String, device: String?, value: String) async -> [String: Any] {
+    await waitUntilReady()
+    guard manager.authorizationStatus.contains(.authorized) else {
+      return failure("HOMEKIT_NOT_AUTHORIZED", "Apple Home-Zugriff ist nicht erlaubt.")
+    }
+    guard let temperature = parseTemperature(value), (-20.0...50.0).contains(temperature) else {
+      return failure("INVALID_TEMPERATURE", "Die gewünschte Temperatur ist ungültig.")
+    }
+
+    let accessories = matchingAccessories(room: room, device: device)
+    let characteristics = accessories.flatMap { accessory in
+      accessory.services.flatMap { service in
+        service.characteristics.filter { $0.characteristicType == HMCharacteristicTypeTargetTemperature }
+      }
+    }
+    guard !characteristics.isEmpty else {
+      return failure("HOMEKIT_TARGET_NOT_FOUND", "In diesem Raum wurde kein steuerbares Thermostat gefunden.")
+    }
+
+    var succeeded = 0
+    for characteristic in characteristics {
+      if await write(characteristic, value: NSNumber(value: temperature)) { succeeded += 1 }
+    }
+    return [
+      "success": succeeded == characteristics.count,
+      "changed": succeeded,
+      "matched": characteristics.count,
+      "message": succeeded == characteristics.count
+        ? "Temperatur in \(room) wurde gesetzt."
+        : "Nicht alle Thermostate konnten gesetzt werden."
+    ]
+  }
+
+  private func matchingAccessories(room: String, device: String?) -> [HMAccessory] {
+    let roomQuery = room.trimmingCharacters(in: .whitespacesAndNewlines)
+    let deviceQuery = device?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+    let roomMatches = manager.homes.flatMap { home in
+      home.rooms.filter { candidate in
+        candidate.name.compare(roomQuery, options: [.caseInsensitive, .diacriticInsensitive]) == .orderedSame
+      }.flatMap { $0.accessories }
+    }
+
+    guard let deviceQuery, !deviceQuery.isEmpty else { return roomMatches }
+    return roomMatches.filter { accessory in
+      accessory.uniqueIdentifier.uuidString.caseInsensitiveCompare(deviceQuery) == .orderedSame || accessory.name.range(of: deviceQuery, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+    }
+  }
+
+  private func write(_ characteristic: HMCharacteristic, value: Any) async -> Bool {
+    await withCheckedContinuation { continuation in
+      characteristic.writeValue(value) { error in
+        continuation.resume(returning: error == nil)
+      }
+    }
+  }
+
+  private func parsePercent(_ value: String) -> Int? {
+    let cleaned = value.replacingOccurrences(of: "%", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let number = Int(cleaned), (0...100).contains(number) else { return nil }
+    return number
+  }
+
+  private func parseTemperature(_ value: String) -> Double? {
+    let cleaned = value
+      .replacingOccurrences(of: "°c", with: "", options: [.caseInsensitive])
+      .replacingOccurrences(of: "grad", with: "", options: [.caseInsensitive])
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+      .replacingOccurrences(of: ",", with: ".")
+    return Double(cleaned)
+  }
+
+  private func failure(_ code: String, _ message: String) -> [String: Any] {
+    ["success": false, "code": code, "message": message]
+  }
+}

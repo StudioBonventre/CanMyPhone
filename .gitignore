@@ -1,0 +1,9 @@
+node_modules/
+.expo/
+dist/
+*.log
+.eas-inspect/
+.verify-ipa-*/
+.env
+.env.*
+!.env.example

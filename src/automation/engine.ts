@@ -1,0 +1,131 @@
+import { capabilityV2 } from "./capabilityCatalogV2";
+import type { ShortcutDefinition, ShortcutStep } from "./shortcutCompiler";
+import { connectorRegistry } from "./builtinConnectorManifests";
+import { connectorRequirementForStep } from "./connectorPlanning";
+import type { ConnectorRegistry } from "./providerConnectorRegistry";
+
+function stepProvider(step: ShortcutStep, registry: ConnectorRegistry) {
+  const binding = connectorRequirementForStep(step, new Set(registry.listReadyProviders().map(m => m.providerId)), registry)?.binding;
+  return binding && "provider" in binding ? registry.getProvider(binding.provider.id) : undefined;
+}
+
+export type TriggerDriver =
+  | "CANMYPHONE_MANUAL"
+  | "CANMYPHONE_NATIVE"
+  | "HOMEKIT"
+  | "APPLE_SHORTCUTS_BRIDGE"
+  | "PROVIDER"
+  | "UNSUPPORTED";
+
+export type ActionDriver =
+  | "CANMYPHONE_NATIVE"
+  | "HOMEKIT"
+  | "CANMYPHONE_APP_INTENT"
+  | "APPLE_SHORTCUTS_ACTION"
+  | "PROVIDER"
+  | "GUIDED"
+  | "UNSUPPORTED";
+
+export type AutomationRuntimePlan = {
+  triggerDriver: TriggerDriver;
+  actionDrivers: ActionDriver[];
+  appleBridgeRequired: boolean;
+  appleBridgePurpose: "NONE" | "TRIGGER_ONLY" | "TRIGGER_AND_ACTIONS";
+  canmyphoneOwnsLogic: boolean;
+  canmyphoneOwnsAllActions: boolean;
+  providerRequired: boolean;
+  installationHost: "CANMYPHONE_NATIVE" | "APPLE_PERSONAL_AUTOMATION" | "HOMEKIT" | "PROVIDER" | "UNSUPPORTED";
+  triggerReliability: "FOREGROUND" | "BACKGROUND_EVENT" | "APPLE_SYSTEM" | "UNAVAILABLE";
+  summary: string;
+};
+
+function triggerDriver(definition: ShortcutDefinition, registry: ConnectorRegistry): TriggerDriver {
+  const trigger = capabilityV2(definition.trigger.capabilityId);
+  if (!trigger || trigger.role !== "trigger") return "UNSUPPORTED";
+  if (definition.trigger.capabilityId === "trigger.manual") return "CANMYPHONE_MANUAL";
+  if (["trigger.homekit-characteristic","trigger.homekit-time"].includes(definition.trigger.capabilityId)) return registry.executable("apple-home", definition.trigger.capabilityId) ? "HOMEKIT" : "UNSUPPORTED";
+  const provider = stepProvider(definition.trigger, registry);
+  if (provider?.transport === "HOMEKIT" && provider.eventInstallationSupported && registry.executable(provider.providerId, definition.trigger.capabilityId)) return "HOMEKIT";
+  if (trigger.executionModes.includes("DIRECT_PUBLIC_API")) return "CANMYPHONE_NATIVE";
+  if (trigger.integration || trigger.executionModes.includes("THIRD_PARTY_API")) return "PROVIDER";
+  if (trigger.executionModes.includes("PERSONAL_AUTOMATION")) return "APPLE_SHORTCUTS_BRIDGE";
+  return "UNSUPPORTED";
+}
+
+function actionDriver(step: ShortcutStep, homekitTrigger = false, registry: ConnectorRegistry = connectorRegistry): ActionDriver {
+  const cap = capabilityV2(step.capabilityId);
+  if (!cap || cap.role !== "action") return "UNSUPPORTED";
+  const resolvedProvider = stepProvider(step, registry);
+  if (resolvedProvider && !registry.listReadyProviders().some(m => m.providerId === resolvedProvider.providerId)) return "UNSUPPORTED";
+  if (homekitTrigger && ["smart-home.light.set", "light.power.set", "light.brightness.set"].includes(step.capabilityId) && resolvedProvider?.transport === "HOMEKIT") return "HOMEKIT";
+  if (cap.executionModes.includes("DIRECT_PUBLIC_API")) return "CANMYPHONE_NATIVE";
+  if (resolvedProvider?.transport === "HOMEKIT") return "CANMYPHONE_NATIVE";
+  if (cap.integration || cap.executionModes.includes("THIRD_PARTY_API")) return "PROVIDER";
+  if (cap.executionModes.includes("SHORTCUT") || cap.executionModes.includes("PERSONAL_AUTOMATION")) return "APPLE_SHORTCUTS_ACTION";
+  if (cap.executionModes.includes("APP_INTENT")) return "CANMYPHONE_APP_INTENT";
+  if (cap.fallback === "GUIDED_HANDOFF") return "GUIDED";
+  return "UNSUPPORTED";
+}
+
+export function compileAutomationRuntime(definition: ShortcutDefinition, registry: ConnectorRegistry = connectorRegistry): AutomationRuntimePlan {
+  const trigger = triggerDriver(definition, registry);
+  const actions = definition.actions.map((action) => actionDriver(action, trigger === "HOMEKIT", registry));
+  const hasAppleActions = actions.includes("APPLE_SHORTCUTS_ACTION");
+  const bridgeForTrigger = trigger === "APPLE_SHORTCUTS_BRIDGE";
+  const appleBridgeRequired = bridgeForTrigger || hasAppleActions;
+  const homekitOnly = trigger === "HOMEKIT" && actions.length === 1 && actions[0] === "HOMEKIT" && definition.conditions.length === 0;
+  const unsupportedConditions = definition.conditions.some((condition) => {
+    const capability = capabilityV2(condition.capabilityId);
+    return !capability || capability.role !== "condition" || !capability.executionModes.includes("DIRECT_PUBLIC_API");
+  });
+  const unsupportedCombination = actions.some(driver => driver === "UNSUPPORTED" || driver === "GUIDED") ||
+    unsupportedConditions ||
+    (hasAppleActions && (!bridgeForTrigger || actions.some(driver => driver !== "APPLE_SHORTCUTS_ACTION")));
+  // No connector currently supplies a persistent, authenticated event transport.
+  // The dispatcher accepts verified events, but a plan cannot be activated until
+  // a connector actually installs such a source.
+  const installationHost: AutomationRuntimePlan["installationHost"] = unsupportedCombination ? "UNSUPPORTED" : homekitOnly ? "HOMEKIT" : trigger === "HOMEKIT" || trigger === "PROVIDER" ? "UNSUPPORTED" : bridgeForTrigger ? "APPLE_PERSONAL_AUTOMATION" : trigger === "CANMYPHONE_NATIVE" || trigger === "CANMYPHONE_MANUAL" ? "CANMYPHONE_NATIVE" : "UNSUPPORTED";
+  const providerRequired = trigger === "PROVIDER" || actions.includes("PROVIDER");
+  const triggerReliability: AutomationRuntimePlan["triggerReliability"] =
+    trigger === "CANMYPHONE_MANUAL" ? "FOREGROUND" :
+    trigger === "CANMYPHONE_NATIVE" || trigger === "HOMEKIT" ? "BACKGROUND_EVENT" :
+    trigger === "APPLE_SHORTCUTS_BRIDGE" ? "APPLE_SYSTEM" : "UNAVAILABLE";
+  const canmyphoneOwnsAllActions = actions.every((driver) =>
+    driver === "CANMYPHONE_NATIVE" || driver === "CANMYPHONE_APP_INTENT"
+  );
+
+  let appleBridgePurpose: AutomationRuntimePlan["appleBridgePurpose"] = "NONE";
+  if (bridgeForTrigger && hasAppleActions) appleBridgePurpose = "TRIGGER_AND_ACTIONS";
+  else if (bridgeForTrigger) appleBridgePurpose = "TRIGGER_ONLY";
+  else if (hasAppleActions) appleBridgePurpose = "TRIGGER_AND_ACTIONS";
+
+  let summary = "CanMyPhone kann diese Automation selbst ausführen.";
+  if (installationHost === "UNSUPPORTED") {
+    summary = "Für diese Trigger- und Aktionskombination gibt es noch keinen verlässlichen automatischen Installationsweg.";
+  } else if (homekitOnly) {
+    summary = "Apple Home führt Auslöser und Aktion nach der Installation aus.";
+  } else if (trigger === "HOMEKIT") {
+    summary = "Ein HomeKit-Auslöser kann nur mit direkt in Apple Home installierbaren Aktionen verbunden werden.";
+  } else if (appleBridgePurpose === "TRIGGER_ONLY") {
+    summary = "CanMyPhone führt die Automation aus. Apple Kurzbefehle liefert nur den System-Trigger.";
+  } else if (appleBridgePurpose === "TRIGGER_AND_ACTIONS") {
+    summary = "CanMyPhone verwaltet die Automation; einzelne iOS-Schritte laufen über Apple Kurzbefehle.";
+  } else if (providerRequired) {
+    summary = "CanMyPhone verwaltet die Automation; ein verbundener Dienst führt mindestens einen Schritt aus.";
+  } else if (trigger === "UNSUPPORTED" || actions.includes("UNSUPPORTED")) {
+    summary = "Mindestens ein Schritt kann noch nicht sicher ausgeführt werden.";
+  }
+
+  return {
+    triggerDriver: trigger,
+    actionDrivers: actions,
+    appleBridgeRequired,
+    appleBridgePurpose,
+    canmyphoneOwnsLogic: true,
+    canmyphoneOwnsAllActions,
+    providerRequired,
+    installationHost,
+    triggerReliability,
+    summary
+  };
+}

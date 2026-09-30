@@ -1,8 +1,12 @@
 import { QueryIntent, Solution } from "../types";
 
 const STOP = new Set([
-  "i", "a", "an", "the", "to", "my", "me", "can", "how", "do", "please",
-  "wie", "ich", "mein", "meine", "das", "die", "der", "und", "mit", "auf", "bitte", "kann", "vom", "aus"
+  // English function words
+  "i", "a", "an", "the", "to", "my", "me", "can", "how", "do", "please", "it", "is", "of", "for", "with", "in", "on",
+  // German function words. These must never create a capability match on their own.
+  "wie", "ich", "du", "mir", "dir", "mein", "meine", "dein", "deine", "das", "die", "der", "den", "dem", "des",
+  "ein", "eine", "einer", "einem", "einen", "und", "oder", "mit", "auf", "bitte", "kann", "konnte", "könnte",
+  "vom", "von", "aus", "fur", "für", "zu", "zur", "zum", "im", "am", "ist", "sind", "soll", "sollte", "was"
 ]);
 
 function normalize(value: string): string[] {
