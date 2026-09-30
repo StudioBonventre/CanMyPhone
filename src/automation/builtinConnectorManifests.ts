@@ -38,12 +38,8 @@ export const BUILTIN_CONNECTOR_MANIFESTS: readonly ProviderConnectorManifest[] =
     authentication: "oauth2-indieauth",
     discovery: "HOME_ASSISTANT_REGISTRIES",
     actions: ["light.power.set", "light.brightness.set", "light.color-temperature.set", "switch.power.set", "cover.open", "cover.close", "cover.position.set", "climate.temperature.set", "climate.mode.set", "lock.lock", "lock.unlock", "media.play", "media.pause", "media.volume.set"].map(id => operation(id, false)),
-    triggers: ["sensor.motion.changed", "sensor.contact.changed", "sensor.temperature.changed"],
-    eventSchemas: {
-      "sensor.motion.changed": { value: "boolean" },
-      "sensor.contact.changed": { value: "boolean" },
-      "sensor.temperature.changed": { value: "number" }
-    },
+    triggers: [],
+    eventSchemas: {},
     documentationSources: [
       { url: "https://developers.home-assistant.io/docs/auth_api/", kind: "OFFICIAL_DOCS", providerOwned: true },
       { url: "https://developers.home-assistant.io/docs/api/rest/", kind: "OFFICIAL_DOCS", providerOwned: true },
