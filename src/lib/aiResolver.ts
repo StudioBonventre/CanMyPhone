@@ -35,9 +35,11 @@ export async function resolveWithOnDeviceAI(
       return { solutionId: null, used: false, available: false, reason: status.reason };
     }
 
+    // Keep the prompt small enough for the on-device model's context window:
+    // id + title + two aliases is enough to pick, the model never sees or writes steps.
     const compactCatalogue = candidates
-      .slice(0, 36)
-      .map((item) => `${item.id} | ${item.title} | ${item.summary} | ${item.aliases.slice(0, 6).join(", ")}`)
+      .slice(0, 120)
+      .map((item) => `${item.id} | ${item.title} | ${item.aliases.slice(0, 2).join(", ")}`)
       .join("\n");
 
     const prompt = [
