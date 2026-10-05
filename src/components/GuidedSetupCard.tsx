@@ -54,7 +54,7 @@ export function GuidedSetupCard({
         <Text style={styles.stepCounter}>Schritt {session.currentStep + 1} von {session.steps.length}</Text>
       </View>
       <View style={styles.progressTrack} accessibilityElementsHidden>
-        <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` }]} />
+        <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` as `${number}%` }]} />
       </View>
 
       <View style={styles.header}>
