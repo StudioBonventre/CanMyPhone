@@ -165,6 +165,11 @@ export function scoreSolutions(
 
       if (intent && relevance > 0) {
         if (entry.item.intents?.includes(intent.kind) && intent.kind !== "general") relevance += 1.5;
+        // "Wenn ich … dann …" describes an automation: recipes beat one-off tips.
+        if (intent.kind === "automation" && entry.item.automation) relevance += 5;
+        // Product rule: a paid recipe must never push a free built-in answer aside
+        // unless the person explicitly asked for an automation.
+        if (intent.kind !== "automation" && entry.item.automation?.tier === "pro") relevance *= 0.8;
         if (intent.wantsSiri && entry.item.voice && entry.item.voice.route !== "none") relevance += 4;
         if (intent.wantsAppleIntelligence && entry.item.entities?.includes("apple-intelligence")) relevance += 8;
         if (intent.wantsAppleIntelligence && entry.item.voice?.route === "siri-ai") relevance += 6;

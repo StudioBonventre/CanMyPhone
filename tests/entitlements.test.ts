@@ -1,31 +1,46 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { addCredits, automaticActionAccess, consumeAutomaticAction, DEFAULT_ENTITLEMENTS, setPro } from "../src/lib/entitlements";
+import { solutions } from "../src/data/solutions";
+import {
+  DEFAULT_ENTITLEMENTS,
+  entitlementsFromActiveProducts,
+  isLocked,
+  normalizeEntitlements,
+  PRO_PRODUCT_IDS
+} from "../src/lib/entitlements";
 
-test("first automatic action is free and is consumed only after success", () => {
-  const access = automaticActionAccess(DEFAULT_ENTITLEMENTS);
-  assert.equal(access.allowed, true);
-  assert.equal(access.reason, "first-free");
-  const after = consumeAutomaticAction(DEFAULT_ENTITLEMENTS);
-  assert.equal(after.freeAutomaticActionUsed, true);
-  assert.equal(after.credits, 0);
+function must<T>(value: T | undefined, label: string): T {
+  if (value === undefined) throw new Error(`missing ${label}`);
+  return value;
+}
+
+const proRecipe = must(solutions.find((item) => item.automation?.tier === "pro"), "pro recipe");
+const freeRecipe = must(solutions.find((item) => item.automation?.tier === "free"), "free recipe");
+const tip = must(solutions.find((item) => !item.automation), "tip");
+
+test("tips and free recipes are never locked", () => {
+  assert.equal(isLocked(tip, DEFAULT_ENTITLEMENTS), false);
+  assert.equal(isLocked(freeRecipe, DEFAULT_ENTITLEMENTS), false);
 });
 
-test("credits are consumed after the free action", () => {
-  const state = { ...DEFAULT_ENTITLEMENTS, freeAutomaticActionUsed: true, credits: 2 };
-  assert.equal(automaticActionAccess(state).reason, "credit");
-  assert.equal(consumeAutomaticAction(state).credits, 1);
+test("pro recipes are locked without and unlocked with Pro", () => {
+  assert.equal(isLocked(proRecipe, DEFAULT_ENTITLEMENTS), true);
+  assert.equal(isLocked(proRecipe, { pro: true }), false);
 });
 
-test("pro never consumes credits and locked users stay unchanged", () => {
-  const pro = setPro({ ...DEFAULT_ENTITLEMENTS, freeAutomaticActionUsed: true, credits: 3 }, true);
-  assert.equal(consumeAutomaticAction(pro).credits, 3);
-  const locked = { ...DEFAULT_ENTITLEMENTS, freeAutomaticActionUsed: true };
-  assert.equal(automaticActionAccess(locked).allowed, false);
-  assert.deepEqual(consumeAutomaticAction(locked), locked);
+test("only known product ids unlock Pro", () => {
+  assert.equal(entitlementsFromActiveProducts([PRO_PRODUCT_IDS.yearly], 1).pro, true);
+  assert.equal(entitlementsFromActiveProducts([PRO_PRODUCT_IDS.monthly], 1).productId, PRO_PRODUCT_IDS.monthly);
+  assert.equal(entitlementsFromActiveProducts(["com.example.other"], 1).pro, false);
+  assert.equal(entitlementsFromActiveProducts([], 1).pro, false);
 });
 
-test("adding credits rejects invalid values", () => {
-  assert.equal(addCredits(DEFAULT_ENTITLEMENTS, 2.8).credits, 2);
-  assert.equal(addCredits(DEFAULT_ENTITLEMENTS, -1).credits, 0);
+test("old persisted credit state is read safely", () => {
+  assert.deepEqual(normalizeEntitlements({ pro: false, credits: 3, freeAutomaticActionUsed: true }), {
+    pro: false,
+    productId: undefined,
+    checkedAt: undefined
+  });
+  assert.equal(normalizeEntitlements(null).pro, false);
+  assert.equal(normalizeEntitlements("garbage").pro, false);
 });

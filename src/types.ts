@@ -37,6 +37,39 @@ export type SettingsGuide = {
   note?: string;
 };
 
+export type AutomationTriggerKind =
+  | "time" | "alarm" | "sleep" | "arrive" | "leave" | "carplay" | "bluetooth" | "wifi"
+  | "battery" | "charger" | "low-power" | "app" | "focus" | "nfc" | "message" | "email" | "sound";
+
+export type AutomationAction = {
+  /** Action name as shown in Kurzbefehle, e.g. „Stromsparmodus festlegen“. */
+  label: string;
+  /** What to type into the action search – robust even if Apple renames the action slightly. */
+  search: string;
+  /** Optional setting inside the action, e.g. „auf Ein stellen“. */
+  detail?: string;
+};
+
+export type AutomationSpec = {
+  trigger: {
+    kind: AutomationTriggerKind;
+    /** Plain-language „Wenn …“ line shown on the recipe card. */
+    when: string;
+    /** Exact trigger configuration in Kurzbefehle, e.g. „Fällt unter 20 %“. */
+    setup: string;
+  };
+  /** Plain-language „Dann …“ line shown on the recipe card. */
+  then: string;
+  actions: AutomationAction[];
+  /** Apps or accessories the person needs, e.g. „Tesla-App“. */
+  needs?: string[];
+  /** A sentence the person can paste into Apple Intelligence in Kurzbefehle (iOS 27+). */
+  prompt: string;
+  /** Shown prominently before setup when the automation moves things in the real world. */
+  safety?: string;
+  tier: "free" | "pro";
+};
+
 export type Solution = {
   id: string;
   platform: Platform;
@@ -56,6 +89,8 @@ export type Solution = {
   availability?: Availability;
   voice?: VoiceIntegration;
   settings?: SettingsGuide;
+  /** Present on automation recipes: the „Wenn … dann …“ blueprint for Kurzbefehle. */
+  automation?: AutomationSpec;
 };
 
 export type SolutionFeedback = "worked" | "didnt_work" | "already_knew" | "not_relevant";
@@ -120,6 +155,8 @@ export type GuideSession = {
 
 export type EntitlementState = {
   pro: boolean;
-  credits: number;
-  freeAutomaticActionUsed: boolean;
+  /** Product id of the active subscription, if known. */
+  productId?: string;
+  /** When StoreKit last confirmed the state (ms since epoch). */
+  checkedAt?: number;
 };

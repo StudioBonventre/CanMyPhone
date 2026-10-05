@@ -6,7 +6,10 @@ export type {
   NativeModuleShape,
   PermissionKind,
   PermissionResult,
-  PermissionStatus
+  PermissionStatus,
+  StorePeriod,
+  StoreProduct,
+  StorePurchaseResult
 } from "./src/CanMyPhoneNative.types";
 
 function loadNativeModule(): NativeModuleShape | null {

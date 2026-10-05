@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { EntitlementState, GuideSession, NeedRadarProfile } from "../types";
+import { normalizeEntitlements } from "./entitlements";
 
 const RADAR_KEY = "canmyphone.needRadar.v1";
 const GUIDE_KEY = "canmyphone.guideSession.v1";
@@ -54,8 +55,8 @@ export async function saveGuideSession(session: GuideSession | null): Promise<vo
   }
 }
 
-export function loadEntitlementState(): Promise<EntitlementState | null> {
-  return readJson<EntitlementState>(ENTITLEMENTS_KEY);
+export async function loadEntitlementState(): Promise<EntitlementState> {
+  return normalizeEntitlements(await readJson<unknown>(ENTITLEMENTS_KEY));
 }
 
 export function saveEntitlementState(state: EntitlementState): Promise<void> {

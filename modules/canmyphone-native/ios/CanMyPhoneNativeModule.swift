@@ -4,14 +4,73 @@ import UIKit
 import UserNotifications
 import AVFoundation
 import Photos
+import StoreKit
 
 #if canImport(FoundationModels)
 import FoundationModels
 #endif
 
 public final class CanMyPhoneNativeModule: Module {
+  /// Finishes renewals, Ask-to-Buy approvals and purchases made on other devices.
+  private var transactionListener: Task<Void, Never>?
+
   public func definition() -> ModuleDefinition {
     Name("CanMyPhoneNative")
+
+    OnCreate {
+      self.transactionListener = Task.detached(priority: .background) {
+        for await update in StoreKit.Transaction.updates {
+          if case .verified(let transaction) = update {
+            await transaction.finish()
+          }
+        }
+      }
+    }
+
+    OnDestroy {
+      self.transactionListener?.cancel()
+    }
+
+    // MARK: StoreKit 2 – CanMyPhone Pro
+
+    AsyncFunction("storeProducts") { (ids: [String]) async throws -> [[String: Any]] in
+      let products = try await StoreKit.Product.products(for: ids)
+      return products.map { self.describe(product: $0) }
+    }
+
+    AsyncFunction("storePurchase") { (id: String) async throws -> [String: Any] in
+      let products = try await StoreKit.Product.products(for: [id])
+      guard let product = products.first else {
+        return ["status": "notFound", "activeProductIds": await self.activeProductIds()]
+      }
+
+      let result = try await product.purchase()
+      switch result {
+      case .success(let verification):
+        switch verification {
+        case .verified(let transaction):
+          await transaction.finish()
+          return ["status": "purchased", "activeProductIds": await self.activeProductIds()]
+        case .unverified:
+          return ["status": "unverified", "activeProductIds": await self.activeProductIds()]
+        }
+      case .userCancelled:
+        return ["status": "cancelled", "activeProductIds": await self.activeProductIds()]
+      case .pending:
+        return ["status": "pending", "activeProductIds": await self.activeProductIds()]
+      @unknown default:
+        return ["status": "unknown", "activeProductIds": await self.activeProductIds()]
+      }
+    }
+
+    AsyncFunction("storeActiveProductIds") { () async -> [String] in
+      return await self.activeProductIds()
+    }
+
+    AsyncFunction("storeRestore") { () async throws -> [String] in
+      try await AppStore.sync()
+      return await self.activeProductIds()
+    }
 
     AsyncFunction("foundationModelStatus") { () async -> [String: Any] in
       #if canImport(FoundationModels)
@@ -83,6 +142,60 @@ public final class CanMyPhoneNativeModule: Module {
       guard let url = URL(string: UIApplication.openSettingsURLString) else { return false }
       return await self.open(url: url)
     }
+  }
+
+  // MARK: StoreKit helpers
+
+  /// Verified, non-revoked subscriptions and purchases the person currently owns.
+  private func activeProductIds() async -> [String] {
+    var ids: [String] = []
+    for await entitlement in StoreKit.Transaction.currentEntitlements {
+      if case .verified(let transaction) = entitlement, transaction.revocationDate == nil {
+        ids.append(transaction.productID)
+      }
+    }
+    return ids
+  }
+
+  private func describe(product: StoreKit.Product) -> [String: Any] {
+    var result: [String: Any] = [
+      "id": product.id,
+      "displayName": product.displayName,
+      "description": product.description,
+      "displayPrice": product.displayPrice,
+      "price": NSDecimalNumber(decimal: product.price).doubleValue
+    ]
+    if let subscription = product.subscription {
+      result["period"] = describe(period: subscription.subscriptionPeriod)
+      if let intro = subscription.introductoryOffer {
+        result["introOffer"] = [
+          "paymentMode": describe(paymentMode: intro.paymentMode),
+          "displayPrice": intro.displayPrice,
+          "period": describe(period: intro.period),
+          "periodCount": intro.periodCount
+        ] as [String: Any]
+      }
+    }
+    return result
+  }
+
+  private func describe(period: StoreKit.Product.SubscriptionPeriod) -> [String: Any] {
+    let unit: String
+    switch period.unit {
+    case .day: unit = "day"
+    case .week: unit = "week"
+    case .month: unit = "month"
+    case .year: unit = "year"
+    @unknown default: unit = "unknown"
+    }
+    return ["value": period.value, "unit": unit]
+  }
+
+  private func describe(paymentMode: StoreKit.Product.SubscriptionOffer.PaymentMode) -> String {
+    if paymentMode == .freeTrial { return "freeTrial" }
+    if paymentMode == .payAsYouGo { return "payAsYouGo" }
+    if paymentMode == .payUpFront { return "payUpFront" }
+    return "unknown"
   }
 
   private func permissionStatus(kind: String) async -> [String: Any] {
