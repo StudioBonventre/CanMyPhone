@@ -101,6 +101,8 @@ export type ConversationResult = {
   solutions: Solution[];
   followUp?: string;
   notice?: string;
+  /** True when the match rests on a single word – the UI asks "Meinst du …?" instead of asserting. */
+  uncertain?: boolean;
 };
 
 export type GuideSessionStatus = "active" | "background" | "completed";

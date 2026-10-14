@@ -1,5 +1,5 @@
 import { ConversationResult, DeviceContext, QueryIntent, QueryIntentKind, Solution } from "../types";
-import { rankSolutions } from "./search";
+import { scoreSolutions } from "./search";
 
 const ENTITY_PATTERNS: { name: string; pattern: RegExp }[] = [
   { name: "tesla", pattern: /\btesla\b/i },
@@ -70,8 +70,12 @@ function needsClarification(query: string, matches: Solution[], intent: QueryInt
 
 export function resolveConversation(query: string, items: Solution[], context: DeviceContext): ConversationResult {
   const intent = analyzeQuery(query);
-  const ranked = rankSolutions(query, items, context.platform, intent);
-  const available = ranked.filter((solution) => isAvailable(solution, context));
+  const scored = scoreSolutions(query, items, context.platform, intent)
+    .filter((entry) => isAvailable(entry.item, context));
+  const best = scored[0]?.score ?? 0;
+  const kept = scored.filter((entry) => entry.score >= best * 0.33);
+  const available = kept.map((entry) => entry.item);
+  const uncertain = kept.length > 0 && !kept[0].strong;
   const followUp = needsClarification(query, available, intent);
 
   let notice: string | undefined;
@@ -85,5 +89,5 @@ export function resolveConversation(query: string, items: Solution[], context: D
     }
   }
 
-  return { intent, solutions: available, followUp, notice };
+  return { intent, solutions: available, followUp, notice, uncertain: followUp ? false : uncertain };
 }

@@ -61,3 +61,32 @@ export function loadEntitlementState(): Promise<EntitlementState | null> {
 export function saveEntitlementState(state: EntitlementState): Promise<void> {
   return writeJson(ENTITLEMENTS_KEY, state);
 }
+
+const GAPS_KEY = "canmyphone.unansweredQuestions.v1";
+const MAX_GAPS = 50;
+
+export type UnansweredQuestion = { query: string; at: number };
+
+/** Questions without a verified answer – the most useful input for growing the catalogue. Stays on device. */
+export async function loadUnansweredQuestions(): Promise<UnansweredQuestion[]> {
+  return (await readJson<UnansweredQuestion[]>(GAPS_KEY)) ?? [];
+}
+
+export async function recordUnansweredQuestion(query: string): Promise<UnansweredQuestion[]> {
+  const current = await loadUnansweredQuestions();
+  const normalized = query.trim();
+  const next = [
+    { query: normalized, at: Date.now() },
+    ...current.filter((entry) => entry.query.toLowerCase() !== normalized.toLowerCase())
+  ].slice(0, MAX_GAPS);
+  await writeJson(GAPS_KEY, next);
+  return next;
+}
+
+export async function clearUnansweredQuestions(): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(GAPS_KEY);
+  } catch {
+    // Ignore storage failures.
+  }
+}

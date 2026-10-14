@@ -20,7 +20,9 @@ import {
   ViewStyle
 } from "react-native";
 import { GlassView, isGlassEffectAPIAvailable } from "expo-glass-effect";
+import { AlternativeList, AnswerDetails } from "./src/components/AnswerDetails";
 import { GuidedSetupCard } from "./src/components/GuidedSetupCard";
+import { categoriesWithSolutions, categoryLabel, solutionsInCategory } from "./src/data/categories";
 import { solutions } from "./src/data/solutions";
 import { directActionPlan, runDirectAction, type DirectActionResult } from "./src/lib/actions";
 import { resolveWithOnDeviceAI } from "./src/lib/aiResolver";
@@ -49,10 +51,14 @@ import { shortcutAssistantPlan } from "./src/lib/shortcutAssistant";
 import { openSupportedSettings } from "./src/lib/settings";
 import {
   clearNeedRadarProfile,
+  clearUnansweredQuestions,
   loadGuideSession,
   loadNeedRadarProfile,
+  loadUnansweredQuestions,
+  recordUnansweredQuestion,
   saveGuideSession,
-  saveNeedRadarProfile
+  saveNeedRadarProfile,
+  type UnansweredQuestion
 } from "./src/lib/storage";
 import {
   DeviceContext,
@@ -73,15 +79,17 @@ type GlassSurfaceProps = PropsWithChildren<{
 }>;
 
 const quickIdeas = [
-  { title: "Benachrichtigungen erlauben", query: "benachrichtigungen erlauben" },
-  { title: "Beim Losfahren Navigation starten", query: "automation shortcut leave work navigation" },
-  { title: "Was kann mein iPhone noch?", query: "discover hidden iphone features" }
+  { title: "Mein Akku ist ständig leer", query: "Mein Akku ist immer so schnell leer", hint: "Der eingebaute Weg zu mehr Laufzeit." },
+  { title: "Ständig Spam-Anrufe", query: "Ständig Spam Anrufe von unbekannten Nummern", hint: "Unbekannte Nummern filtern, ohne App." },
+  { title: "Ich vergesse, wo ich geparkt habe", query: "Wo habe ich geparkt?", hint: "Dein iPhone merkt es sich automatisch." },
+  { title: "Die Schrift ist mir zu klein", query: "Die Schrift ist mir zu klein", hint: "Größer lesen in allen Apps." }
 ];
 
 const hiddenFeatures = [
-  { title: "Die Rückseite deines iPhones als Taste nutzen", query: "back tap" },
-  { title: "Dokumente ohne zusätzliche App scannen", query: "scan document pdf" },
-  { title: "Wichtige Geräusche automatisch erkennen lassen", query: "sound recognition" }
+  { title: "Die Rückseite deines iPhones als Taste nutzen", id: "ios-back-tap" },
+  { title: "Hintergrund aus Fotos entfernen – mit einem Fingertipp", id: "ios-lift-subject" },
+  { title: "Bescheid geben lassen, dass du sicher angekommen bist", id: "ios-check-in" },
+  { title: "Wichtige Geräusche automatisch erkennen lassen", id: "ios-sound-recognition" }
 ];
 
 const feedbackOptions: { value: SolutionFeedback; label: string }[] = [
@@ -271,7 +279,6 @@ export default function App() {
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [preferences, setPreferences] = useState<UserPreferences>(defaultUserPreferences);
   const [preferencesLoaded, setPreferencesLoaded] = useState(false);
-  const [region, setRegion] = useState<Region>("eu");
   const [motionPhase, setMotionPhase] = useState<DropPhase>("idle");
   const [guideSession, setGuideSession] = useState<GuideSession | null>(null);
   const [returnedFromBackground, setReturnedFromBackground] = useState(false);
@@ -282,12 +289,17 @@ export default function App() {
   const [actionResult, setActionResult] = useState<DirectActionResult | null>(null);
   const [actionRunning, setActionRunning] = useState(false);
   const [answerFeedback, setAnswerFeedback] = useState<SolutionFeedback | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [uncertainDismissed, setUncertainDismissed] = useState(false);
+  const [discoverCategory, setDiscoverCategory] = useState<string | null>(null);
+  const [unanswered, setUnanswered] = useState<UnansweredQuestion[]>([]);
 
   const appState = useRef<AppStateStatus>(AppState.currentState);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const answerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const platform = Platform.OS === "android" ? "android" : "ios";
+  const region: Region = preferences.region;
   const deviceContext: DeviceContext = useMemo(() => ({
     platform,
     region,
@@ -304,9 +316,10 @@ export default function App() {
 
   useEffect(() => {
     let alive = true;
-    Promise.all([loadNeedRadarProfile(), loadGuideSession(), loadUserPreferences()])
-      .then(([savedProfile, savedGuide, savedPreferences]) => {
+    Promise.all([loadNeedRadarProfile(), loadGuideSession(), loadUserPreferences(), loadUnansweredQuestions()])
+      .then(([savedProfile, savedGuide, savedPreferences, savedGaps]) => {
         if (!alive) return;
+        setUnanswered(savedGaps);
         if (savedProfile) setProfile(savedProfile);
         if (savedGuide && savedGuide.status !== "completed") {
           setGuideSession({ ...savedGuide, status: "active", updatedAt: Date.now() });
@@ -366,10 +379,28 @@ export default function App() {
     [submittedQuery, deviceContext]
   );
 
+  const selectedResult = selectedId ? solutions.find((item) => item.id === selectedId) ?? null : null;
   const aiResult = aiSelectedId ? solutions.find((item) => item.id === aiSelectedId) ?? null : null;
   const catalogueResult = conversation.solutions[0] ?? null;
-  const needsFollowUp = Boolean(submittedQuery && conversation.followUp && !clarificationUsed);
-  const bestResult = needsFollowUp ? null : aiResult ?? catalogueResult;
+  const needsFollowUp = Boolean(submittedQuery && conversation.followUp && !clarificationUsed && !selectedResult);
+  // A single matching word is not enough to claim "this is your answer" – ask first.
+  const needsConfirmation = Boolean(
+    submittedQuery && !needsFollowUp && !selectedResult && !aiResult && conversation.uncertain && !uncertainDismissed
+  );
+  const bestResult = needsFollowUp || needsConfirmation || (uncertainDismissed && !selectedResult)
+    ? null
+    : selectedResult ?? aiResult ?? catalogueResult;
+  const alternatives = useMemo(
+    () => bestResult
+      ? conversation.solutions.filter((item) => item.id !== bestResult.id && !profile.dismissedSolutionIds.includes(item.id)).slice(0, 3)
+      : [],
+    [bestResult, conversation.solutions, profile.dismissedSolutionIds]
+  );
+  const discoverCategories = useMemo(() => categoriesWithSolutions(solutions, platform), [platform]);
+  const categorySolutions = useMemo(
+    () => discoverCategory ? solutionsInCategory(solutions, discoverCategory, platform) : [],
+    [discoverCategory, platform]
+  );
   const guideSolution = guideSession ? solutions.find((item) => item.id === guideSession.solutionId) ?? null : null;
   const radarResults = useMemo(() => radarRecommendations(profile, solutions, platform).slice(0, 4), [profile, platform]);
   const learnedCategories = useMemo(() => topLearnedCategories(profile), [profile]);
@@ -390,9 +421,37 @@ export default function App() {
     setFollowUpDraft("");
     setClarificationUsed(false);
     setAiSelectedId(null);
+    setSelectedId(null);
+    setUncertainDismissed(false);
     setActionResult(null);
     setAnswerFeedback(null);
     setMotionPhase("idle");
+  };
+
+  /** Show one specific catalogue entry as the answer, e.g. from Discover or an alternative. */
+  const openSolution = async (solution: Solution, keepQuery = false) => {
+    Keyboard.dismiss();
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    if (answerTimer.current) clearTimeout(answerTimer.current);
+    setTab("ask");
+    if (!keepQuery) {
+      setSubmittedQuery(solution.title);
+      setDraftQuery(solution.title);
+      setClarificationUsed(false);
+    }
+    setSelectedId(solution.id);
+    setUncertainDismissed(false);
+    setAiSelectedId(null);
+    setActionResult(null);
+    setAnswerFeedback(null);
+    setProfile((current) => learnFromOpen(current, solution));
+    setMotionPhase("answer");
+    await hapticAnswer();
+  };
+
+  const rejectSuggestions = async () => {
+    setUncertainDismissed(true);
+    if (submittedQuery) setUnanswered(await recordUnansweredQuestion(submittedQuery));
   };
 
   const runAsk = async (value = draftQuery, fromClarification = false) => {
@@ -406,6 +465,8 @@ export default function App() {
     setDraftQuery(normalized);
     setSubmittedQuery("");
     setAiSelectedId(null);
+    setSelectedId(null);
+    setUncertainDismissed(false);
     setActionResult(null);
     setAnswerFeedback(null);
     if (!fromClarification) setClarificationUsed(false);
@@ -426,6 +487,10 @@ export default function App() {
         const candidates = solutions.filter((item) => item.platform === platform || item.platform === "both");
         const resolved = await resolveWithOnDeviceAI(normalized, candidates);
         selectedByAI = resolved.solutionId;
+      }
+
+      if (!deterministic.followUp && deterministic.solutions.length === 0 && !selectedByAI) {
+        recordUnansweredQuestion(normalized).then(setUnanswered).catch(() => undefined);
       }
 
       setAiSelectedId(selectedByAI);
@@ -535,6 +600,11 @@ export default function App() {
     await hapticStep();
   };
 
+  const clearGaps = async () => {
+    setUnanswered([]);
+    await clearUnansweredQuestions();
+  };
+
   const resetRadar = async () => {
     const fresh = createNeedRadarProfile();
     setProfile(fresh);
@@ -547,6 +617,7 @@ export default function App() {
 
   const switchTab = (next: Tab) => {
     Keyboard.dismiss();
+    if (next === "discover" && tab === "discover") setDiscoverCategory(null);
     setTab(next);
     setMotionPhase("idle");
   };
@@ -602,7 +673,7 @@ export default function App() {
           >
             {tab === "ask" ? (
               <>
-                {submittedQuery && (bestResult || needsFollowUp) ? (
+                {submittedQuery ? (
                   <View style={styles.answerTopBar}>
                     <Pressable onPress={resetQuestion} hitSlop={12} accessibilityLabel="Zurück zur Frage">
                       <Text style={styles.backButton}>‹</Text>
@@ -615,7 +686,9 @@ export default function App() {
                   <Text style={styles.hero}>
                     {needsFollowUp
                       ? "Eine Sache muss ich noch wissen."
-                      : bestResult
+                      : needsConfirmation
+                        ? "Meinst du eines davon?"
+                        : bestResult
                         ? preferences.beginnerMode
                           ? "Ich habe einen einfachen Weg gefunden."
                           : "Ja — ich habe einen Weg gefunden."
@@ -626,7 +699,9 @@ export default function App() {
                   <Text style={styles.heroSubtext}>
                     {needsFollowUp
                       ? "Nur eine kurze Rückfrage, damit ich dir nichts Falsches zeige."
-                      : bestResult
+                      : needsConfirmation
+                        ? "Ich bin mir nicht ganz sicher, was du meinst. Tippe auf das Passende."
+                        : bestResult
                         ? "CanMyPhone bevorzugt native, sichere und möglichst einfache Lösungen."
                         : submittedQuery
                           ? "Formuliere dein Ziel etwas konkreter. Ich erfinde keine Funktionen oder Menüpfade."
@@ -675,6 +750,19 @@ export default function App() {
                       </Pressable>
                     </View>
                   </GlassSurface>
+                ) : needsConfirmation ? (
+                  <View style={styles.answerArea}>
+                    <GlassSurface style={styles.followUpCard} tintColor="rgba(255,255,255,0.18)">
+                      <AlternativeList
+                        title="VORSCHLÄGE"
+                        solutions={conversation.solutions.slice(0, 3)}
+                        onSelect={(solution) => openSolution(solution, true).catch(() => undefined)}
+                      />
+                      <Pressable onPress={() => rejectSuggestions().catch(() => undefined)} style={styles.textAction}>
+                        <Text style={styles.textActionText}>Nichts davon</Text>
+                      </Pressable>
+                    </GlassSurface>
+                  </View>
                 ) : bestResult ? (
                   <View style={styles.answerArea}>
                     <View style={styles.answerMetaRow}>
@@ -741,6 +829,8 @@ export default function App() {
                       </GlassSurface>
                     ) : null}
 
+                    <AnswerDetails solution={bestResult} beginnerMode={preferences.beginnerMode} />
+
                     <View style={styles.feedbackSection}>
                       <Text style={styles.feedbackTitle}>War das hilfreich?</Text>
                       <View style={styles.feedbackRow}>
@@ -756,6 +846,22 @@ export default function App() {
                       </View>
                     </View>
 
+                    {answerFeedback === "didnt_work" || answerFeedback === "not_relevant" ? (
+                      <Text style={styles.feedbackHint}>
+                        {alternatives.length
+                          ? "Danke! Vielleicht passt einer dieser Wege besser:"
+                          : "Danke! Ich merke mir die Frage, damit der Katalog besser wird."}
+                      </Text>
+                    ) : answerFeedback ? (
+                      <Text style={styles.feedbackHint}>Danke – das hilft CanMyPhone, bessere Vorschläge zu machen.</Text>
+                    ) : null}
+
+                    <AlternativeList
+                      title="WEITERE WEGE"
+                      solutions={alternatives}
+                      onSelect={(solution) => openSolution(solution, true).catch(() => undefined)}
+                    />
+
                     <Pressable onPress={resetQuestion} style={styles.textAction}>
                       <Text style={styles.textActionText}>Neue Frage</Text>
                     </Pressable>
@@ -764,9 +870,15 @@ export default function App() {
                   <View style={styles.noResultArea}>
                     <GlassSurface style={styles.noResultCard} tintColor="rgba(255,255,255,0.16)">
                       <Text style={styles.noResultTitle}>Lieber keine erfundene Antwort.</Text>
-                      <Text style={styles.noResultText}>Ich habe in unserem verifizierten Katalog keinen sicheren Treffer gefunden.</Text>
+                      <Text style={styles.noResultText}>Ich habe in unserem verifizierten Katalog keinen sicheren Treffer gefunden. Deine Frage bleibt lokal gespeichert, damit wir genau diese Lücke schließen können.</Text>
                     </GlassSurface>
                     <Pressable onPress={resetQuestion} style={styles.primaryAction}><Text style={styles.primaryActionText}>Anders formulieren</Text></Pressable>
+                    <Pressable
+                      onPress={() => { resetQuestion(); setDiscoverCategory(null); setTab("discover"); }}
+                      style={styles.textAction}
+                    >
+                      <Text style={styles.textActionText}>Nach Themen stöbern</Text>
+                    </Pressable>
                   </View>
                 ) : (
                   <View style={styles.ideaList}>
@@ -776,13 +888,7 @@ export default function App() {
                         <Pressable style={styles.ideaRow} onPress={() => runAsk(item.query).catch(() => undefined)}>
                           <View style={styles.ideaTextWrap}>
                             <Text style={styles.ideaText}>{item.title}</Text>
-                            <Text style={styles.ideaSubtext}>
-                              {index === 0
-                                ? "CanMyPhone prüft zuerst den direkten iOS-Weg."
-                                : index === 1
-                                  ? "Ich prüfe Kurzbefehle und Automationen."
-                                  : "Finde Funktionen, die zu deinen bisherigen Fragen passen."}
-                            </Text>
+                            <Text style={styles.ideaSubtext}>{item.hint}</Text>
                           </View>
                           <Text style={styles.chevron}>›</Text>
                         </Pressable>
@@ -795,47 +901,95 @@ export default function App() {
             ) : null}
 
             {tab === "discover" ? (
-              <>
-                <View style={styles.sectionHeroBlock}>
-                  <Text style={styles.hero}>{radarResults.length ? "Für dich entdeckt." : "Entdecke, was dein iPhone schon kann."}</Text>
-                  <Text style={styles.heroSubtext}>
-                    {radarResults.length
-                      ? "Need Radar sortiert nützliche Funktionen nach deinen bisherigen Fragen — lokal und transparent."
-                      : "Nützliche Funktionen, verständlich erklärt — ohne Techniksprech."}
-                  </Text>
-                </View>
+              discoverCategory ? (
+                <>
+                  <View style={styles.answerTopBar}>
+                    <Pressable onPress={() => setDiscoverCategory(null)} hitSlop={12} accessibilityLabel="Zurück zu den Themen">
+                      <Text style={styles.backButton}>‹</Text>
+                    </Pressable>
+                    <Text style={styles.answerTopTitle}>{categoryLabel(discoverCategory)}</Text>
+                  </View>
+                  <View style={styles.discoveryList}>
+                    {categorySolutions.map((item) => (
+                      <Pressable key={item.id} onPress={() => openSolution(item).catch(() => undefined)} accessibilityRole="button">
+                        <GlassSurface style={styles.discoveryCard} interactive tintColor="rgba(255,255,255,0.14)">
+                          <View style={styles.discoveryTextWrap}>
+                            <Text style={styles.discoveryBadge}>{item.builtIn ? "EINGEBAUT" : "MIT APP"} · {item.setupMinutes <= 0 ? "SOFORT" : `${item.setupMinutes} MIN`}</Text>
+                            <Text style={styles.discoveryTitle}>{item.title}</Text>
+                            <Text style={styles.discoverySummary} numberOfLines={3}>{item.summary}</Text>
+                          </View>
+                        </GlassSurface>
+                      </Pressable>
+                    ))}
+                  </View>
+                </>
+              ) : (
+                <>
+                  <View style={styles.sectionHeroBlock}>
+                    <Text style={styles.hero}>{radarResults.length ? "Für dich entdeckt." : "Entdecke, was dein iPhone schon kann."}</Text>
+                    <Text style={styles.heroSubtext}>
+                      {radarResults.length
+                        ? "Need Radar sortiert nützliche Funktionen nach deinen bisherigen Fragen — lokal und transparent."
+                        : `${solutions.filter((item) => item.platform === platform || item.platform === "both").length} geprüfte Wege, verständlich erklärt — ohne Techniksprech.`}
+                    </Text>
+                  </View>
 
-                {radarResults.length ? (
-                  <View style={styles.discoveryList}>
-                    {radarResults.map((item, index) => (
-                      <Pressable key={item.id} onPress={() => runAsk(item.title).catch(() => undefined)}>
-                        <GlassSurface style={styles.discoveryCard} interactive tintColor="rgba(255,255,255,0.14)">
-                          <View style={styles.discoveryNumber}><Text style={styles.discoveryNumberText}>{index + 1}</Text></View>
-                          <View style={styles.discoveryTextWrap}>
-                            <Text style={styles.discoveryBadge}>FÜR DICH</Text>
-                            <Text style={styles.discoveryTitle}>{item.title}</Text>
-                            <Text style={styles.discoverySummary}>{item.summary}</Text>
-                          </View>
+                  {radarResults.length ? (
+                    <View style={styles.discoveryList}>
+                      {radarResults.map((item, index) => (
+                        <Pressable key={item.id} onPress={() => openSolution(item).catch(() => undefined)}>
+                          <GlassSurface style={styles.discoveryCard} interactive tintColor="rgba(255,255,255,0.14)">
+                            <View style={styles.discoveryNumber}><Text style={styles.discoveryNumberText}>{index + 1}</Text></View>
+                            <View style={styles.discoveryTextWrap}>
+                              <Text style={styles.discoveryBadge}>FÜR DICH</Text>
+                              <Text style={styles.discoveryTitle}>{item.title}</Text>
+                              <Text style={styles.discoverySummary}>{item.summary}</Text>
+                            </View>
+                          </GlassSurface>
+                        </Pressable>
+                      ))}
+                    </View>
+                  ) : (
+                    <View style={styles.discoveryList}>
+                      {hiddenFeatures.map((feature) => {
+                        const item = solutions.find((candidate) => candidate.id === feature.id);
+                        if (!item) return null;
+                        return (
+                          <Pressable key={feature.id} onPress={() => openSolution(item).catch(() => undefined)}>
+                            <GlassSurface style={styles.discoveryCard} interactive tintColor="rgba(255,255,255,0.14)">
+                              <View style={styles.discoveryTextWrap}>
+                                <Text style={styles.discoveryBadge}>WUSSTEST DU SCHON?</Text>
+                                <Text style={styles.discoveryTitle}>{feature.title}</Text>
+                                <Text style={styles.discoveryCTA}>Ansehen →</Text>
+                              </View>
+                            </GlassSurface>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  )}
+
+                  <Text style={[styles.sectionLabel, styles.categorySectionLabel]}>NACH THEMEN</Text>
+                  <View style={styles.categoryGrid}>
+                    {discoverCategories.map((category) => (
+                      <Pressable
+                        key={category.id}
+                        style={styles.categoryCell}
+                        onPress={() => setDiscoverCategory(category.id)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${category.label}, ${category.count} Wege`}
+                      >
+                        <GlassSurface style={styles.categoryCard} interactive tintColor="rgba(255,255,255,0.14)">
+                          <Text style={styles.categorySymbol}>{category.symbol}</Text>
+                          <Text style={styles.categoryTitle}>{category.label}</Text>
+                          <Text style={styles.categoryHint} numberOfLines={2}>{category.hint}</Text>
+                          <Text style={styles.categoryCount}>{category.count} {category.count === 1 ? "Weg" : "Wege"}</Text>
                         </GlassSurface>
                       </Pressable>
                     ))}
                   </View>
-                ) : (
-                  <View style={styles.discoveryList}>
-                    {hiddenFeatures.map((item) => (
-                      <Pressable key={item.title} onPress={() => runAsk(item.query).catch(() => undefined)}>
-                        <GlassSurface style={styles.discoveryCard} interactive tintColor="rgba(255,255,255,0.14)">
-                          <View style={styles.discoveryTextWrap}>
-                            <Text style={styles.discoveryBadge}>ENTDECKEN</Text>
-                            <Text style={styles.discoveryTitle}>{item.title}</Text>
-                            <Text style={styles.discoveryCTA}>Ansehen →</Text>
-                          </View>
-                        </GlassSurface>
-                      </Pressable>
-                    ))}
-                  </View>
-                )}
-              </>
+                </>
+              )
             ) : null}
 
             {tab === "you" ? (
@@ -868,7 +1022,7 @@ export default function App() {
                     </Pressable>
                   </View>
 
-                  {learnedCategories.length ? <Text style={styles.radarHint}>Aktuell gelernt: {learnedCategories.join(" · ")}</Text> : null}
+                  {learnedCategories.length ? <Text style={styles.radarHint}>Aktuell gelernt: {learnedCategories.map(categoryLabel).join(" · ")}</Text> : null}
 
                   <View style={styles.divider} />
 
@@ -886,10 +1040,10 @@ export default function App() {
 
                   <Text style={styles.youTitle}>Region</Text>
                   <View style={styles.regionRow}>
-                    <Pressable onPress={() => setRegion("eu")} style={[styles.regionButton, region === "eu" && styles.regionButtonActive]}>
+                    <Pressable onPress={() => updatePreferences({ region: "eu" })} style={[styles.regionButton, region === "eu" && styles.regionButtonActive]}>
                       <Text style={[styles.regionButtonText, region === "eu" && styles.regionButtonTextActive]}>EU</Text>
                     </Pressable>
-                    <Pressable onPress={() => setRegion("outside_eu")} style={[styles.regionButton, region === "outside_eu" && styles.regionButtonActive]}>
+                    <Pressable onPress={() => updatePreferences({ region: "outside_eu" })} style={[styles.regionButton, region === "outside_eu" && styles.regionButtonActive]}>
                       <Text style={[styles.regionButtonText, region === "outside_eu" && styles.regionButtonTextActive]}>Außerhalb der EU</Text>
                     </Pressable>
                   </View>
@@ -899,6 +1053,25 @@ export default function App() {
                   <Pressable onPress={resetRadar} style={styles.resetButton}>
                     <Text style={styles.resetText}>Gelernte Präferenzen löschen</Text>
                   </Pressable>
+                </GlassSurface>
+
+                <GlassSurface style={[styles.youCard, styles.gapsCard]} tintColor="rgba(255,255,255,0.16)">
+                  <Text style={styles.youTitle}>Unbeantwortete Fragen</Text>
+                  <Text style={styles.youText}>
+                    {unanswered.length
+                      ? "Dafür gab es noch keinen geprüften Weg. Die Liste bleibt auf deinem iPhone."
+                      : "Wenn CanMyPhone eine Frage nicht sicher beantworten kann, erscheint sie hier – nur lokal auf deinem iPhone."}
+                  </Text>
+                  {unanswered.slice(0, 8).map((entry) => (
+                    <Pressable key={`${entry.at}-${entry.query}`} onPress={() => runAsk(entry.query).catch(() => undefined)}>
+                      <Text style={styles.gapRow}>„{entry.query}“</Text>
+                    </Pressable>
+                  ))}
+                  {unanswered.length ? (
+                    <Pressable onPress={() => clearGaps().catch(() => undefined)} style={styles.resetButton}>
+                      <Text style={styles.resetText}>Liste löschen</Text>
+                    </Pressable>
+                  ) : null}
                 </GlassSurface>
               </>
             ) : null}
@@ -1016,6 +1189,17 @@ const styles = StyleSheet.create({
   discoveryTitle: { fontSize: 18, lineHeight: 23, fontWeight: "700", color: "#1F2A37" },
   discoverySummary: { marginTop: 5, fontSize: 13, lineHeight: 18, color: "#748090" },
   discoveryCTA: { marginTop: 10, fontSize: 13, fontWeight: "600", color: "#007AFF" },
+  categorySectionLabel: { marginTop: 30, paddingHorizontal: 4 },
+  categoryGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: 12 },
+  categoryCell: { width: "48.5%" },
+  categoryCard: { minHeight: 132, borderRadius: 24, padding: 16, overflow: "hidden" },
+  categorySymbol: { fontSize: 20, color: "#087BFF", marginBottom: 10 },
+  categoryTitle: { fontSize: 15, lineHeight: 19, fontWeight: "700", color: "#17202B" },
+  categoryHint: { marginTop: 4, fontSize: 12, lineHeight: 16, color: "#6E7A88" },
+  categoryCount: { marginTop: "auto", paddingTop: 8, fontSize: 11, fontWeight: "700", color: "#7890A6" },
+  feedbackHint: { marginTop: 12, fontSize: 13, lineHeight: 18, color: "#566375" },
+  gapsCard: { marginTop: 14 },
+  gapRow: { marginTop: 10, fontSize: 14, lineHeight: 19, color: "#202B39" },
   youCard: { borderRadius: 30, padding: 20, overflow: "hidden" },
   youRow: { flexDirection: "row", gap: 14, alignItems: "center" },
   youTextWrap: { flex: 1 },
