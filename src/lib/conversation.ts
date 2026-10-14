@@ -13,8 +13,9 @@ const ENTITY_PATTERNS: { name: string; pattern: RegExp }[] = [
 function detectKind(query: string): QueryIntentKind {
   const q = query.toLowerCase();
   if (/\b(verfügbar|verfuegbar|available|geht.*(eu|europa)|funktioniert.*(eu|europa))\b/.test(q)) return "availability";
+  if (/\b(automatisch|automation|automatisieren|shortcut|shortcuts|kurzbefehl|kurzbefehle|sobald|immer wenn|jedes mal wenn)\b/.test(q)) return "automation";
+  if (/\bwenn (ich|mein|meine|die|der|das|es)\b/.test(q)) return "automation";
   if (/\b(wie (mach|mache|schalt|schalte|aktivier|aktiviere)|einschalten|anschalten|aktivieren|turn on|switch on|enable|activate)\b/.test(q)) return "enable";
-  if (/\b(automatisch|automation|automatisieren|shortcut|shortcuts|kurzbefehl|kurzbefehle)\b/.test(q)) return "automation";
   if (/\b(siri|hey siri|sprachbefehl|voice command|per sprache)\b/.test(q)) return "voice-control";
   if (/\b(wie kann ich|wie mache ich|wie geht|how do i|how can i)\b/.test(q)) return "howto";
   return "general";

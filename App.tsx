@@ -8,6 +8,7 @@ import {
   Easing,
   Keyboard,
   KeyboardAvoidingView,
+  Linking,
   Platform,
   Pressable,
   SafeAreaView,
@@ -22,8 +23,19 @@ import {
 import { GlassView, isGlassEffectAPIAvailable } from "expo-glass-effect";
 import { AlternativeList, AnswerDetails } from "./src/components/AnswerDetails";
 import { GuidedSetupCard } from "./src/components/GuidedSetupCard";
+import { Paywall } from "./src/components/Paywall";
+import { RecipeCard, RecipeView } from "./src/components/RecipeView";
 import { categoriesWithSolutions, categoryLabel, solutionsInCategory } from "./src/data/categories";
-import { solutions } from "./src/data/solutions";
+import { recipeSolutions, solutions, tipSolutions } from "./src/data/solutions";
+import { DEFAULT_ENTITLEMENTS, isLocked } from "./src/lib/entitlements";
+import {
+  LEGAL_LINKS,
+  loadProProducts,
+  purchasePro,
+  refreshEntitlements,
+  restorePurchases,
+  type StoreProduct
+} from "./src/lib/purchases";
 import { directActionPlan, runDirectAction, type DirectActionResult } from "./src/lib/actions";
 import { resolveWithOnDeviceAI } from "./src/lib/aiResolver";
 import { resolveConversation } from "./src/lib/conversation";
@@ -63,6 +75,7 @@ import {
 import {
   DeviceContext,
   DropPhase,
+  EntitlementState,
   GuideSession,
   NeedRadarProfile,
   Region,
@@ -78,11 +91,18 @@ type GlassSurfaceProps = PropsWithChildren<{
   tintColor?: string;
 }>;
 
-const quickIdeas = [
-  { title: "Mein Akku ist ständig leer", query: "Mein Akku ist immer so schnell leer", hint: "Der eingebaute Weg zu mehr Laufzeit." },
-  { title: "Ständig Spam-Anrufe", query: "Ständig Spam Anrufe von unbekannten Nummern", hint: "Unbekannte Nummern filtern, ohne App." },
-  { title: "Ich vergesse, wo ich geparkt habe", query: "Wo habe ich geparkt?", hint: "Dein iPhone merkt es sich automatisch." },
-  { title: "Die Schrift ist mir zu klein", query: "Die Schrift ist mir zu klein", hint: "Größer lesen in allen Apps." }
+/** Free recipes shown on the start screen – everyone can try these without paying. */
+const featuredRecipeIds = [
+  "auto-low-battery-power-saving",
+  "auto-arrive-home-message",
+  "auto-headphones-music",
+  "auto-bedtime-focus"
+];
+
+const automationExamples = [
+  "Wenn ich heimkomme, Licht an",
+  "Wenn mein Akku leer wird, Strom sparen",
+  "Wenn ich ins Auto steige, Musik an"
 ];
 
 const hiddenFeatures = [
@@ -293,6 +313,15 @@ export default function App() {
   const [uncertainDismissed, setUncertainDismissed] = useState(false);
   const [discoverCategory, setDiscoverCategory] = useState<string | null>(null);
   const [unanswered, setUnanswered] = useState<UnansweredQuestion[]>([]);
+  const [automationCategory, setAutomationCategory] = useState<string | null>(null);
+  /** Where an answer was opened from, so „Zurück“ returns to exactly that screen. */
+  const [answerOrigin, setAnswerOrigin] = useState<Tab | null>(null);
+  const [entitlements, setEntitlements] = useState<EntitlementState>(DEFAULT_ENTITLEMENTS);
+  const [showPaywall, setShowPaywall] = useState(false);
+  const [products, setProducts] = useState<StoreProduct[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
+  const [purchaseBusy, setPurchaseBusy] = useState(false);
+  const [purchaseMessage, setPurchaseMessage] = useState<string | null>(null);
 
   const appState = useRef<AppStateStatus>(AppState.currentState);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -338,6 +367,22 @@ export default function App() {
       alive = false;
       if (searchTimer.current) clearTimeout(searchTimer.current);
       if (answerTimer.current) clearTimeout(answerTimer.current);
+    };
+  }, []);
+
+  // Subscription state: cached instantly, then confirmed by StoreKit – also after returning to the app.
+  useEffect(() => {
+    let alive = true;
+    const refresh = () => {
+      refreshEntitlements().then((next) => { if (alive) setEntitlements(next); }).catch(() => undefined);
+    };
+    refresh();
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") refresh();
+    });
+    return () => {
+      alive = false;
+      subscription.remove();
     };
   }, []);
 
@@ -396,9 +441,21 @@ export default function App() {
       : [],
     [bestResult, conversation.solutions, profile.dismissedSolutionIds]
   );
-  const discoverCategories = useMemo(() => categoriesWithSolutions(solutions, platform), [platform]);
+  const discoverCategories = useMemo(() => categoriesWithSolutions(tipSolutions, platform, "tip"), [platform]);
+  const automationCategories = useMemo(() => categoriesWithSolutions(recipeSolutions, platform, "automation"), [platform]);
+  const automationCategoryRecipes = useMemo(
+    () => automationCategory ? solutionsInCategory(recipeSolutions, automationCategory, platform) : [],
+    [automationCategory, platform]
+  );
+  const featuredRecipes = useMemo(
+    () => featuredRecipeIds
+      .map((id) => recipeSolutions.find((item) => item.id === id))
+      .filter((item): item is Solution => Boolean(item)),
+    []
+  );
+  const bestLocked = bestResult ? isLocked(bestResult, entitlements) : false;
   const categorySolutions = useMemo(
-    () => discoverCategory ? solutionsInCategory(solutions, discoverCategory, platform) : [],
+    () => discoverCategory ? solutionsInCategory(tipSolutions, discoverCategory, platform) : [],
     [discoverCategory, platform]
   );
   const guideSolution = guideSession ? solutions.find((item) => item.id === guideSession.solutionId) ?? null : null;
@@ -416,6 +473,8 @@ export default function App() {
 
   const resetQuestion = () => {
     Keyboard.dismiss();
+    if (answerOrigin && answerOrigin !== tab) setTab(answerOrigin);
+    setAnswerOrigin(null);
     setSubmittedQuery("");
     setDraftQuery("");
     setFollowUpDraft("");
@@ -433,6 +492,8 @@ export default function App() {
     Keyboard.dismiss();
     if (searchTimer.current) clearTimeout(searchTimer.current);
     if (answerTimer.current) clearTimeout(answerTimer.current);
+    setShowPaywall(false);
+    if (!keepQuery) setAnswerOrigin(tab);
     setTab("ask");
     if (!keepQuery) {
       setSubmittedQuery(solution.title);
@@ -514,6 +575,10 @@ export default function App() {
   };
 
   const startGuide = async (solution: Solution, steps?: string[], title?: string) => {
+    if (isLocked(solution, entitlements)) {
+      await openPaywall();
+      return;
+    }
     const session = makeGuideSession(solution, steps ?? solution.steps, title ?? solution.title);
     setGuideSession(session);
     setReturnedFromBackground(false);
@@ -550,11 +615,34 @@ export default function App() {
       await updateGuideLiveActivity(guideSession);
     }
 
+    if (guideSolution.automation) {
+      const opened = await Linking.openURL("shortcuts://").then(() => true).catch(() => false);
+      if (!opened) {
+        setSettingsHint("Öffne die App Kurzbefehle selbst – CanMyPhone merkt sich deinen Schritt.");
+        setMotionPhase("guiding");
+      }
+      return;
+    }
+
     const result = await openSupportedSettings(guideSolution);
     if (!result.opened) {
       setSettingsHint(result.message || "Öffne Einstellungen manuell. CanMyPhone merkt sich deinen Schritt.");
       setMotionPhase("guiding");
     }
+  };
+
+  /** Leave the guide early – the answer stays open, nothing is lost. */
+  const cancelGuide = async () => {
+    if (guideSession) {
+      await endGuideLiveActivity("Anleitung beendet");
+      await saveGuideSession(null);
+    }
+    setGuideSession(null);
+    setLiveActivityActive(false);
+    setReturnedFromBackground(false);
+    setSettingsHint(null);
+    setMotionPhase("answer");
+    await hapticStep();
   };
 
   const finishGuide = async () => {
@@ -600,6 +688,43 @@ export default function App() {
     await hapticStep();
   };
 
+  const openPaywall = async () => {
+    Keyboard.dismiss();
+    setPurchaseMessage(null);
+    setShowPaywall(true);
+    if (products.length || loadingProducts) return;
+    setLoadingProducts(true);
+    const loaded = await loadProProducts();
+    setProducts(loaded);
+    setLoadingProducts(false);
+  };
+
+  const closePaywall = () => {
+    setShowPaywall(false);
+    setPurchaseMessage(null);
+  };
+
+  const buyPro = async (productId: string) => {
+    if (purchaseBusy) return;
+    setPurchaseBusy(true);
+    setPurchaseMessage(null);
+    const outcome = await purchasePro(productId);
+    setEntitlements(outcome.state);
+    setPurchaseMessage(outcome.message);
+    setPurchaseBusy(false);
+    if (outcome.success) await hapticAnswer();
+  };
+
+  const restorePro = async () => {
+    if (purchaseBusy) return;
+    setPurchaseBusy(true);
+    setPurchaseMessage(null);
+    const outcome = await restorePurchases();
+    setEntitlements(outcome.state);
+    setPurchaseMessage(outcome.message);
+    setPurchaseBusy(false);
+  };
+
   const clearGaps = async () => {
     setUnanswered([]);
     await clearUnansweredQuestions();
@@ -617,10 +742,27 @@ export default function App() {
 
   const switchTab = (next: Tab) => {
     Keyboard.dismiss();
+    setShowPaywall(false);
     if (next === "discover" && tab === "discover") setDiscoverCategory(null);
+    if (next === "ask" && tab === "ask") {
+      setAutomationCategory(null);
+      resetQuestion();
+    }
     setTab(next);
     setMotionPhase("idle");
   };
+
+  /** One consistent way back on every sub-screen: a big, labelled „‹ Zurück“. */
+  const renderTopBar = (title: string, onBack: () => void) => (
+    <View style={styles.answerTopBar}>
+      <Pressable onPress={onBack} hitSlop={12} style={styles.backPill} accessibilityRole="button" accessibilityLabel="Zurück">
+        <GlassSurface style={styles.backPillGlass} interactive tintColor="rgba(255,255,255,0.22)">
+          <Text style={styles.backPillText}>‹ Zurück</Text>
+        </GlassSurface>
+      </Pressable>
+      <Text style={styles.answerTopTitle} numberOfLines={1}>{title}</Text>
+    </View>
+  );
 
   const transitionLabel = actionRunning
     ? "Ich führe das sicher aus …"
@@ -661,6 +803,7 @@ export default function App() {
               onNext={() => updateGuideStep(guideSession.currentStep + 1)}
               onLeaveForSettings={leaveForSettings}
               onFinish={finishGuide}
+              onClose={() => cancelGuide().catch(() => undefined)}
             />
             {settingsHint ? <Text style={styles.settingsHint}>{settingsHint}</Text> : null}
           </ScrollView>
@@ -671,18 +814,44 @@ export default function App() {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            {tab === "ask" ? (
+            {showPaywall ? (
               <>
-                {submittedQuery ? (
-                  <View style={styles.answerTopBar}>
-                    <Pressable onPress={resetQuestion} hitSlop={12} accessibilityLabel="Zurück zur Frage">
-                      <Text style={styles.backButton}>‹</Text>
-                    </Pressable>
-                    <Text style={styles.answerTopTitle}>Antwort</Text>
-                  </View>
-                ) : null}
+                {renderTopBar("CanMyPhone Pro", closePaywall)}
+                <Paywall
+                  products={products}
+                  loadingProducts={loadingProducts}
+                  busy={purchaseBusy}
+                  message={purchaseMessage}
+                  isPro={entitlements.pro}
+                  recipeCount={recipeSolutions.length}
+                  onPurchase={(id) => buyPro(id).catch(() => undefined)}
+                  onRestore={() => restorePro().catch(() => undefined)}
+                  onClose={closePaywall}
+                />
+              </>
+            ) : null}
 
-                <View style={[styles.heroBlock, submittedQuery && styles.heroBlockAnswer]}>
+            {!showPaywall && tab === "ask" && !submittedQuery && automationCategory ? (
+              <>
+                {renderTopBar(categoryLabel(automationCategory), () => setAutomationCategory(null))}
+                <View style={styles.recipeList}>
+                  {automationCategoryRecipes.map((item) => (
+                    <RecipeCard
+                      key={item.id}
+                      solution={item}
+                      locked={isLocked(item, entitlements)}
+                      onPress={() => openSolution(item).catch(() => undefined)}
+                    />
+                  ))}
+                </View>
+              </>
+            ) : null}
+
+            {!showPaywall && tab === "ask" && (submittedQuery || !automationCategory) ? (
+              <>
+                {submittedQuery ? renderTopBar(bestResult?.automation ? "Automation" : "Antwort", resetQuestion) : null}
+
+                <View style={[styles.heroBlock, submittedQuery && styles.heroBlockAnswer, bestResult?.automation && styles.heroHidden]}>
                   <Text style={styles.hero}>
                     {needsFollowUp
                       ? "Eine Sache muss ich noch wissen."
@@ -694,7 +863,7 @@ export default function App() {
                           : "Ja — ich habe einen Weg gefunden."
                         : submittedQuery
                           ? "Dafür habe ich noch keinen sicheren Treffer."
-                          : "Was soll dein iPhone für dich tun?"}
+                          : "Was soll dein iPhone automatisch für dich tun?"}
                   </Text>
                   <Text style={styles.heroSubtext}>
                     {needsFollowUp
@@ -706,8 +875,8 @@ export default function App() {
                         : submittedQuery
                           ? "Formuliere dein Ziel etwas konkreter. Ich erfinde keine Funktionen oder Menüpfade."
                           : preferences.beginnerMode
-                            ? "Sag einfach, was du möchtest. Ich erkläre dir immer nur den nächsten Schritt."
-                            : "Sag einfach, was du erreichen möchtest. CanMyPhone findet den einfachsten Weg."}
+                            ? "Schreib einfach, was passieren soll. Ich erkläre dir immer nur den nächsten Schritt."
+                            : "Beschreib es in deinen Worten – CanMyPhone zeigt dir, wie dein iPhone es von selbst erledigt."}
                   </Text>
                 </View>
 
@@ -716,7 +885,7 @@ export default function App() {
                     <TextInput
                       value={draftQuery}
                       onChangeText={setDraftQuery}
-                      placeholder="Was möchtest du erreichen?"
+                      placeholder="z. B. Wenn ich heimkomme, Licht an"
                       placeholderTextColor="#7D8793"
                       returnKeyType="send"
                       onSubmitEditing={() => runAsk().catch(() => undefined)}
@@ -765,6 +934,15 @@ export default function App() {
                   </View>
                 ) : bestResult ? (
                   <View style={styles.answerArea}>
+                    {bestResult.automation ? (
+                      <RecipeView
+                        solution={bestResult}
+                        locked={bestLocked}
+                        onStartGuide={() => startGuide(bestResult).catch(() => undefined)}
+                        onUnlock={() => openPaywall().catch(() => undefined)}
+                      />
+                    ) : (
+                    <>
                     <View style={styles.answerMetaRow}>
                       <Text style={styles.answerEyebrow}>{aiSelectedId ? "LOKAL ERKANNT · VERIFIZIERTER KATALOG" : "BESTER VERIFIZIERTER TREFFER"}</Text>
                     </View>
@@ -830,6 +1008,8 @@ export default function App() {
                     ) : null}
 
                     <AnswerDetails solution={bestResult} beginnerMode={preferences.beginnerMode} />
+                    </>
+                    )}
 
                     <View style={styles.feedbackSection}>
                       <Text style={styles.feedbackTitle}>War das hilfreich?</Text>
@@ -880,35 +1060,70 @@ export default function App() {
                       <Text style={styles.textActionText}>Nach Themen stöbern</Text>
                     </Pressable>
                   </View>
-                ) : (
-                  <View style={styles.ideaList}>
-                    <Text style={styles.sectionLabel}>SCHNELL STARTEN</Text>
-                    {quickIdeas.map((item, index) => (
-                      <View key={item.title}>
-                        <Pressable style={styles.ideaRow} onPress={() => runAsk(item.query).catch(() => undefined)}>
-                          <View style={styles.ideaTextWrap}>
-                            <Text style={styles.ideaText}>{item.title}</Text>
-                            <Text style={styles.ideaSubtext}>{item.hint}</Text>
+                ) : !isSearching ? (
+                  <View style={styles.homeSections}>
+                    <View style={styles.exampleRow}>
+                      {automationExamples.map((example) => (
+                        <Pressable key={example} onPress={() => runAsk(example).catch(() => undefined)} accessibilityRole="button">
+                          <GlassSurface style={styles.exampleChip} interactive tintColor="rgba(255,255,255,0.18)">
+                            <Text style={styles.exampleChipText}>{example}</Text>
+                          </GlassSurface>
+                        </Pressable>
+                      ))}
+                    </View>
+
+                    <Text style={[styles.sectionLabel, styles.homeSectionLabel]}>GRATIS AUSPROBIEREN</Text>
+                    <View style={styles.recipeList}>
+                      {featuredRecipes.map((item) => (
+                        <RecipeCard
+                          key={item.id}
+                          solution={item}
+                          locked={isLocked(item, entitlements)}
+                          onPress={() => openSolution(item).catch(() => undefined)}
+                        />
+                      ))}
+                    </View>
+
+                    <Text style={[styles.sectionLabel, styles.homeSectionLabel]}>NACH SITUATION</Text>
+                    <View style={styles.categoryGrid}>
+                      {automationCategories.map((category) => (
+                        <Pressable
+                          key={category.id}
+                          style={styles.categoryCell}
+                          onPress={() => setAutomationCategory(category.id)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`${category.label}, ${category.count} Automationen`}
+                        >
+                          <GlassSurface style={styles.categoryCard} interactive tintColor="rgba(255,255,255,0.14)">
+                            <Text style={styles.categoryEmoji}>{category.symbol}</Text>
+                            <Text style={styles.categoryTitle}>{category.label}</Text>
+                            <Text style={styles.categoryHint} numberOfLines={2}>{category.hint}</Text>
+                            <Text style={styles.categoryCount}>{category.count} Automationen</Text>
+                          </GlassSurface>
+                        </Pressable>
+                      ))}
+                    </View>
+
+                    {!entitlements.pro ? (
+                      <Pressable onPress={() => openPaywall().catch(() => undefined)} accessibilityRole="button">
+                        <GlassSurface style={styles.proTeaser} interactive tintColor="rgba(8,123,255,0.14)">
+                          <View style={styles.proTeaserTextWrap}>
+                            <Text style={styles.proTeaserTitle}>Alle {recipeSolutions.length} Automationen freischalten</Text>
+                            <Text style={styles.proTeaserText}>Mit CanMyPhone Pro – jederzeit kündbar.</Text>
                           </View>
                           <Text style={styles.chevron}>›</Text>
-                        </Pressable>
-                        {index < quickIdeas.length - 1 ? <View style={styles.ideaDivider} /> : null}
-                      </View>
-                    ))}
+                        </GlassSurface>
+                      </Pressable>
+                    ) : null}
                   </View>
-                )}
+                ) : null}
               </>
             ) : null}
 
-            {tab === "discover" ? (
+            {!showPaywall && tab === "discover" ? (
               discoverCategory ? (
                 <>
-                  <View style={styles.answerTopBar}>
-                    <Pressable onPress={() => setDiscoverCategory(null)} hitSlop={12} accessibilityLabel="Zurück zu den Themen">
-                      <Text style={styles.backButton}>‹</Text>
-                    </Pressable>
-                    <Text style={styles.answerTopTitle}>{categoryLabel(discoverCategory)}</Text>
-                  </View>
+                  {renderTopBar(categoryLabel(discoverCategory), () => setDiscoverCategory(null))}
                   <View style={styles.discoveryList}>
                     {categorySolutions.map((item) => (
                       <Pressable key={item.id} onPress={() => openSolution(item).catch(() => undefined)} accessibilityRole="button">
@@ -926,11 +1141,11 @@ export default function App() {
               ) : (
                 <>
                   <View style={styles.sectionHeroBlock}>
-                    <Text style={styles.hero}>{radarResults.length ? "Für dich entdeckt." : "Entdecke, was dein iPhone schon kann."}</Text>
+                    <Text style={styles.hero}>{radarResults.length ? "Für dich entdeckt." : "Wusstest du schon?"}</Text>
                     <Text style={styles.heroSubtext}>
                       {radarResults.length
                         ? "Need Radar sortiert nützliche Funktionen nach deinen bisherigen Fragen — lokal und transparent."
-                        : `${solutions.filter((item) => item.platform === platform || item.platform === "both").length} geprüfte Wege, verständlich erklärt — ohne Techniksprech.`}
+                        : `${tipSolutions.filter((item) => item.platform === platform || item.platform === "both").length} geprüfte Tipps, was dein iPhone schon kann – verständlich erklärt.`}
                     </Text>
                   </View>
 
@@ -992,12 +1207,35 @@ export default function App() {
               )
             ) : null}
 
-            {tab === "you" ? (
+            {!showPaywall && tab === "you" ? (
               <>
                 <View style={styles.sectionHeroBlock}>
                   <Text style={styles.hero}>CanMyPhone passt sich dir an.</Text>
                   <Text style={styles.heroSubtext}>Wenige Einstellungen, klar erklärt und jederzeit zurücksetzbar.</Text>
                 </View>
+
+                <Pressable onPress={() => openPaywall().catch(() => undefined)} accessibilityRole="button">
+                  <GlassSurface style={[styles.youCard, styles.proCard]} interactive tintColor="rgba(8,123,255,0.14)">
+                    <Text style={styles.proCardEyebrow}>CANMYPHONE PRO</Text>
+                    <Text style={styles.youTitle}>{entitlements.pro ? "Pro ist aktiv – danke!" : `Alle ${recipeSolutions.length} Automationen freischalten`}</Text>
+                    <Text style={styles.youText}>
+                      {entitlements.pro
+                        ? "Du hast Zugriff auf alle Rezepte, auch auf neue."
+                        : "Gratis-Rezepte und alle Tipps bleiben kostenlos. Pro schaltet den Rest frei."}
+                    </Text>
+                    <Text style={styles.proCardLink}>{entitlements.pro ? "Details ›" : "Pro ansehen ›"}</Text>
+                  </GlassSurface>
+                </Pressable>
+                {entitlements.pro ? (
+                  <Pressable onPress={() => Linking.openURL(LEGAL_LINKS.manageSubscriptions).catch(() => undefined)} style={styles.textAction}>
+                    <Text style={styles.textActionText}>Abo verwalten</Text>
+                  </Pressable>
+                ) : null}
+                {__DEV__ ? (
+                  <Pressable onPress={() => setEntitlements((current) => ({ ...current, pro: !current.pro }))} style={styles.textAction}>
+                    <Text style={styles.textActionText}>Entwicklung: Pro {entitlements.pro ? "aus" : "an"} (nur Test)</Text>
+                  </Pressable>
+                ) : null}
 
                 <GlassSurface style={styles.youCard} tintColor="rgba(255,255,255,0.16)">
                   <View style={styles.youRow}>
@@ -1081,8 +1319,14 @@ export default function App() {
         {!guideSession ? (
           <GlassSurface style={styles.tabBar} tintColor="rgba(255,255,255,0.18)">
             {(["ask", "discover", "you"] as Tab[]).map((item) => (
-              <Pressable key={item} onPress={() => switchTab(item)} style={[styles.tabButton, tab === item && styles.tabButtonActive]}>
-                <Text style={[styles.tabText, tab === item && styles.tabTextActive]}>{item === "ask" ? "Fragen" : item === "discover" ? "Entdecken" : "Du"}</Text>
+              <Pressable
+                key={item}
+                onPress={() => switchTab(item)}
+                style={[styles.tabButton, tab === item && styles.tabButtonActive]}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: tab === item }}
+              >
+                <Text style={[styles.tabText, tab === item && styles.tabTextActive]}>{item === "ask" ? "Automationen" : item === "discover" ? "Tipps" : "Du"}</Text>
               </Pressable>
             ))}
           </GlassSurface>
@@ -1107,7 +1351,7 @@ const styles = StyleSheet.create({
   mainContent: { flex: 1 },
   contentContainer: { flexGrow: 1, paddingBottom: 18 },
   guideScrollContent: { flexGrow: 1, justifyContent: "center", paddingVertical: 18 },
-  heroBlock: { paddingTop: 74, paddingHorizontal: 8, alignItems: "center" },
+  heroBlock: { paddingTop: 44, paddingHorizontal: 8, alignItems: "center" },
   heroBlockAnswer: { paddingTop: 38 },
   sectionHeroBlock: { paddingTop: 52, paddingHorizontal: 8, alignItems: "center", marginBottom: 24 },
   hero: { maxWidth: 350, fontSize: 36, lineHeight: 40, fontWeight: "700", letterSpacing: -1.15, color: "#101725", textAlign: "center" },
@@ -1190,6 +1434,24 @@ const styles = StyleSheet.create({
   discoverySummary: { marginTop: 5, fontSize: 13, lineHeight: 18, color: "#748090" },
   discoveryCTA: { marginTop: 10, fontSize: 13, fontWeight: "600", color: "#007AFF" },
   categorySectionLabel: { marginTop: 30, paddingHorizontal: 4 },
+  heroHidden: { display: "none" },
+  backPill: { marginRight: 12 },
+  backPillGlass: { minHeight: 38, paddingHorizontal: 14, borderRadius: 19, justifyContent: "center", overflow: "hidden" },
+  backPillText: { fontSize: 15, fontWeight: "600", color: "#087BFF" },
+  homeSections: { marginTop: 22 },
+  homeSectionLabel: { marginTop: 28, paddingHorizontal: 4 },
+  exampleRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "center" },
+  exampleChip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, overflow: "hidden" },
+  exampleChipText: { fontSize: 13, fontWeight: "600", color: "#3A4757" },
+  recipeList: { gap: 12, marginTop: 6 },
+  categoryEmoji: { fontSize: 24, marginBottom: 8 },
+  proTeaser: { marginTop: 22, flexDirection: "row", alignItems: "center", padding: 18, borderRadius: 24, overflow: "hidden" },
+  proTeaserTextWrap: { flex: 1 },
+  proTeaserTitle: { fontSize: 16, fontWeight: "700", color: "#0A4FA8" },
+  proTeaserText: { marginTop: 3, fontSize: 13, color: "#46566A" },
+  proCard: { marginBottom: 6 },
+  proCardEyebrow: { fontSize: 10, fontWeight: "800", letterSpacing: 0.9, color: "#087BFF", marginBottom: 6 },
+  proCardLink: { marginTop: 10, fontSize: 14, fontWeight: "700", color: "#087BFF" },
   categoryGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", rowGap: 12 },
   categoryCell: { width: "48.5%" },
   categoryCard: { minHeight: 132, borderRadius: 24, padding: 16, overflow: "hidden" },

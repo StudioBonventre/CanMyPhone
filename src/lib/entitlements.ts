@@ -1,38 +1,37 @@
-import type { EntitlementState } from "../types";
+import type { EntitlementState, Solution } from "../types";
 
-export type AutomaticActionAccess = {
-  allowed: boolean;
-  costCredits: number;
-  reason: "pro" | "first-free" | "credit" | "locked";
-};
+/** App Store product ids. Create exactly these in App Store Connect (see docs/MONETIZATION.md). */
+export const PRO_PRODUCT_IDS = {
+  monthly: "com.studiobonventre.canmyphone.pro.monthly",
+  yearly: "com.studiobonventre.canmyphone.pro.yearly"
+} as const;
 
-export const DEFAULT_ENTITLEMENTS: EntitlementState = {
-  pro: false,
-  credits: 0,
-  freeAutomaticActionUsed: false
-};
+export const ALL_PRO_PRODUCT_IDS: string[] = [PRO_PRODUCT_IDS.yearly, PRO_PRODUCT_IDS.monthly];
 
-export function automaticActionAccess(state: EntitlementState): AutomaticActionAccess {
-  if (state.pro) return { allowed: true, costCredits: 0, reason: "pro" };
-  if (!state.freeAutomaticActionUsed) return { allowed: true, costCredits: 0, reason: "first-free" };
-  if (state.credits > 0) return { allowed: true, costCredits: 1, reason: "credit" };
-  return { allowed: false, costCredits: 1, reason: "locked" };
+export const DEFAULT_ENTITLEMENTS: EntitlementState = { pro: false };
+
+/**
+ * Tips, guides, search and the app's own direct actions are always free.
+ * Only automation recipes marked "pro" need the subscription.
+ */
+export function isLocked(solution: Solution, state: EntitlementState): boolean {
+  if (state.pro) return false;
+  return solution.automation?.tier === "pro";
 }
 
-/** Only call after an automatic action actually succeeds. */
-export function consumeAutomaticAction(state: EntitlementState): EntitlementState {
-  const access = automaticActionAccess(state);
-  if (!access.allowed) return state;
-  if (access.reason === "pro") return state;
-  if (access.reason === "first-free") return { ...state, freeAutomaticActionUsed: true };
-  return { ...state, credits: Math.max(0, state.credits - 1) };
+/** Turns the list of active StoreKit product ids into the app's entitlement state. */
+export function entitlementsFromActiveProducts(activeProductIds: string[], now = Date.now()): EntitlementState {
+  const productId = ALL_PRO_PRODUCT_IDS.find((id) => activeProductIds.includes(id));
+  return productId ? { pro: true, productId, checkedAt: now } : { pro: false, checkedAt: now };
 }
 
-export function addCredits(state: EntitlementState, credits: number): EntitlementState {
-  if (!Number.isFinite(credits) || credits <= 0) return state;
-  return { ...state, credits: state.credits + Math.floor(credits) };
-}
-
-export function setPro(state: EntitlementState, pro: boolean): EntitlementState {
-  return { ...state, pro };
+/** Accepts older persisted shapes (v0.11 credits model) without crashing. */
+export function normalizeEntitlements(raw: unknown): EntitlementState {
+  if (!raw || typeof raw !== "object") return DEFAULT_ENTITLEMENTS;
+  const value = raw as Partial<EntitlementState>;
+  return {
+    pro: value.pro === true,
+    productId: typeof value.productId === "string" ? value.productId : undefined,
+    checkedAt: typeof value.checkedAt === "number" ? value.checkedAt : undefined
+  };
 }

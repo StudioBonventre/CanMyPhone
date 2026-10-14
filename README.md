@@ -1,6 +1,9 @@
 # CanMyPhone
 
-> **Tell us what is annoying you. We find the simplest verified way your phone can help.**
+> **Was kann mein iPhone für mich automatisieren – und wie bekomme ich das hin?**
+>
+> Describe what should happen ("Wenn ich heimkomme, Licht an"). CanMyPhone finds a tested automation recipe,
+> shows it as a simple *Wenn → Dann* card and walks you through Kurzbefehle one step at a time.
 
 CanMyPhone is an open-source, device-aware capability engine for smartphones. It is **not a catalog of random tips**. It starts with the user's real problem, asks a short follow-up when necessary, and finds the simplest relevant solution — preferably a capability already built into the phone.
 
@@ -159,4 +162,15 @@ The app code and the public capability dataset are licensed under MIT for the in
 
 ## Status
 
-**Pre-alpha / v0.5 Catalogue & Search.** The verified catalogue now covers 99 iPhone capabilities across 22 everyday topics (battery, safety, calls & messages, photos, family, accessibility …), each linked to Apple's official iPhone User Guide. Search understands everyday problem phrasings ("Mein Akku ist immer so schnell leer") through stemming, synonyms and alias co-occurrence, asks "Meinst du …?" when only one word matches, and stays silent on off-topic questions. Answers show cost, setup time, requirements, steps and the source; Discover lets people browse by topic, and unanswered questions are kept locally as the input for the next catalogue round. See [`docs/CATALOGUE.md`](docs/CATALOGUE.md).
+**Pre-alpha / v0.13 Automations & Pro.** CanMyPhone is now an automation assistant:
+
+- **24 automation recipes** (6 free) in six situations – Zuhause, Auto & unterwegs (incl. Tesla), Morgens & abends,
+  Akku, Fokus & Freizeit, Familie & Sicherheit. Each recipe is a *Wenn → Dann* blueprint from which the exact
+  German Kurzbefehle taps are generated (`src/data/automationRecipes.ts`, `src/lib/automationSteps.ts`).
+- **Guided setup** with big „‹ Zurück“ / „Weiter ›“ buttons, a progress bar, „Beenden“ at any time and
+  „Kurzbefehle öffnen“. A ready-made sentence for Apple Intelligence in Kurzbefehle (iOS 27) is offered too.
+- **CanMyPhone Pro** subscription via StoreKit 2 in the app's own Swift module – no third-party SDK, no server.
+  See [`docs/MONETIZATION.md`](docs/MONETIZATION.md) and [`PRIVACY.md`](PRIVACY.md).
+- **99 tips** remain as the second area „Tipps“ (see [`docs/CATALOGUE.md`](docs/CATALOGUE.md)).
+- Apple does not let any app create Kurzbefehle automations by itself, so CanMyPhone guides instead of
+  pretending to automate in the background.
